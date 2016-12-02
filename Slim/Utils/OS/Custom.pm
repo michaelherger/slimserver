@@ -12,17 +12,11 @@ sub initDetails {
 	return $class->{osDetails};
 }
 
-# we're doing the player type registration in here, as initDetails would be too early
 sub postInitPrefs {
 	my $class = shift;
 
-        # disable support for video and photo scanning
-        $::MEDIASUPPORT = 0;
-
-        Slim::Networking::Slimproto->addPlayerClass(13, 'm6encore', {
-		client => 'Slim::Player::M6Encore',
-		display => 'Slim::Display::NoDisplay'
-	});
+	# disable support for video and photo scanning
+	$::MEDIASUPPORT = 0;
 
 	$class->SUPER::postInitPrefs();
 }
@@ -60,7 +54,7 @@ sub skipPlugins {
 	return (
 		qw(
 			ACLFileTest ImageBrowser SN
-			PreventStandby iTunes MusicMagic
+			PreventStandby MusicMagic
 		),
 		$class->SUPER::skipPlugins(),
 	);
