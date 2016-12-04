@@ -7,18 +7,9 @@ sub initDetails {
 	my $class = shift;
 
 	$class->{osDetails} = $class->SUPER::initDetails();
-	$class->{osDetails}->{name} = "My very own Unix based OS";
+	$class->{osDetails}->{osName} = "Encore OS";
 
 	return $class->{osDetails};
-}
-
-sub postInitPrefs {
-	my $class = shift;
-
-	# disable support for video and photo scanning
-	$::MEDIASUPPORT = 0;
-
-	$class->SUPER::postInitPrefs();
 }
 
 sub dirsFor {
@@ -55,6 +46,7 @@ sub skipPlugins {
 		qw(
 			ACLFileTest ImageBrowser SN
 			PreventStandby MusicMagic
+			UPnP
 		),
 		$class->SUPER::skipPlugins(),
 	);
