@@ -16,7 +16,7 @@ sub dirsFor {
 	my ($class, $dir) = @_;
 
 	my @dirs = ();
-	
+
 	if ($dir =~ /^(?:prefs)$/) {
 
 		push @dirs, $::prefsdir || "/etc/encoreserver/prefs";
@@ -27,16 +27,40 @@ sub dirsFor {
 
 	} elsif ($dir eq 'cache') {
 
-		# XXX: cachedir pref is going to cause a problem here, we need to ignore it
-		push @dirs, $::cachedir || "/etc/encoreserver/cache";
+		push @dirs, $::cachedir || "/media/data/Cache";
+
+	} elsif ($dir eq 'music') {
+
+		push @dirs, "/media/data/Music";
+
+	} elsif ($dir eq 'playlists') {
+
+		push @dirs, "/media/data/Playlist";
 
 	} else {
 
 		push @dirs, $class->SUPER::dirsFor($dir);
-
+		
 	}
 
 	return wantarray() ? @dirs : $dirs[0];
+}
+
+sub getSystemLanguage { 'EN' }
+
+sub initPrefs {
+	my ($class, $prefs) = @_;
+
+	# we are running in a known environment - don't show the wizard
+	$prefs->{wizardDone} = 1;
+
+	# override some defaults to our taste
+	$prefs->{showArtist} = 1;
+	$prefs->{useTPE2AsAlbumArtist} = 1;
+	$prefs->{useUnifiedArtistsList} = 1;
+	$prefs->{variousArtistAutoIdentification} = 1;
+	$prefs->{itemsPerPage} = 500;
+	$prefs->{groupdiscs} = 1;
 }
 
 sub skipPlugins {
