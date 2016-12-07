@@ -7,6 +7,7 @@ use base qw(Slim::Utils::OS::Linux);
 #            Initialization will fail if it does not exist.
 use constant ENCORE_VERSION_FILE => '/usr/encore/encore-release';
 
+# give our installation its own fancy OS name
 sub initDetails {
 	my $class = shift;
 
@@ -16,6 +17,7 @@ sub initDetails {
 	return $class->{osDetails};
 }
 
+# use custom folders for settings, cache etc.
 sub dirsFor {
 	my ($class, $dir) = @_;
 
@@ -50,6 +52,7 @@ sub dirsFor {
 	return wantarray() ? @dirs : $dirs[0];
 }
 
+# assume EN the default language if no locale is configured for the encore user
 sub getSystemLanguage {
 	my $class = shift;
 
@@ -58,9 +61,10 @@ sub getSystemLanguage {
 	return $language eq 'C' ? 'EN' : $language;
 }
 
-# buffer as much data in memory as possible
+# buffer as much data in memory as possible - highly improves performance on systems with 1GB+ of RAM
 sub canDBHighMem { 2 }
 
+# we want to customize defaults for some prefs - put them here
 sub initPrefs {
 	my ($class, $prefs) = @_;
 
@@ -77,8 +81,12 @@ sub initPrefs {
 	$prefs->{variousArtistAutoIdentification} = 1;
 	$prefs->{itemsPerPage} = 500;
 	$prefs->{groupdiscs} = 1;
+
+	$prefs->{longdateFormat} = q(%A, |%d %B %Y);
+	$prefs->{shortdateFormat} = q(%d/%m/%Y);
 }
 
+# plugins we don't even want to offer to the user
 sub skipPlugins {
 	my $class = shift;
 	
@@ -92,12 +100,11 @@ sub skipPlugins {
 	);
 }
 
-# don't store potential firmware updates on this system
-# but let the players download directly (if possible)
+# don't store potential Squeezebox firmware updates on 
+# this system but let the players download directly
 sub directFirmwareDownload { 1 };
 
-
+# ignore this configuration unless we are running it on a Encore system
 if (-f ENCORE_VERSION_FILE) {
 	return 1;
 }
-
