@@ -3,6 +3,10 @@ package Slim::Utils::OS::Custom;
 use strict;
 use base qw(Slim::Utils::OS::Linux);
 
+# IMPORTANT: The folloiwng file will be used to verify we're an Encore device.
+#            Initialization will fail if it does not exist.
+use constant ENCORE_VERSION_FILE => '/usr/encore/encore-release';
+
 sub initDetails {
 	my $class = shift;
 
@@ -46,13 +50,25 @@ sub dirsFor {
 	return wantarray() ? @dirs : $dirs[0];
 }
 
-sub getSystemLanguage { 'EN' }
+sub getSystemLanguage {
+	my $class = shift;
+
+	my $language = $class->SUPER::getSystemLanguage() || 'EN';
+	
+	return $language eq 'C' ? 'EN' : $language;
+}
+
+# buffer as much data in memory as possible
+sub canDBHighMem { 2 }
 
 sub initPrefs {
 	my ($class, $prefs) = @_;
 
 	# we are running in a known environment - don't show the wizard
 	$prefs->{wizardDone} = 1;
+
+	# use our custom skin
+	$prefs->{skin} = 'Encore';
 
 	# override some defaults to our taste
 	$prefs->{showArtist} = 1;
@@ -76,11 +92,12 @@ sub skipPlugins {
 	);
 }
 
-
 # don't store potential firmware updates on this system
 # but let the players download directly (if possible)
 sub directFirmwareDownload { 1 };
 
-1;
 
+if (-f ENCORE_VERSION_FILE) {
+	return 1;
+}
 
