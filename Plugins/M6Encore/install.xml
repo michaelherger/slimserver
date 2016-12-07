@@ -8,6 +8,7 @@
 	<creator>Michael Herger</creator>
 
 	<defaultState>enabled</defaultState>
+	<enforce>true</enforce>
         
 	<homepageURL>http://encore.musicalfidelity.com/</homepageURL>
 	<icon>plugins/M6Encore/html/images/icon.png</icon>
