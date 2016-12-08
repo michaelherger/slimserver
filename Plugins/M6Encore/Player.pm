@@ -44,6 +44,19 @@ sub setDigitalInput {
 	$client->sendFrame('audp', \pack('C', $input));
 }
 
+# disable a few features inherited from Transporter, but which aren't available here
+sub hasPowerControl { 0 }
+sub hasDigitalOut { 0 }
+sub hasDigitalIn { 0 }
+sub hasPreAmp { 0 }
+sub hasAesbeu { 0 }
+sub hasExternalClock { 0 }
+sub hasEffectsLoop { 0 }
+sub hasPolarityInversion { 0 }
+sub hasRolloff { 0 }
+sub hasOutputChannels { 0 }
+
+
 1;
 
 __END__
