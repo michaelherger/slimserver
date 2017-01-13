@@ -47,7 +47,7 @@ sub setDigitalInput {
 # disable a few features inherited from Transporter, but which aren't available here
 sub hasPowerControl { 0 }
 sub hasDigitalOut { 0 }
-sub hasDigitalIn { 0 }
+sub hasDigitalIn { 1 }
 sub hasPreAmp { 0 }
 sub hasAesbeu { 0 }
 sub hasExternalClock { 0 }
