@@ -113,6 +113,8 @@ sub initPlugin {
 	[1, 1, 0, \&digitalInputMenu]);
 	Slim::Control::Request::addDispatch(['setdigitalinput', '_which'],
 	[1, 0, 0, \&setDigitalInput]);
+	Slim::Control::Request::addDispatch(['encore', '_command', '_p1', '_p2'],
+	[1, 0, 0, \&encoreCommand]);
 
 	Slim::Web::Pages->addPageLinks("icons", { $class->getDisplayName() => Plugins::M6Encore::Plugin->_pluginDataFor('icon') });
 }
@@ -367,6 +369,22 @@ sub setDigitalInput {
 	}
 
 	&{$$functions{$which}}($client);
+
+	$request->setStatusDone()
+}
+
+sub encoreCommand {
+	my $request = shift;
+	my $client  = $request->client();
+	my $command   = $request->getParam('_command');
+	my $p1        = $request->getParam('_p1');
+	my $p2        = $request->getParam('_p2');
+
+	my $functions = getFunctions();
+
+	main::INFOLOG && $log->error("encoreCommand ($command $p1 $p2)");
+
+	$client->sendFrame('ENCR',\pack('w/a w/a w/a',$command, $p1, $p2));
 
 	$request->setStatusDone()
 }
