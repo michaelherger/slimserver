@@ -662,7 +662,9 @@ sub getMediaDirs {
 		}->{$type}) } };
 		
 		$mediadirs = [ grep { !$ignoreList->{$_} } @$mediadirs ];
-		$mediadirs = [ grep /^\Q$filter\E$/, @$mediadirs] if $filter;
+		$mediadirs = [ grep { $_ } map {
+			($filter eq $_ || $filter =~ /^\Q$_\E/) && $filter
+		} @$mediadirs] if $filter;
 	}
 	
 	$mediadirsCache{$type} = [ map { $_ } @$mediadirs ] unless $filter;
@@ -932,7 +934,7 @@ sub readDirectory {
 	
 		while (defined (my $item = readdir(DIR)) ) {
 			# call idle streams to service timers - used for blocking animation.
-			if (scalar @diritems % 3) {
+			if (!scalar @diritems % 20) {
 				main::idleStreams();
 			}
 	

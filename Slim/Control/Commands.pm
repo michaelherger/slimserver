@@ -639,14 +639,18 @@ sub mixerCommand {
 			}
 	
 			$client->fade_volume($fade, \&_mixer_mute, [$client]);
-	
-			for my $eachclient (@buddies) {
 
-				if ($prefs->client($eachclient)->get('syncVolume')) {
+			# Bug 18165: do not sync volume if client's volume itself is not synced			
+			if ($prefs->client($client)->get('syncVolume')) {		
+			
+				for my $eachclient (@buddies) {
 
-					$eachclient->fade_volume($fade, \&_mixer_mute, [$eachclient]);
+					if ($prefs->client($eachclient)->get('syncVolume')) {
+
+						$eachclient->fade_volume($fade, \&_mixer_mute, [$eachclient]);
+					}
 				}
-			}
+			}	
 		}
 
 	} else {
@@ -675,13 +679,16 @@ sub mixerCommand {
 			$newval = $client->$entity($newval);
 		}
 
-		for my $eachclient (@buddies) {
-			if ($prefs->client($eachclient)->get('syncVolume')) {
-				$prefs->client($eachclient)->set($entity, $newval);
-				$eachclient->$entity($newval);
-				$eachclient->mixerDisplay('volume') if $entity eq 'volume';
+		# Bug 18165: do not sync volume if client's volume itself is not synced
+		if ($prefs->client($client)->get('syncVolume')) {		
+			for my $eachclient (@buddies) {
+				if ($prefs->client($eachclient)->get('syncVolume')) {
+					$prefs->client($eachclient)->set($entity, $newval);
+					$eachclient->$entity($newval);
+					$eachclient->mixerDisplay('volume') if $entity eq 'volume';
+				}
 			}
-		}
+		}	
 	}
 		
 	if (defined $controllerSequenceId) {
@@ -2632,11 +2639,9 @@ sub rescanCommand {
 		
 			# we only want to scan folders for video/pictures
 			my %seen = (); # to avoid duplicates
-			@dirs = grep { !$seen{$_}++ } @{ Slim::Utils::Misc::getVideoDirs() }, @{ Slim::Utils::Misc::getImageDirs() };
-			
-			if ($singledir) {
-				@dirs = grep { /\Q$singledir\E/ } @dirs;
-			}
+			@dirs = grep { 
+				!$seen{$_}++ 
+			} @{ Slim::Utils::Misc::getVideoDirs($singledir) }, @{ Slim::Utils::Misc::getImageDirs($singledir) };
 
 			if ( main::MEDIASUPPORT && scalar @dirs && $mode ne 'playlists' ) {
 				require Slim::Utils::Scanner::LMS;
@@ -2657,28 +2662,20 @@ sub rescanCommand {
 				};
 				
 				# Audio scan is run first, when done, the LMS scanner is run
-				my $audio;
-				$audio = sub {
-					my $audiodirs = Slim::Utils::Misc::getAudioDirs();
-					
-					if ($singledir) {
-						$audiodirs = [ grep { /\Q$singledir\E/ } @{$audiodirs} ];
-					}
-					elsif (my $playlistdir = Slim::Utils::Misc::getPlaylistDir()) {
-						# scan playlist folder too
-						push @$audiodirs, $playlistdir;
-					}
-					
-					# XXX until libmediascan supports audio, run the audio scanner now
-					Slim::Utils::Scanner::Local->rescan( $audiodirs, {
-						types      => 'list|audio',
-						scanName   => 'directory',
-						progress   => 1,
-						onFinished => $lms,
-					} );
-				};
-			
-				$audio->();
+				my $audiodirs = Slim::Utils::Misc::getAudioDirs($singledir);
+
+				if (my $playlistdir = Slim::Utils::Misc::getPlaylistDir()) {
+					# scan playlist folder too
+					push @$audiodirs, $playlistdir;
+				}
+
+				# XXX until libmediascan supports audio, run the audio scanner now
+				Slim::Utils::Scanner::Local->rescan( $audiodirs, {
+					types      => 'list|audio',
+					scanName   => 'directory',
+					progress   => 1,
+					onFinished => $lms,
+				} );
 			}
 			elsif ($mode eq 'playlists') {
 				my $playlistdir = Slim::Utils::Misc::getPlaylistDir();
@@ -2691,12 +2688,9 @@ sub rescanCommand {
 				} );
 			}
 			else {
-				my $audiodirs = Slim::Utils::Misc::getAudioDirs();
-				
-				if ($singledir) {
-					$audiodirs = [ grep { /\Q$singledir\E/ } @{$audiodirs} ];
-				}
-				elsif (my $playlistdir = Slim::Utils::Misc::getPlaylistDir()) {
+				my $audiodirs = Slim::Utils::Misc::getAudioDirs($singledir);
+
+				if (my $playlistdir = Slim::Utils::Misc::getPlaylistDir()) {
 					# scan playlist folder too
 					push @$audiodirs, $playlistdir;
 				}
