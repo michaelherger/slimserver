@@ -134,7 +134,8 @@ img#background {
 }
 
 #header_content {
-	height: 12px;
+	height: 0px;
+/*	height: 12px; */
 	padding-top: 11px;
 	margin-right: 0;
 /*	background: url(html/images/header_right.gif) no-repeat top right; */
@@ -181,7 +182,7 @@ img#background {
 
 .inner_top, .inner_bottom {
 	height: 12px;
-	background-color: #404040;
+	background-color: #003b8e;
 }
 
 #mainSpacer { width: 50px; }
@@ -197,7 +198,7 @@ img#background {
 
 #footer_content {
 	height: 16px;
-	padding-top: 24px;
+	padding-top: 0px;
 	margin-right: 0;
 }
 
@@ -260,7 +261,7 @@ img#background {
 
 /* inner pages (left frame) */
 .wz_page .pagetitle, #inner_header, #infoTab, #playlistTab {
-	background-color: #404040;
+	background-color: #003b8e;
 	color: #dddddd;
 }
 
@@ -665,7 +666,7 @@ div.thumbwrap {
 #crumblist a.dragUp, 
 #crumblist a.dragDown {
 	background-color: #dddddd;
-	color: #404040;
+	color: #003b8e;
 } 
 
 
@@ -698,7 +699,7 @@ form#advSearchForm.resultsPage {
 /* player control */
 #playerbox {
 	padding: 0 12px 5px 12px;
-	background-color: #404040;
+	background-color: #003b8e;
 	color: #dddddd;
 }
 

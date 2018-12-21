@@ -1,10 +1,10 @@
 /* some overrids of the Default main stylesheet */
 body.main {
-	background: #0074bc;
+	background: #1564bf;
 }
 
 #noJS {
-	background-color: blue;
+	background-color: #1564bf;
 	background-image: none;
 }
 
@@ -16,24 +16,35 @@ body.main {
 	position: absolute;
 	top: 2px;
 	left: 5px;
+	height: 0px;
+	width: 0px;
+/*	
 	height: 40px;
 	width: 283px;
 	background: url(html/images/encoremediaserver.png) no-repeat;
+*/
 }
 
 #MFLogo {
 	position: absolute;
 	top: 5px;
 	right: 5px;
+	height: 0px;
+	width: 0px;
+/*
 	height: 40px;
 	width: 183px;
 	background: url(html/images/mflogowhite.png) no-repeat;
+*/
 }
 
-
 #playerChooser {
-	position: absolute;
-	right: 210px;
+	right: 13px;
+}
+
+#playerChooserDiv {
+	height: 32px;
+	background-color: #003b8e;
 }
 
 .inner_top, .inner_bottom {

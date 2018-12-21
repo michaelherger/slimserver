@@ -99,28 +99,12 @@ Main = {
 			renderHidden: true,
 			items: [
 				{
-					region: 'north',
-					contentEl: 'header',
-					border: false,
-					margins: '5 5 0 5',
-					height: 40
-				},
-				
-				{
 					region: 'center',
 					layout: 'border',
 					border: false,
-					margins: '20 40',
+					margins: '0 0',
 					items: [leftpanel, rightpanel]
 				},
-
-				{
-					region: 'south',
-					contentEl: 'footer',
-					border: false,
-					margins: '0 5 5 5',
-					height: 40
-				}
 			]
 		};
 
