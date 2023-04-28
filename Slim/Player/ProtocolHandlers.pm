@@ -1,8 +1,7 @@
 package Slim::Player::ProtocolHandlers;
 
-# $Id$
 
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -10,6 +9,7 @@ package Slim::Player::ProtocolHandlers;
 use strict;
 
 use Scalar::Util qw(blessed);
+use Tie::RegexpHash;
 
 use Slim::Utils::Log;
 use Slim::Utils::Misc;
@@ -19,17 +19,19 @@ use Slim::Networking::Async::HTTP;
 # the protocolHandlers hash contains the modules that handle specific URLs,
 # indexed by the URL protocol.  built-in protocols are exist in the hash, but
 # have a zero value
-my %protocolHandlers = ( 
+my %protocolHandlers = (
 	file     => main::LOCALFILE ? qw(Slim::Player::Protocols::LocalFile) : qw(Slim::Player::Protocols::File),
 	tmp      => qw(Slim::Player::Protocols::Volatile),
-	http     => qw(Slim::Player::Protocols::HTTP),
-	https    => Slim::Networking::Async::HTTP->hasSSL() ? qw(Slim::Player::Protocols::HTTPS) : qw(Slim::Player::Protocols::HTTP),
-	icy      => qw(Slim::Player::Protocols::HTTP),
 	mms      => qw(Slim::Player::Protocols::MMS),
 	spdr     => qw(Slim::Player::Protocols::SqueezePlayDirect),
+	http     => qw(Slim::Player::Protocols::HTTP),
+	https    => qw(Slim::Player::Protocols::HTTPS),
+	icy      => qw(Slim::Player::Protocols::HTTP),
 	playlist => 0,
 	db       => 1,
 );
+
+tie my %URLHandlers, 'Tie::RegexpHash';
 
 my %localHandlers = (
 	file     => 1,
@@ -47,7 +49,7 @@ sub isValidHandler {
 		if ($protocolHandlers{$protocol}) {
 			return 1;
 		}
-	
+
 		if (exists $protocolHandlers{$protocol}) {
 			return 0;
 		}
@@ -58,9 +60,9 @@ sub isValidHandler {
 
 sub isValidRemoteHandler {
 	my ($class, $protocol) = @_;
-	
+
 	return isValidHandler(@_) && !$localHandlers{$protocol};
-	
+
 }
 
 sub registeredHandlers {
@@ -71,8 +73,14 @@ sub registeredHandlers {
 
 sub registerHandler {
 	my ($class, $protocol, $classToRegister) = @_;
-	
+
 	$protocolHandlers{$protocol} = $classToRegister;
+}
+
+sub registerURLHandler {
+	my ($class, $regexp, $classToRegister) = @_;
+
+	$URLHandlers{$regexp} = $classToRegister;
 }
 
 sub registerIconHandler {
@@ -84,7 +92,7 @@ sub registerIconHandler {
 
 sub handlerForProtocol {
 	my ($class, $protocol) = @_;
-	
+
 	return $protocolHandlers{$protocol};
 }
 
@@ -102,8 +110,9 @@ sub handlerForURL {
 	}
 
 	# Load the handler when requested..
-	my $handler = $class->loadHandler($protocol);
-	
+	my $handler = $class->loadURLHandler($url)
+	    // $class->loadHandler($protocol);
+
 	# Handler should be a class, not '1' for rtsp
 	return $handler && $handler =~ /::/ ? $handler : undef;
 }
@@ -112,7 +121,7 @@ sub iconHandlerForURL {
 	my ($class, $url) = @_;
 
 	return undef unless $url;
-	
+
 	my $handler;
 	foreach (keys %iconHandlers) {
 		if ($url =~ /$_/i) {
@@ -127,7 +136,7 @@ sub iconHandlerForURL {
 
 sub iconForURL {
 	my ($class, $url, $client) = @_;
-	
+
 	$url ||= '';
 
 	if (my $handler = $class->handlerForURL($url)) {
@@ -136,7 +145,7 @@ sub iconForURL {
 				return $meta->{cover} if $meta->{cover};
 			}
 		}
-		
+
 		if ($handler->can('getIcon')) {
 			return $handler->getIcon($url);
 		}
@@ -146,15 +155,30 @@ sub iconForURL {
 		return 'html/images/playlists.png';
 	}
 
-	elsif ($url =~ /^db:album\.(\w+)=(.+)/) {
-		my $value = Slim::Utils::Misc::unescape($2);
-		
-		if (utf8::is_utf8($value)) {
-			utf8::decode($value);
-			utf8::encode($value);
+	elsif ($url =~ /^db:(album\..*)/) {
+		my $query = {};
+		for my $term (split('&', $1)) {
+			if ($term =~ /(.*)=(.*)/) {
+				my $key = $1;
+				my $value = Slim::Utils::Misc::unescape($2);
+
+				$key =~ s/^album\./me./;
+
+				if (utf8::is_utf8($value)) {
+					utf8::decode($value);
+					utf8::encode($value);
+				}
+
+				$query->{$key} = $value;
+			}
 		}
-		
-		my $album = Slim::Schema->search('Album', { $1 => $value })->first;
+
+		my $params;
+		if (grep /^contributor/, keys %$query) {
+			$params->{prefetch} = 'contributor';
+		}
+
+		my $album = Slim::Schema->search('Album', $query, $params)->first;
 
 		if ($album && $album->artwork) {
 			return 'music/' . $album->artwork . '/cover.png';
@@ -178,11 +202,21 @@ sub iconForURL {
 	return;
 }
 
-# Dynamically load in the protocol handler classes to save memory.
 sub loadHandler {
 	my ($class, $protocol) = @_;
 
-	my $handlerClass = $protocolHandlers{lc $protocol};
+	return $class->loadHandlerClass($protocolHandlers{lc $protocol});
+}
+
+sub loadURLHandler {
+	my ($class, $url) = @_;
+
+	return $class->loadHandlerClass($URLHandlers{$url});
+}
+
+# Dynamically load in the protocol handler classes to save memory.
+sub loadHandlerClass {
+	my ($class, $handlerClass) = @_;
 
 	if ($handlerClass && $handlerClass ne '1' && !$loadedHandlers{$handlerClass}) {
 

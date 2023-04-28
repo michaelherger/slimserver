@@ -1,8 +1,6 @@
 package Slim::Formats::FLAC;
 
-# $tagsd: FLAC.pm,v 1.5 2003/12/15 17:57:50 daniel Exp $
-
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -45,6 +43,7 @@ my %tagMapping = (
 	'DISCNUMBER'                => 'DISC',
 	'DISCTOTAL'                 => 'DISCC',
 	'URL'                       => 'URLTAG',
+	'BPM'                       => 'BPM',
 	'MUSICBRAINZ_SORTNAME'      => 'ARTISTSORT',
 	'MUSICBRAINZ_ALBUMARTIST'   => 'ALBUMARTIST',
 	'MUSICBRAINZ_ALBUMARTISTID' => 'MUSICBRAINZ_ALBUMARTIST_ID',
@@ -55,6 +54,8 @@ my %tagMapping = (
 	'MUSICBRAINZ_TRACKID'       => 'MUSICBRAINZ_ID',
 	'MUSICBRAINZ_TRMID'         => 'MUSICBRAINZ_TRM_ID',
 	'DESCRIPTION'               => 'COMMENT',
+	'ORIGINALYEAR'              => 'YEAR',
+	'UNSYNCEDLYRICS'            => "LYRICS",
 
 	# J.River once again.. can't these people use existing standards?
 	'REPLAY GAIN'               => 'REPLAYGAIN_TRACK_GAIN',
@@ -87,22 +88,22 @@ sub getTag {
 	my $class  = shift;
 	my $file   = shift || return {};
 	my $anchor = shift || "";
-	
+
 	my $s = Audio::Scan->scan($file);
-	
+
 	return unless $s->{info}->{samplerate};
-	
+
 	my $tags = $class->_getStandardTag($s);
-	
-	my $hasCue = exists $tags->{CUESHEET_BLOCK} || exists $tags->{CUESHEET};		
+
+	my $hasCue = exists $tags->{CUESHEET_BLOCK} || exists $tags->{CUESHEET};
 
 	if ( !$hasCue ) {
 		# no embedded cuesheet.
 		# this is either a single song, or has an external cuesheet
 		return $tags;
 	}
-	
-	my $cuesheet;	
+
+	my $cuesheet;
 	if ( $tags->{CUESHEET} ) {
 		# user-supplied cuesheet in a single tag
 		$cuesheet = [ split /\s*\n/, $tags->{CUESHEET} ];
@@ -110,7 +111,7 @@ sub getTag {
 	else {
 		$cuesheet = $tags->{CUESHEET_BLOCK};
 	}
-	
+
 	# if we do have an embedded cuesheet, we need to parse the metadata
 	# for the individual tracks.
 	#
@@ -123,7 +124,7 @@ sub getTag {
 	# get the tracks from the cuesheet - tell parseCUE that we're dealing
 	# with an embedded cue sheet by passing in the filename
 	my $tracks = Slim::Formats::Playlists::CUE->parse($cuesheet, dirname($file), $file);
-	
+
 	# Fail if bad cuesheet was found
 	if ( !$tracks || !scalar keys %{$tracks} ) {
 		return $tags;
@@ -158,7 +159,7 @@ sub getTag {
 		# Allow FLACs with embedded cue sheets to have a date and size
 		$track->{AGE} = $fileage;
 		$track->{FS}  = $tags->{SIZE};
-		
+
 		# Mark track as virtual
 		$track->{VIRTUAL} = 1;
 
@@ -198,9 +199,9 @@ sub getCoverArt {
 
 	# Enable artwork in Audio::Scan
 	local $ENV{AUDIO_SCAN_NO_ARTWORK} = 0;
-	
+
 	my $s = Audio::Scan->scan($file);
-	
+
 	my $tags = $s->{tags};
 
 	$class->_addArtworkTags($s, $tags);
@@ -224,7 +225,7 @@ sub _getStandardTag {
 
 sub _doTagMapping {
 	my ($class, $tags) = @_;
-	
+
 	# Map ID3 tags first, so FLAC tags win out
 	if ( $tags->{TAGVERSION} ) {
 		# Tell MP3 tag mapper to not overwrite existing tags
@@ -246,16 +247,19 @@ sub _doTagMapping {
 			my @years = sort @{$tags->{DATE}};
 			$tags->{DATE} = $years[0];
 		}
-		
+
 		($tags->{YEAR} = $tags->{DATE}) =~ s/.*(\d\d\d\d).*/$1/;
 	}
+
+	# Sometimes the BPM is not an integer so we try to convert.
+	$tags->{BPM} = int($tags->{BPM}) if defined $tags->{BPM};
 }
 
 sub _addInfoTags {
 	my ($class, $s, $tags) = @_;
-	
+
 	my $info = $s->{info};
-	
+
 	# Add info tags
 	$tags->{SIZE}       = $info->{file_size};
 	$tags->{SECS}       = $info->{song_length_ms} / 1000;
@@ -266,7 +270,7 @@ sub _addInfoTags {
 	$tags->{SAMPLESIZE} = $info->{bits_per_sample};
 	$tags->{CHANNELS}   = $info->{channels};
 	$tags->{LOSSLESS}   = 1;
-	
+
 	# Map ID3 tags if file has them
 	if ( $info->{id3_version} ) {
 		$tags->{TAGVERSION} = 'FLAC, ' . $info->{id3_version};
@@ -278,9 +282,9 @@ sub _addArtworkTags {
 
 	# Standard picture block, try to find the front cover first
 	if ( $tags->{ALLPICTURES} ) {
-		my @allpics = sort { $a->{picture_type} <=> $b->{picture_type} } 
+		my @allpics = sort { $a->{picture_type} <=> $b->{picture_type} }
 				@{ $tags->{ALLPICTURES} };
-				
+
 		if ( my @frontcover = grep ($_->{picture_type} == 3,@allpics)) {
 			# in case of many type 3 (front cover) just use the first one
 			$tags->{ARTWORK} = $frontcover[0]->{image_data};
@@ -288,7 +292,7 @@ sub _addArtworkTags {
 			# fall back to use lowest type image found
 			$tags->{ARTWORK} = $allpics[0]->{image_data};
 		}
-		
+
 	}
 
 	# As seen in J.River Media Center FLAC files.
@@ -303,7 +307,7 @@ sub _addArtworkTags {
 			$tags->{ARTWORK} = $artwork;
 		}
 	}
-	
+
 	# Flag if we have embedded cover art
 	if ( $tags->{ARTWORK} ) {
 		if ( $ENV{AUDIO_SCAN_NO_ARTWORK} ) {
@@ -348,7 +352,7 @@ sub _getSubFileTags {
 	# try parsing stacked vorbis comments
 	$items = $class->_getStackedVCs($s, $tracks);
 	return $items if $items > 0;
-	
+
 	# This won't yield good results - but without it, we regress from 6.0.2
 	my $tags = $class->_getStandardTag($s);
 
@@ -361,7 +365,7 @@ sub _getSubFileTags {
 
 		return scalar keys %$tracks;
 	}
-	
+
 	# if we really wanted to, we could parse "standard" tags and apply to every track
 	# but that doesn't seem very useful.
 
@@ -379,9 +383,9 @@ sub _getXMLTags {
 	# even better, use RDF::Simple::Parser
 
 	# crude regex matching until we get a real rdf/xml parser in place
-	my $mbAlbum  = qr{"(http://musicbrainz.org/(?:mm-2.1/)album/[\w-]+)"};
-	my $mbArtist = qr{"(http://musicbrainz.org/(?:mm-2.1/)artist/[\w-]+)"};
-	my $mbTrack  = qr{"(http://musicbrainz.org/(?:mm-2.1/)track/[\w-]+)"};
+	my $mbAlbum  = qr{"(https?://musicbrainz.org/(?:mm-2.1/)album/[\w-]+)"};
+	my $mbArtist = qr{"(https?://musicbrainz.org/(?:mm-2.1/)artist/[\w-]+)"};
+	my $mbTrack  = qr{"(https?://musicbrainz.org/(?:mm-2.1/)track/[\w-]+)"};
 
 	# get list of albums included in this file
 	# TODO: handle a collection of tracks without an album association (<mm:trackList> at a file level)
@@ -393,7 +397,7 @@ sub _getXMLTags {
 		while ($albumListSegment =~ s|<rdf:li\s+rdf:resource=$mbAlbum\s*/>||m) {
 			push(@albumList, $1);
 		}
-		
+
 	} else {
 
 		# assume only one album
@@ -433,7 +437,7 @@ sub _getXMLTags {
 		if ($albumsegment =~ m|<mm:coverart rdf:resource="(/images/[^"+])"/>|s) { #" vim syntax
 			$albumHash->{$albumKey}->{'COVER'} = $1 unless $1 eq "/images/no_coverart.png";
 			# This need expanding upon to be actually useful
-		}		
+		}
 
 		# a cheezy way to get the first (earliest) release date
 		if ($albumsegment =~ m|<rdf:Seq>\s*<rdf:li>\s*<mm:ReleaseDate>.*?<dc:date>(.+?)</dc:date>|s) {
@@ -537,7 +541,7 @@ sub _getXMLTags {
 
 sub _getNumberedVCs {
 	my ($class, $s, $tracks) = @_;
-	
+
 	my $isDebug = $log->is_debug;
 
 	# parse numbered vorbis comments
@@ -557,7 +561,7 @@ sub _getNumberedVCs {
 	# TITLE[1]=baz
 	# TRACKNUMBER[2]=2
 	# TITLE[2]=something
-	
+
 	# grab the raw comments for parsing
 	my $tags = $s->{tags};
 
@@ -633,7 +637,7 @@ sub _getNumberedVCs {
 
 sub _getCDDBTags {
 	my ($class, $s, $tracks) = @_;
-	
+
 	my $isDebug = $log->is_debug;
 
 	my $items = 0;
@@ -687,7 +691,7 @@ sub _getCDDBTags {
 			my $tracknum = $1;
 
 			if ($tags->{$key} =~ m|^(.*\S)\s+/\s+(.+)$|) {
-				
+
 				if ($order eq "standard") {
 					$tracks->{$tracknum}->{'ARTIST'} = $1;
 					$tracks->{$tracknum}->{'TITLE'} = $2;
@@ -732,7 +736,7 @@ sub _getCUEinVCs {
 	my ($class, $s, $tracks) = @_;
 
 	my $items = 0;
-	
+
 	# foobar2000 alternately can stuff an entire cuesheet, along with
 	# the CDTEXT hack for storing metadata, into a vorbis comment tag.
 
@@ -740,11 +744,11 @@ sub _getCUEinVCs {
 	# cuesheet we pulled from the vorbis file.
 
 	my $tags = $s->{tags} || {};
-	
+
 	return 0 unless exists $tags->{CUESHEET};
 
 	my @cuesheet = split(/\s*\n/, $tags->{'CUESHEET'});
-	
+
 	push @cuesheet, "    REM END " . $tags->{'SECS'};
 
 	# we don't have a proper dir to send parseCUE(), but we already have urls,
@@ -830,7 +834,7 @@ sub _getStackedVCs {
 	}
 
 	return 0 unless $titletags == $cuetracks;
-	
+
 
 	# ok, let's see which tags apply to which tracks
 
@@ -847,12 +851,12 @@ sub _getStackedVCs {
 			# Make the key uppercase
 			my $tkey  = uc($1);
 			my $value = $2;
-			
+
 			# use duplicate detection to find track boundries
 			# retain file wide values as defaults
 			if (defined $tempTags->{$tkey}) {
 				$items++;
-				my %merged = (%{$defaultTags}, %{$tempTags});				
+				my %merged = (%{$defaultTags}, %{$tempTags});
 				$defaultTags = \%merged;
 				$tempTags = {};
 
@@ -902,7 +906,7 @@ sub findFrameBoundaries {
 	if ( !defined $fh || !defined $time ) {
 		return 0;
 	}
-	
+
 	return Audio::Scan->find_frame_fh( flac => $fh, int($time * 1000) );
 }
 
@@ -916,13 +920,13 @@ so we use this to set the track duaration value.
 
 sub scanBitrate {
 	my ( $class, $fh, $url ) = @_;
-	
+
 	seek $fh, 0, 0;
-	
+
 	my $s = Audio::Scan->scan_fh( flac => $fh );
-	
+
 	my $info = $s->{info};
-	
+
 	if ( !$info->{song_length_ms} ) {
 		return (-1, undef);
 	}
@@ -938,6 +942,169 @@ sub scanBitrate {
 
 	# FLAC bitrate is not accurate with a small header file, so don't bother
 	return (-1, undef);
+}
+
+sub parseStream {
+	my ( $class, $dataref, $args, $length ) = @_;
+
+	$args->{_scanbuf} .= $$dataref;
+	my $buflen = length $args->{_scanbuf};
+	return -1 if $buflen < 32*1024;
+
+	my $fh = File::Temp->new( DIR => Slim::Utils::Misc::getTempDir);
+	$fh->write($args->{_scanbuf});
+	$fh->seek(0, 0);
+
+	my $info = Audio::Scan->scan_fh( flac => $fh )->{info};
+	return undef unless $info->{samplerate};
+
+	$info->{fh} = $fh;
+
+	# Audio::Scan tries to guess total_sample which is in FLAC header. When codec does not know, it sets it
+	# to 0 and then Audio::Scan seeks to eof and read sample numbers from there which is incorrect here. So we
+	# assume that in best cases, FLAC has a compression ratio of 8 and use that as a limit.
+	my $maxSamples = ($buflen - $info->{audio_offset}) / ($info->{channels} * $info->{bits_per_sample} / 8) * 8;
+
+	if ($maxSamples < 0 || $info->{total_samples} < $maxSamples) {
+		$log->warn("Can't estimate track duration (got $info->{song_length_ms} ms)");
+		$info->{song_length_ms} = 0;
+		$info->{total_samples} = 0;
+	} elsif ($length) {
+		$info->{avg_bitrate} = int(8*1000 * ($length - $info->{audio_offset}) / $info->{song_length_ms});
+	}
+
+	return $info;
+}
+
+sub initiateFrameAlign {
+	my $context = { aligned => 0 };
+
+	# use a closure to hold context
+	return sub {
+		return frameAlign($context, @_);
+	}
+}
+
+sub frameAlign {
+	my ($context, undef, $chunkSize, $offset) = @_;
+
+	# all set, just quickly return
+	return 0 if $context->{aligned} && !$context->{inbuf};
+
+	# no need to align if we have a full file
+	if (!$context->{inbuf} && substr($_[1], 0, 4) eq 'fLaC') {
+		main::DEBUGLOG && $log->is_debug && $log->debug("found STREAMINFO header");
+		$context->{aligned} = 1;
+		return 0;
+	}
+
+	$context->{inbuf} .= substr($_[1], $offset);
+
+	# search for alignment
+	while (!$context->{aligned} && length $context->{inbuf} > 32) {
+		my $tag = unpack('C', substr($context->{inbuf}, 0, 1, ''));
+		$context->{bytes}++;
+		next unless $tag == 0xff;
+		$tag = ($tag << 24) | (unpack('N', substr($context->{inbuf}, 0, 4)) >> 8);
+		next unless ($tag & 0xfff80000) == 0xfff80000;
+
+		# try to identify non-valid frame combination (see flac specifications)
+		next unless (($tag >> 12) & 0x0f) && ((($tag >> 8) & 0x0f) != 0x0f) && ((($tag >> 4) & 0x0f) < 11) &&
+					  ((($tag >> 1) & 0x07) != 0x03) && ((($tag >> 1) & 0x07) != 0x07);
+
+		my $offset = 4;
+		for (my $byte = unpack('C',substr($context->{inbuf}, 3, 1)); $byte & 0x80; $offset++) { $byte <<= 1 }
+		$offset-- if $offset > 4;
+
+		my $blockSize = ($tag >> 12) & 0x0f;
+		if ($blockSize == 6) {
+			$offset += 2;
+		}
+		elsif ($blockSize == 7) {
+			$offset += 1;
+		}
+
+		my $samplerate = ($tag >> 8) & 0x0f;
+		if ($samplerate == 12) {
+			$offset += 1;
+		}
+		elsif ($samplerate > 12 && $samplerate < 15) {
+			$offset += 2;
+		}
+
+		# now $offset points at CRC-8
+		my $crc = crc8(pack('N', $tag) . substr($context->{inbuf}, 3, $offset - 3));
+
+		if ($crc == unpack('C', substr($context->{inbuf}, $offset, 1))) {
+			$context->{inbuf} = pack('C', $tag >> 24) . $context->{inbuf};
+			$context->{aligned} = 1;
+			last;
+		}
+	}
+
+	my $length = length $context->{inbuf};
+
+	# just need to flush the buffer, make sure empty ourselves first
+	if ($context->{aligned}) {
+		if ($chunkSize < $length) {
+			$_[1] = substr($context->{inbuf}, 0, $length - $chunkSize - 1, '');
+			return $chunkSize + 1;
+		}
+		else {
+			$_[1] = $context->{inbuf};
+			$context->{inbuf} = '';
+			return 0;
+		}
+	}
+
+	$_[1] = '';
+	return 0;
+}
+
+my @CRC_TABLE = (
+    0x00, 0x07, 0x0E, 0x09, 0x1C, 0x1B, 0x12, 0x15,
+    0x38, 0x3F, 0x36, 0x31, 0x24, 0x23, 0x2A, 0x2D,
+    0x70, 0x77, 0x7E, 0x79, 0x6C, 0x6B, 0x62, 0x65,
+    0x48, 0x4F, 0x46, 0x41, 0x54, 0x53, 0x5A, 0x5D,
+    0xE0, 0xE7, 0xEE, 0xE9, 0xFC, 0xFB, 0xF2, 0xF5,
+    0xD8, 0xDF, 0xD6, 0xD1, 0xC4, 0xC3, 0xCA, 0xCD,
+    0x90, 0x97, 0x9E, 0x99, 0x8C, 0x8B, 0x82, 0x85,
+    0xA8, 0xAF, 0xA6, 0xA1, 0xB4, 0xB3, 0xBA, 0xBD,
+    0xC7, 0xC0, 0xC9, 0xCE, 0xDB, 0xDC, 0xD5, 0xD2,
+    0xFF, 0xF8, 0xF1, 0xF6, 0xE3, 0xE4, 0xED, 0xEA,
+    0xB7, 0xB0, 0xB9, 0xBE, 0xAB, 0xAC, 0xA5, 0xA2,
+    0x8F, 0x88, 0x81, 0x86, 0x93, 0x94, 0x9D, 0x9A,
+    0x27, 0x20, 0x29, 0x2E, 0x3B, 0x3C, 0x35, 0x32,
+    0x1F, 0x18, 0x11, 0x16, 0x03, 0x04, 0x0D, 0x0A,
+    0x57, 0x50, 0x59, 0x5E, 0x4B, 0x4C, 0x45, 0x42,
+    0x6F, 0x68, 0x61, 0x66, 0x73, 0x74, 0x7D, 0x7A,
+    0x89, 0x8E, 0x87, 0x80, 0x95, 0x92, 0x9B, 0x9C,
+    0xB1, 0xB6, 0xBF, 0xB8, 0xAD, 0xAA, 0xA3, 0xA4,
+    0xF9, 0xFE, 0xF7, 0xF0, 0xE5, 0xE2, 0xEB, 0xEC,
+    0xC1, 0xC6, 0xCF, 0xC8, 0xDD, 0xDA, 0xD3, 0xD4,
+    0x69, 0x6E, 0x67, 0x60, 0x75, 0x72, 0x7B, 0x7C,
+    0x51, 0x56, 0x5F, 0x58, 0x4D, 0x4A, 0x43, 0x44,
+    0x19, 0x1E, 0x17, 0x10, 0x05, 0x02, 0x0B, 0x0C,
+    0x21, 0x26, 0x2F, 0x28, 0x3D, 0x3A, 0x33, 0x34,
+    0x4E, 0x49, 0x40, 0x47, 0x52, 0x55, 0x5C, 0x5B,
+    0x76, 0x71, 0x78, 0x7F, 0x6A, 0x6D, 0x64, 0x63,
+    0x3E, 0x39, 0x30, 0x37, 0x22, 0x25, 0x2C, 0x2B,
+    0x06, 0x01, 0x08, 0x0F, 0x1A, 0x1D, 0x14, 0x13,
+    0xAE, 0xA9, 0xA0, 0xA7, 0xB2, 0xB5, 0xBC, 0xBB,
+    0x96, 0x91, 0x98, 0x9F, 0x8A, 0x8D, 0x84, 0x83,
+    0xDE, 0xD9, 0xD0, 0xD7, 0xC2, 0xC5, 0xCC, 0xCB,
+    0xE6, 0xE1, 0xE8, 0xEF, 0xFA, 0xFD, 0xF4, 0xF3
+);
+
+sub crc8 {
+	my $data = shift;
+	my $val = 0;
+
+	while ($data) {
+		$val = $CRC_TABLE[$val ^ unpack('C', substr($data, 0, 1, ''))];
+	}
+
+	return $val;
 }
 
 sub canSeek { 1 }

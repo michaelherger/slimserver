@@ -1,13 +1,13 @@
 package Slim::Networking::Repositories;
 
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
 
 =head1 NAME
 
-Slim::Music::Repositories
+Slim::Networking::Repositories
 
 =head1 DESCRIPTION
 
@@ -68,7 +68,7 @@ use Slim::Utils::Timers;
 use constant POLL_INTERVAL => 3600 * 6;
 
 # mirrors whose latency is within this range (in seconds) will be picked randomly
-use constant OK_THRESHOLD => 0.5;	
+use constant OK_THRESHOLD => 0.5;
 
 my $log = Slim::Utils::Log->addLogCategory( {
 	category     => 'network.repositories',
@@ -81,16 +81,16 @@ my $prefs = preferences('server');
 # weighting. The default of 1 would be replaced with the latency in order to
 # allow latency based load balancing.
 my %repositories = (
-	servers    => { 'https://repos.squeezecommunity.org/' => 1 },
+	servers    => { 'https://downloads.slimdevices.com/releases/' => 1 },
 	firmware   => { 'http://update.slimdevices.com/update/firmware/' => 1 },
-	extensions => { 'https://repos.squeezecommunity.org/extensions.xml' => 1 },
+	extensions => { 'https://github.com/LMS-Community/lms-plugin-repository/raw/master/extensions.xml' => 1 },
 );
 
 my %missingSSLWarned;
 
 sub init {
 	# read optional file with additinal repositories
-	my $reposfile = catfile(Slim::Utils::OSDetect::dirsFor('repositories'), 'repositories.conf');
+	my $reposfile = catfile(scalar Slim::Utils::OSDetect::dirsFor('repositories'), 'repositories.conf');
 
 	if ( -f $reposfile && open(CONVERT, $reposfile) ) {
 		while (my $line = <CONVERT>) {
@@ -134,23 +134,25 @@ sub get {
 
 	my $url = $item =~ /^https?:/ ? $class->getMirrorForUrl($item) : $class->getUrlForRepository($item);
 
-	if (!Slim::Networking::Async::HTTP->hasSSL() && $url =~ s/^https:/http:/) {
-		$log->warn("Falling back to plain text http lack of IO::Socket::SSL: " . $url) unless $missingSSLWarned{$url}++;
+	if (!Slim::Networking::Async::HTTP->hasSSL() && $url =~ /^https:(.*)/ && !$missingSSLWarned{$url}++) {
+		$log->warn("Falling back to plain text http lack of IO::Socket::SSL: " . $url);
 	}
+
+	$url =~ s/^https:/http:/ if $missingSSLWarned{$url};
 
 	Slim::Networking::SimpleAsyncHTTP->new($cb, sub {
 		my ($http, $error) = @_;
 
 		my $url = $http->url;
-
 		$log->error("Failed to fetch $url: $error");
 
-		if ($url =~ s/^(http)s:/$1:/) {
-			$log->warn("https lookup failed - trying plain text http instead: $url");
+		if ($prefs->get('insecureHTTPS') && $url =~ /^https:/) {
+			$log->warn("https lookup failed - trying plain text http instead: $url") unless $missingSSLWarned{$url}++;
+			$url =~ s/^(http)s:/$1:/;
 			Slim::Networking::SimpleAsyncHTTP->new($cb, $ecb, $params)->get($url);
 		}
 		else {
-			$ecb->($http, $error)
+			$ecb->($http, $error);
 		}
 	}, $params)->get( $url );
 }
@@ -173,7 +175,7 @@ sub getUrlForRepository {
 	@urls = grep {
 		$latency ||= $repositories->{$_};
 		$repositories->{$_} - $latency < OK_THRESHOLD ? 1 : 0;
-	} sort { 
+	} sort {
 		$repositories->{$a} <=> $repositories->{$b}
 	} @urls;
 
@@ -189,9 +191,9 @@ sub getMirrorForUrl {
 	my ($class, $url) = @_;
 
 	main::DEBUGLOG && $log->is_debug && $log->debug("Trying to find a mirror for URL: " . $url);
-	
-	my ($repository) = grep { 
-		$repositories{$_}->{$url} ? $_ : undef 
+
+	my ($repository) = grep {
+		$repositories{$_}->{$url} ? $_ : undef
 	} keys %repositories;
 
 	if ($repository) {
@@ -210,11 +212,11 @@ sub measureLatency {
 
 	for my $repo ( keys %{$repositories{$repository}} ) {
 		Slim::Networking::SimpleAsyncHTTP->new(
-			\&_measureLatencyDone, 
-			\&_measureLatencyDone, 
-			{ 
-				repository => $repository, 
-				sent       => Time::HiRes::time(), 
+			\&_measureLatencyDone,
+			\&_measureLatencyDone,
+			{
+				repository => $repository,
+				sent       => Time::HiRes::time(),
 				cache      => 0,
 				timeout    => 5,
 			}

@@ -1,8 +1,6 @@
 package Slim::Web::Settings::Server::Status;
 
-# $Id: Basic.pm 13299 2007-09-27 08:59:36Z mherger $
-
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -10,9 +8,7 @@ package Slim::Web::Settings::Server::Status;
 use strict;
 use base qw(Slim::Web::Settings);
 
-use Slim::Utils::Log;
 use Slim::Utils::Strings qw(cstring);
-use Slim::Utils::Prefs;
 use Slim::Menu::SystemInfo;
 
 sub name {
@@ -29,19 +25,27 @@ sub handler {
 	if ($paramRef->{'abortScan'}) {
 		Slim::Music::Import->abortScan();
 	}
-	
+
 	$paramRef->{info} = Slim::Menu::SystemInfo->menu( $client );
 	$paramRef->{info} = $paramRef->{info}->{items};
-	
+
 	$paramRef->{server}  = _extractGroup($paramRef, cstring($client, 'INFORMATION_MENU_SERVER'));
 	$paramRef->{library} = _extractGroup($paramRef, cstring($client, 'INFORMATION_MENU_LIBRARY'));
 	$paramRef->{players} = _extractGroup($paramRef, cstring($client, 'INFORMATION_MENU_PLAYER'));
 
-	# we only have one player	
+	foreach (@{$paramRef->{info}}) {
+		if ($_->{web} && ($_->{web}->{group} || '') eq 'onlinelibrary') {
+			$paramRef->{onlinelibrary} ||= [];
+			push @{$paramRef->{onlinelibrary}}, $_;
+		}
+	}
+	@{$paramRef->{info}} = grep { !$_->{web} || ($_->{web}->{group} || '') ne 'onlinelibrary' } @{$paramRef->{info}};
+
+	# we only have one player
 	if ($client && !$paramRef->{players}) {
 		$paramRef->{players} = {
 			items => [
-				 _extractGroup($paramRef, $client->name) 
+				 _extractGroup($paramRef, $client->name)
 			]
 		};
 	}
@@ -50,6 +54,8 @@ sub handler {
 	$paramRef->{logs}    = _extractGroup($paramRef, cstring($client, 'SETUP_DEBUG_SERVER_LOG'));
 
 	$paramRef->{'scanning'} = Slim::Music::Import->stillScanning();
+	$paramRef->{'radioNeedsFakeVersion'} = Slim::Networking::Discovery->needsFakeVersion;
+	$paramRef->{'needsTimeSync'} = !main::NOMYSB && Slim::Networking::SqueezeNetwork::Time->needsTimeSync;
 
 	if (Slim::Schema::hasLibrary()) {
 		# skeleton for the progress update
@@ -65,11 +71,11 @@ sub handler {
 
 sub _extractGroup {
 	my ($paramRef, $token) = @_;
-	
+
 	my @items = grep { $_->{name} eq $token } @{$paramRef->{info}};
-	
+
 	@{$paramRef->{info}} = grep { $_->{name} ne $token } @{$paramRef->{info}};
-	
+
 	return shift @items;
 }
 

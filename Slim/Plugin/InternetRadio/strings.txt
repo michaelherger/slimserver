@@ -32,13 +32,13 @@ PLUGIN_RADIOTIME_MODULE_NAME
 	SV	TuneIn Radio
 
 PLUGIN_RADIOTIME_MODULE_NAME_DESC
-	CS	TuneIn Radio - Místní Internetové rádio
+	CS	TuneIn Radio - Místní internetové rádio
 	DA	TuneIn Radio - lokal internetradio
 	DE	TuneIn Radio - Lokale Internetradiosender
 	EN	TuneIn Radio - Local Internet Radio
 	ES	TuneIn Radio - Radio por Internet local
 	FI	TuneIn Radio - paikallinen internetradio
-	FR	TuneIn Radio - Radio Internet locale
+	FR	TuneIn Radio - Radios Internet
 	IT	TuneIn Radio - Radio Internet locale
 	NL	TuneIn Radio - lokale internetradio
 	NO	TuneIn Radio: Lokal Internett-radio
@@ -62,7 +62,7 @@ PLUGIN_RADIOTIME_MODULE_TITLE
 	SV	TuneIn Radio
 
 PLUGIN_RADIOTIME_LOADING
-	CS	Nahrávání TuneIn Radio...
+	CS	Načítání TuneIn Radio...
 	DA	Indlæser TuneIn Radio...
 	DE	TuneIn Radio wird geladen...
 	EN	Loading TuneIn Radio...
@@ -108,13 +108,13 @@ RADIOTIME_LANGUAGE
 	SV	Efter språk
 
 RADIOTIME_LOCAL
-	CS	Místní rozhlas
+	CS	Místní rádio
 	DA	Lokal Radio
 	DE	Lokales Radio
 	EN	Local Radio
 	ES	Radio local
 	FI	Paikallisradio
-	FR	Radio Locale
+	FR	Radios Locales
 	IT	Radio locale
 	NL	Lokale Radio
 	NO	Lokalradio
@@ -138,7 +138,7 @@ RADIOTIME_LOCATION
 	SV	Efter land
 
 RADIOTIME_WORLD
-	CS	Podle lokality
+	CS	Svět
 	DA	Efter sted
 	DE	Nach Standort
 	EN	By Location
@@ -198,7 +198,7 @@ RADIOTIME_PODCAST
 	SV	Poddsändningar
 
 RADIOTIME_SEARCH
-	CS	Vyhledávání TuneIn
+	CS	Hledat na TuneIn
 	DA	Søg i TuneIn
 	DE	TuneIn durchsuchen
 	EN	Search TuneIn
@@ -234,7 +234,7 @@ RADIOTIME_TALK
 	EN	Talk
 	ES	Conversación
 	FI	Keskustelu
-	FR	Émissions-Débats
+	FR	Émissions / Débats
 	IT	Talk
 	NL	Gesproken
 	NO	Prat
@@ -243,13 +243,13 @@ RADIOTIME_TALK
 	SV	Pratradio
 
 RADIOTIME_MY_PRESETS
-	CS	Mé Předvolby
+	CS	Moje předvolby
 	DA	Mine forvalg
 	DE	Eigene Voreinstellungen
 	EN	My Presets
 	ES	Mis Memorias
 	FI	Esiasetukset
-	FR	Mes Préréglages
+	FR	Mes favoris TuneIn
 	HE	ההגדרות הקבועות מראש שלי
 	IT	Stazioni predefinite
 	NL	Mijn Voorkeuren

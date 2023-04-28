@@ -1,9 +1,7 @@
 # String file for RandomPlay plugin
 
-# $Id: strings.txt 11037 2006-12-24 07:25:38Z mherger $
-
 PLUGIN_RANDOMPLAY
-	CS	Náhodně zvolený mix
+	CS	Náhodný mix
 	DA	Tilfældigt miks
 	DE	Zufallsmix
 	EN	Random Mix
@@ -12,7 +10,7 @@ PLUGIN_RANDOMPLAY
 	FR	Mix aléatoire
 	HE	מיקס אקראי
 	IT	Raccolta casuale
-	NL	Willekeurige mix
+	NL	Willekeurige Mix
 	NO	Tilfeldig miks
 	PL	Składanka losowa
 	RU	Произвольный микс
@@ -27,13 +25,14 @@ PLUGIN_RANDOM_DESC
 	FI	Jukeboksi musiikillesi
 	FR	Juke-box pour votre musique
 	IT	Jukebox per la raccolta musicale personale
-	NL	Jukebox voor je muziek
+	NL	Jukebox voor jouw muziek
 	NO	Jukeboks til musikken
 	PL	Zmieniacz na Twoją muzykę
 	RU	Музыкальный автомат для ваших песен
 	SV	Jukebox för din musik
 
 PLUGIN_RANDOM_DISABLE
+	CS	Zastavit náhodný mix
 	DE	Zufallsmix anhalten
 	EN	Stop Random Mix
 	FR	Arrête mix aléatoire
@@ -42,7 +41,7 @@ PLUGIN_RANDOM_DISABLE
 	PL	Zatrzymaj składankę losową
 
 PLUGIN_RANDOM_DISABLED
-	CS	Náhodně zvolený mix zastaven
+	CS	Náhodný mix zastaven
 	DA	Tilfældigt miks er stoppet
 	DE	Zufallsmix angehalten
 	EN	Random Mix Stopped
@@ -73,7 +72,7 @@ PLUGIN_RANDOM_TRACK
 	SV	Låtmix
 
 PLUGIN_RANDOM_TRACK_PLAYING
-	CS	Přehrávání náhodně zvolených skladeb
+	CS	Přehrávání náhodných skladeb
 	DA	Afspiller tilfældige numre
 	DE	Zufällige Titel werden wiedergegeben
 	EN	Playing Random Songs
@@ -89,7 +88,7 @@ PLUGIN_RANDOM_TRACK_PLAYING
 	SV	Spelar upp slumpmässigt valda låtar
 
 PLUGIN_RANDOM_TRACK_DISABLE
-	CS	zastavení přidávání skladeb
+	CS	přestat přidávat skladby
 	DA	tilføj ikke flere numre
 	DE	keine Titel mehr hinzuzufügen
 	EN	stop adding songs
@@ -98,7 +97,7 @@ PLUGIN_RANDOM_TRACK_DISABLE
 	FR	ne plus ajouter de morceaux
 	HE	הפסק להוסיף שירים
 	IT	interrompi aggiunta brani
-	NL	toevoegen van nummers stoppen
+	NL	stop toevoegen van nummers
 	NO	slutte å legge til sanger
 	PL	zatrzymaj dodawanie utworów
 	RU	прекратить добавление песен
@@ -120,7 +119,7 @@ PLUGIN_RANDOM_ALBUM
 	SV	Albummix
 
 PLUGIN_RANDOM_ALBUM_ITEM
-	CS	Náhodně zvolené album
+	CS	Náhodné album
 	DA	Tilfældigt album
 	DE	Zufälliges Album
 	EN	Random Album
@@ -136,7 +135,7 @@ PLUGIN_RANDOM_ALBUM_ITEM
 	SV	Slumpmässigt valt album
 
 PLUGIN_RANDOM_ALBUM_PLAYING
-	CS	Přehrávání náhodně zvolených alb
+	CS	Přehrávání náhodných alb
 	DA	Afspiller tilfældige album
 	DE	Zufällige Alben werden wiedergegeben
 	EN	Playing Random Albums
@@ -161,14 +160,14 @@ PLUGIN_RANDOM_ALBUM_DISABLE
 	FR	ne plus ajouter d'albums
 	HE	הפסק להוסיף אלבומים
 	IT	interrompi aggiunta album
-	NL	toevoegen van albums stoppen
+	NL	stop toevoegen van albums
 	NO	slutte å legge til album
 	PL	zatrzymaj dodawanie albumów
 	RU	прекратить добавление альбомов
 	SV	sluta lägga till album
 
 PLUGIN_RANDOM_CONTRIBUTOR
-	CS	Mix umělců
+	CS	Mix interpretů
 	DA	Miks baseret på tilfældig kunstner
 	DE	Interpretenmix
 	EN	Artist Mix
@@ -183,7 +182,7 @@ PLUGIN_RANDOM_CONTRIBUTOR
 	SV	Artistmix
 
 PLUGIN_RANDOM_CONTRIBUTOR_ITEM
-	CS	Náhodně zvolení interpreti
+	CS	Náhodní interpreti
 	DA	Miks baseret på tilfældig kunstner
 	DE	Zufälliger Interpret
 	EN	Random Artist
@@ -199,7 +198,7 @@ PLUGIN_RANDOM_CONTRIBUTOR_ITEM
 	SV	Slumpmässigt vald artist
 
 PLUGIN_RANDOM_CONTRIBUTOR_PLAYING
-	CS	Přehrávání náhodně zvolených umělců
+	CS	Přehrávání náhodných interpretů
 	DA	Afspiller tilfældige kunstnere...
 	DE	Zufällige Interpreten werden wiedergegeben ...
 	EN	Playing Random Artists
@@ -224,7 +223,7 @@ PLUGIN_RANDOM_CONTRIBUTOR_DISABLE
 	FR	ne plus ajouter d'artistes
 	HE	הפסק להוסיף מבצעים
 	IT	interrompi aggiunta artisti
-	NL	toevoegen van artiesten stoppen
+	NL	stop toevoegen van artiesten
 	NO	slutte å legge til artister
 	PL	zatrzymaj dodawanie wykonawców
 	RU	прекратить добавление исполнителей
@@ -246,7 +245,7 @@ PLUGIN_RANDOM_YEAR
 	SV	Årsmix
 
 PLUGIN_RANDOM_YEAR_ITEM
-	CS	Náhodně zvolený rok
+	CS	Náhodný rok
 	DA	Tilfældigt år
 	DE	Zufälliger Jahrgang
 	EN	Random Year
@@ -262,7 +261,7 @@ PLUGIN_RANDOM_YEAR_ITEM
 	SV	Slumpmässigt valt år
 
 PLUGIN_RANDOM_YEAR_PLAYING
-	CS	Přehrávání náhodně zvolených roků
+	CS	Přehrávání náhodných roků
 	DA	Afspiller tilfældige år
 	DE	Zufällige Jahrgänge werden wiedergegeben
 	EN	Playing Random Years
@@ -278,7 +277,7 @@ PLUGIN_RANDOM_YEAR_PLAYING
 	SV	Spelar upp slumpmässigt valda år
 
 PLUGIN_RANDOM_YEAR_DISABLE
-	CS	Přestat přidávat roky
+	CS	přestat přidávat roky
 	DA	tilføj ikke flere år
 	DE	keine Jahrgänge mehr hinzuzufügen
 	EN	stop adding years
@@ -287,7 +286,7 @@ PLUGIN_RANDOM_YEAR_DISABLE
 	FR	ne plus ajouter d'années
 	HE	הפסק להוסיף שנים
 	IT	interrompi aggiunta anni
-	NL	toevoegen van jaren stoppen
+	NL	stop toevoegen van jaren
 	NO	slutte å legge til flere år
 	PL	zatrzymaj dodawanie lat
 	RU	прекратить добавление годов
@@ -325,7 +324,7 @@ PLUGIN_RANDOM_SELECT_ALL
 	SV	Välj alla
 
 PLUGIN_RANDOM_SELECT_NONE
-	CS	Nevybírat žádné
+	CS	Nevybrat žádné
 	DA	Vælg ingen
 	DE	Keine auswählen
 	EN	Select None
@@ -341,19 +340,20 @@ PLUGIN_RANDOM_SELECT_NONE
 	SV	Välj ingen
 
 PLUGIN_RANDOM_LIBRARY_FILTER
+	CS	Použít zobrazení knihovny
 	DE	Bibliotheksansicht verwenden
 	EN	Use library view
 	NL	Gebruik deelcollectie
 	NO	Bruk delbiblioteker
 
 PLUGIN_RANDOM_CHOOSE_BELOW
-	CS	Vybrat náhodně zvolený mix hudby z vaší knihovny:
+	CS	Vyberte si náhodný mix hudby z vaší knihovny:
 	DA	Vælg en tilfældig blanding af musik fra dit bibliotek:
 	DE	Wählen Sie einen zufälligen Musikmix aus Ihrer Sammlung:
 	EN	Choose a random mix of music from your library:
 	ES	Elegir una mezcla aleatoria de música de la biblioteca:
 	FI	Valitse satunnainen musiikkikokoelma kirjastostasi:
-	FR	Sélectionnez un mix aléatoire de morceaux tirés de votre bibliothèque:
+	FR	Sélectionnez un mix aléatoire de morceaux tirés de votre bibliothèque :
 	HE	בחר מיקס אקראי של מוסיקה מהספרייה:
 	IT	Scegliere una raccolta casuale di musica dalla libreria:
 	NL	Een willekeurige mix van muziek uit je collectie kiezen:
@@ -363,7 +363,7 @@ PLUGIN_RANDOM_CHOOSE_BELOW
 	SV	Välj en slumpmässig mix av musik från ditt bibliotek:
 
 PLUGIN_RANDOM_TRACK_WEB
-	CS	Náhodně zvolené skladby
+	CS	Náhodné skladby
 	DA	Tilfældige numre
 	DE	Zufällige Titel
 	EN	Random songs
@@ -379,7 +379,7 @@ PLUGIN_RANDOM_TRACK_WEB
 	SV	Slumpmässigt valda låtar
 
 PLUGIN_RANDOM_CONTRIBUTOR_WEB
-	CS	Náhodně zvolení interpreti
+	CS	Náhodní interpreti
 	DA	Miks baseret på tilfældige kunstnere
 	DE	Zufällige Interpreten
 	EN	Random artists
@@ -395,7 +395,7 @@ PLUGIN_RANDOM_CONTRIBUTOR_WEB
 	SV	Slumpmässigt valda artister
 
 PLUGIN_RANDOM_ALBUM_WEB
-	CS	Náhodně zvolená alba
+	CS	Náhodná alba
 	DA	Miks baseret på tilfældige album
 	DE	Zufällige Alben
 	EN	Random albums
@@ -411,7 +411,7 @@ PLUGIN_RANDOM_ALBUM_WEB
 	SV	Slumpmässigt valda album
 
 PLUGIN_RANDOM_YEAR_WEB
-	CS	Náhodně zvolené roky
+	CS	Náhodné roky
 	DA	Tilfældige år
 	DE	Zufällige Jahrgänge
 	EN	Random years
@@ -433,10 +433,10 @@ PLUGIN_RANDOM_GENRE_FILTER_WEB
 	EN	Genres to include in your mix:
 	ES	Géneros a incluir en la mezcla:
 	FI	Miksiin sisällytettävät genret:
-	FR	Genres à inclure dans le mix:
+	FR	Genres à inclure dans le mix :
 	HE	סגנונות שיש לכלול במיקס:
 	IT	Generi musicali da includere nella raccolta:
-	NL	Genres voor opname in je mix:
+	NL	Genres om toe te voegen aan je mix:
 	NO	Sjangere som skal inkluderes i miksen:
 	PL	Gatunki do dodania do składanki:
 	RU	Жанры, добавляемые в микс:
@@ -458,7 +458,7 @@ PLUGIN_RANDOM_CHOOSE_GENRES
 	SV	Välj genrer
 
 PLUGIN_RANDOM_BEFORE_NUM_TRACKS
-	CS	Zobrazí se právě přehrávané
+	CS	Právě hraje zobrazí
 	DA	Nu spiller vil vise
 	DE	Aktuelle Wiedergabe zeigt
 	EN	Now Playing will show
@@ -474,7 +474,7 @@ PLUGIN_RANDOM_BEFORE_NUM_TRACKS
 	SV	Nu spelas visas
 
 PLUGIN_RANDOM_AFTER_NUM_TRACKS
-	CS	přicházející skladby a
+	CS	přicházejících skladeb a
 	DA	kommende numre og
 	DE	noch abzuspielende und
 	EN	upcoming songs and
@@ -490,13 +490,13 @@ PLUGIN_RANDOM_AFTER_NUM_TRACKS
 	SV	låtar som kommer att spelas och
 
 PLUGIN_RANDOM_AFTER_NUM_OLD_TRACKS
-	CS	nedávno přehrané skladby.
+	CS	nedávno přehraných skladeb.
 	DA	numre afspillet for nylig.
 	DE	wiedergegebene Titel.
 	EN	recently played songs.
 	ES	canciones reproducidas recientemente.
 	FI	äskettäin soitetut kappaleet.
-	FR	morceaux joués récemment.
+	FR	morceaux lus récemment.
 	HE	שירים אחרונים שהושמעו.
 	IT	ultimi brani riprodotti.
 	NL	recent gespeelde nummers.
@@ -506,7 +506,7 @@ PLUGIN_RANDOM_AFTER_NUM_OLD_TRACKS
 	SV	nyligen spelade låtar.
 
 PLUGIN_RANDOM_CONTINUOUS_MODE
-	CS	Přidat nové položky po skončení starých
+	CS	Přidávání nových položek po dokončení starých
 	DA	Tilføj nye når gamle er færdige
 	DE	Neue Objekte hinzufügen, wenn alte wiedergegeben wurden
 	EN	Add new items when old ones finish
@@ -522,7 +522,7 @@ PLUGIN_RANDOM_CONTINUOUS_MODE
 	SV	Lägg till nya objekt när de gamla tar slut.
 
 PLUGIN_RANDOM_GENERAL_HELP
-	CS	Do vašeho mixu můžete kdykoli přidávat nebo z něj odstraňovat skladby. K zastavení náhodně zvoleného mixu vymažte váš seznam skladeb nebo klikněte na
+	CS	Do vašeho mixu můžete kdykoli přidávat nebo z něj odstraňovat skladby. K zastavení náhodného mixu vymažte váš seznam skladeb nebo klikněte na
 	DA	Du kan altid tilføje og fjerne numre fra dit miks. Du kan stoppe et tilfældigt miks ved at rydde afspilningslisten eller klikke for at
 	DE	Sie können jederzeit Titel aus dem Mix entfernen oder neue hinzufügen. Zum Anhalten des Zufallsmix leeren Sie die Wiedergabeliste oder klicken, um
 	EN	You can add or remove songs from your mix at any time. To stop a random mix, clear your playlist or click to
@@ -538,7 +538,7 @@ PLUGIN_RANDOM_GENERAL_HELP
 	SV	Du kan alltid lägga till eller ta bort låtar från en mix. Om du vill stoppa en slumpmässig mix rensar du spellistan, eller klickar om du vill
 
 PLUGIN_RANDOM_PRESS_RIGHT
-	CS	Stiskněte VPRAVO k
+	CS	Stiskněte tlačítko VPRAVO k
 	DA	Tryk på højre for at
 	DE	Drücken Sie RECHTS um
 	EN	Press RIGHT to
@@ -547,18 +547,32 @@ PLUGIN_RANDOM_PRESS_RIGHT
 	FR	Appuyez sur DROITE pour
 	HE	לחץ על הלחצן ימינה כדי
 	IT	Premere il pulsante DESTRA per
-	NL	Met pijltje-RECHTS kun je
+	NL	Druk RECHTS om
 	NO	Gå til høyre for å
 	PL	Naciśnij przycisk W PRAWO, aby
 	RU	Нажмите RIGHT, чтобы
 	SV	Tryck på RIGHT om du vill
 
 PLUGIN_RANDOM_TITLEMIX_WITH_GENRES
+	CS	Mix skladeb (omezeno na aktuální žánry)
 	DE	Titelmix (auf aktuelle Genres beschränkt)
 	EN	Song Mix (limited to current genres)
+	FR	Morceaux aléatoires (limités aux genres actuels)
+	NL	Nummermix (alleen binnen huidige genres)
 	NO	Sangmiks (begrenset til nåværende sjangre)
 
 PLUGIN_RANDOM_ALBUM_MIX_WITH_GENRES
+	CS	Náhodné album (omezeno na aktuální žánry)
 	DE	Zufälliges Album (auf aktuelle Genres beschränkt)
 	EN	Random Album (limited to current genres)
+	FR	Album aléatoire (limité aux genres actuels)
+	NL	Willekeurig album (alleen binnen huidige genres)
 	NO	Tilfeldig album (begrenset til nåværende sjangre)
+
+PLUGIN_RANDOM_TITLEMIX_KEEP_GENRES
+	DE	Titelmix (Genreauswahl beibehalten)
+	EN	Song Mix (keep genre selection)
+
+PLUGIN_RANDOM_ALBUM_MIX_KEEP_GENRES
+	DE	Zufälliges Album (Genreauswahl beibehalten)
+	EN	Random Album (keep genre selection)

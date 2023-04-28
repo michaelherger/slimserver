@@ -1,11 +1,10 @@
 package Slim::Display::Transporter;
 
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
 
-# $Id$
 
 =head1 NAME
 
@@ -309,7 +308,7 @@ sub showVisualizer {
 	my $display = shift;
 
 	# turn off visualizer if we're playing a digital input
-	if ( Slim::Music::Info::isDigitalInput(Slim::Player::Playlist::song($display->client)) ) {
+	if ( Slim::Music::Info::isDigitalInput(Slim::Player::Playlist::track($display->client)) ) {
 		return 0;
 	}
 	

@@ -1,10 +1,9 @@
 package Slim::Web::Pages::Search;
 
-# $Id$
 
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
-# modify it under the terms of the GNU General Public License, 
+# modify it under the terms of the GNU General Public License,
 # version 2.
 
 use strict;
@@ -30,10 +29,10 @@ my $sqlLog = logger('database.sql');
 my $prefs = preferences('advancedSearch');
 
 sub init {
-	
+
 	Slim::Web::Pages->addPageFunction( qr/^search\.(?:htm|xml)/, \&search );
 	Slim::Web::Pages->addPageFunction( qr/^advanced_search\.(?:htm|xml)/, \&advancedSearch );
-	
+
 	Slim::Web::Pages->addPageLinks("search", {'ADVANCEDSEARCH' => "advanced_search.html"});
 }
 
@@ -47,30 +46,38 @@ sub search {
 		$params->{'library_id'} ||= $library_id;
 		$library_id = "&library_id=$library_id";
 	}
-	
+
 	if (my $action = $params->{'action'}) {
 		$params->{'path'} = "clixmlbrowser/clicmd=browselibrary+playlist+$action&mode=search$library_id/";
 		return Slim::Web::XMLBrowser::webLink(@_);
 	}
 
-	
+
 	if ($params->{'ajaxSearch'}) {
 		$params->{'itemsPerPage'} = MAXRESULTS;
 		$params->{'path'} = "clixmlbrowser/clicmd=browselibrary+items&linktitle=SEARCH&mode=search$library_id/";
-		return Slim::Web::XMLBrowser::webLink(@_);		
+		$params->{'q'} =~ s/\*//g;
+		return Slim::Web::XMLBrowser::webLink(@_);
 	}
 
 	my $searchItems = Slim::Menu::BrowseLibrary::searchItems($client);
-	
+
 	$params->{searches} = [];
-	
+
 	foreach (@$searchItems) {
 		push @{ $params->{searches} }, {
 			$_->{name} => "search.html",
 		};
 	}
 
-	return Slim::Web::HTTP::filltemplatefile('search.html', $params);	
+	return Slim::Web::HTTP::filltemplatefile('search.html', $params);
+}
+
+sub parseAdvancedSearchParams {
+	my ($client, $params) = @_;
+
+	$params->{_dontRenderPage} = 1;
+	return advancedSearch($client, $params);
 }
 
 sub advancedSearch {
@@ -80,12 +87,14 @@ sub advancedSearch {
 	my %query   = ();
 	my @qstring = ();
 
+	my $dontRenderPage = delete $params->{_dontRenderPage};
+
 	# template defaults
 	$params->{'browse_list'}  = " ";
 	$params->{'liveSearch'}   = 0;
 	$params->{'browse_items'} = [];
 	$params->{'icons'}        = $Slim::Web::Pages::additionalLinks{icons};
-	
+
 	if ( $params->{'action'} && $params->{'action'} eq 'deleteSaved' ) {
 		$prefs->remove($params->{'savedSearch'});
 		delete $params->{'deleteSavedSearch'};
@@ -103,7 +112,7 @@ sub advancedSearch {
 					delete $params->{$key};
 				}
 			}
-			
+
 			while ( my ($k, $v) = each %{$params->{'search'}} ) {
 				if (ref $v && ref $v eq 'HASH') {
 					while ( my ($k2, $v2) = each %$v ) {
@@ -124,16 +133,16 @@ sub advancedSearch {
 	elsif ( $params->{'resetAdvSearch'} ) {
 		delete $params->{savedSearch};
 	}
-	
+
 	my $type = ($params->{'searchType'} || '') =~ /^(Track|Album)$/ ? $1 : 'Track';
-	
+
 	# keep a copy of the search params to be stored in a saved search
 	my %searchParams;
 	my %joins;
 
 	# Check for valid search terms
 	for my $key (sort keys %$params) {
-		
+
 		next unless $key =~ /^search\.(\S+)/;
 		next unless $params->{$key};
 
@@ -158,7 +167,7 @@ sub advancedSearch {
 			$newKey =~ s/\.op$//;
 
 			$searchParams{$newKey} ||= {};
-			$searchParams{$newKey}->{op} = $op; 
+			$searchParams{$newKey}->{op} = $op;
 
 			next unless $params->{$key} || ($newKey eq 'year' && $params->{$key} eq '0');
 
@@ -240,19 +249,19 @@ sub advancedSearch {
 		}
 		elsif ($key =~ /search\.(.*)\.(active\d+)$/) {
 			$searchParams{$1} ||= {};
-			$searchParams{$1}->{$2} = $params->{$key}; 
+			$searchParams{$1}->{$2} = $params->{$key};
 
 			next;
 		}
 
 		$searchParams{$newKey} ||= {};
-		$searchParams{$newKey}->{value} = $params->{$key}; 
+		$searchParams{$newKey}->{value} = $params->{$key};
 
 		# Append to the query string
 		push @qstring, join('=', $key, Slim::Utils::Misc::escape($params->{$key}));
 
 		# Normalize the string queries
-		# 
+		#
 		# Turn the track_title into track.title for the query.
 		# We need the _'s in the form, because . means hash key.
 		if ($newKey =~ s/(.+)_(titlesearch|namesearch|value|)$/$1\.$2/) {
@@ -271,7 +280,7 @@ sub advancedSearch {
 
 		if ($newKey =~ /url/) {
 			my $uri = URI::Escape::uri_escape_utf8($params->{$key});
-			
+
 			# don't escape backslashes
 			$uri =~ s$%(?:2F|5C)$/$ig;
 			# replace the % in the URI escaped string with a single character placeholder
@@ -282,32 +291,32 @@ sub advancedSearch {
 
 		$query{$newKey} = $params->{$key};
 	}
-	
+
 	# show list of file types we have in the DB
 	my $dbh = Slim::Schema->dbh;
 	my $cache = Slim::Utils::Cache->new();
 	my $prefix = Slim::Music::Import->lastScanTime() . '_advSearch_';
-		
+
 	if ( !($params->{'fileTypes'} = $cache->get($prefix . 'ctList')) ) {
-		foreach my $ct ( @{ $dbh->selectcol_arrayref('SELECT DISTINCT content_type FROM tracks WHERE audio = 1') } ) {
+		foreach my $ct ( @{ $dbh->selectcol_arrayref('SELECT DISTINCT content_type FROM tracks WHERE audio = 1 AND tracks.content_type != "cpl" AND tracks.content_type != "src" AND tracks.content_type != "ssp" AND tracks.content_type != "dir"') } ) {
 			$params->{'fileTypes'} ||= {};
 			$params->{'fileTypes'}->{lc($ct)} = string(uc($ct));
 		}
-		
+
 		$cache->set($prefix . 'ctList', $params->{'fileTypes'}, 86400 * 7) if keys %{$params->{'fileTypes'}};
 	}
-	
+
 	# get available samplerates
 	if ( !($params->{'samplerates'} = $cache->get($prefix . 'samplerateList')) ) {
 		$params->{'samplerates'} = $dbh->selectcol_arrayref('SELECT DISTINCT samplerate FROM tracks WHERE samplerate > 0');
 		$cache->set($prefix . 'samplerateList', $params->{'samplerates'}, 86400 * 7) if scalar @{$params->{'samplerates'}};
 	}
-	
+
 	if ( !($params->{'samplesizes'} = $cache->get($prefix . 'samplesizeList')) ) {
 		$params->{'samplesizes'} = $dbh->selectcol_arrayref('SELECT DISTINCT samplesize FROM tracks WHERE samplesize > 0');
 		$cache->set($prefix . 'samplesizeList', $params->{'samplesizes'}, 86400 * 7) if scalar @{$params->{'samplesizes'}};
 	}
-	
+
 	# load up the genres we know about.
 	my $collate = Slim::Utils::OSDetect->getOS()->sqlHelperClass()->collate();
 	$params->{'genres'}     = Slim::Schema->search('Genre', undef, { 'order_by' => "namesort $collate" });
@@ -321,22 +330,22 @@ sub advancedSearch {
 
 				my $genreId = $genreSearch->{value};
 				my $genre   = $params->{'genres'}->find({ id => $genreId })->name;
-				
+
 				if ($genre) {
 					$searchParams{'genre'}      = { value => -1 };
 					$searchParams{'genre_name'} = {	value => $genre };
 				}
 			}
 		}
-		
+
 		foreach my $k (keys %searchParams) {
 			delete $searchParams{$k} unless $searchParams{$k}->{value};
 		}
-		
+
 		$searchParams{'searchType'} = $type;
 
 		$prefs->set($saveSearch, \%searchParams);
-		
+
 		delete $params->{saveSearch};
 	}
 
@@ -348,7 +357,7 @@ sub advancedSearch {
 
 		_initActiveRoles($params);
 
-		return Slim::Web::HTTP::filltemplatefile("advanced_search.html", $params);
+		return $dontRenderPage ? $params : Slim::Web::HTTP::filltemplatefile("advanced_search.html", $params);
 	}
 
 	my @joins = ();
@@ -382,11 +391,11 @@ sub advancedSearch {
 	# create sub-query to get text based genre matches (if needed)
 	my $namesearch = delete $query{'genre_name'};
 	if ($query{'genre'}) {
-		
+
 		# IDs can change. When we want to save a library definition we better use the genre name.
 		if ( $query{'genre'} >= 0 && $params->{'action'} && $params->{'action'} eq 'saveLibraryView' && (my $saveSearch = $params->{saveSearch}) ) {
 			$namesearch = Slim::Schema->search('Genre', { id => $query{'genre'} })->get_column('name')->first;
-			$query{'genre'} = { 
+			$query{'genre'} = {
 				'in' => Slim::Schema->search('Genre', {
 					'me.namesearch' => { 'like' => Slim::Utils::Text::searchStringSplit($namesearch) }
 				})->get_column('id')->as_query
@@ -400,8 +409,8 @@ sub advancedSearch {
 					s/\s+$//;
 					@{Slim::Utils::Text::searchStringSplit($_)};
 				} split /,/, $namesearch;
-				
-				$query{'genre'} = { 
+
+				$query{'genre'} = {
 					($query{'genre'} == -2 ? 'not_in' : 'in') => Slim::Schema->search('Genre', {
 						'me.namesearch' => { 'like' => \@tokens }
 					})->get_column('id')->as_query
@@ -411,10 +420,10 @@ sub advancedSearch {
 				delete $query{'genre'};
 			}
 		}
-		
+
 		push @joins, 'genreTracks' if $query{'genre'} || $query{'genres.namesearch'};
 	}
-	
+
 	$query{'me.audio'} = 1;
 
 	if ($query{'album.titlesearch'} || $joins{'album'}) {
@@ -426,7 +435,7 @@ sub advancedSearch {
 
 		push @joins, 'comments';
 	}
-	
+
 	if ( main::STATISTICS && $query{'persistent.rating'} || $query{'persistent.playcount'} ) {
 		push @joins, 'persistent';
 	}
@@ -448,12 +457,12 @@ sub advancedSearch {
 		'join'  => \@joins,
 		'joins' => \@joins,
 	);
-	
+
 	$attrs{'order_by'} = "me.disc, me.titlesort $collate" if $type eq 'Track';
-	
+
 	# Create a resultset - have fillInSearchResults do the actual search.
 	my $tracksRs = Slim::Schema->search('Track', \%query, \%attrs)->distinct;
-	
+
 	my $rs;
 	if ( $type eq 'Album' ) {
 		$rs = Slim::Schema->search('Album', {
@@ -469,11 +478,11 @@ sub advancedSearch {
 			'join'     => \@joins,
 			'joins'    => \@joins,
 		})->distinct;
-		
+
 		my $sqlQuery = $rs->get_column('id')->as_query;
-		
+
 		my $vlid = 'advSrch_' . time;
-		
+
 		Slim::Music::VirtualLibraries->registerLibrary( {
 			id      => $vlid,
 			name    => $saveSearch,
@@ -484,6 +493,8 @@ sub advancedSearch {
 		Slim::Music::VirtualLibraries->rebuild($vlid);
 	}
 
+	return ($tracksRs, $rs) if $dontRenderPage;
+
 	if (defined $client && !$params->{'start'}) {
 
 		# stash parameters used to generate this query, so if the user
@@ -491,7 +502,7 @@ sub advancedSearch {
 		# keeping all the tracks in memory twice.
 		$client->modeParam("search${type}Results", { 'cond' => \%query, 'attr' => \%attrs });
 	}
-	
+
 	fillInSearchResults($params, $rs || $tracksRs, \@qstring, $client);
 
 	return Slim::Web::HTTP::filltemplatefile("advanced_search.html", $params);
@@ -527,9 +538,9 @@ sub fillInSearchResults {
 	$params->{'itemsPerPage'} ||= preferences('server')->get('itemsPerPage');
 
 	# This is handed to pageInfo to generate the pagebar 1 2 3 >> links.
-	my $otherParams = '&player=' . Slim::Utils::Misc::escape($player) . 
-			  ($type ?'&searchType='. ucfirst($type) : '') . 
-			  ($query ? '&query=' . Slim::Utils::Misc::escape($query) : '' ) . 
+	my $otherParams = '&player=' . Slim::Utils::Misc::escape($player) .
+			  ($type ?'&searchType='. ucfirst($type) : '') .
+			  ($query ? '&query=' . Slim::Utils::Misc::escape($query) : '' ) .
 			  '&' .
 			  join('&', @$qstring);
 
@@ -560,7 +571,7 @@ sub fillInSearchResults {
 	});
 
 	$params->{'start'} = $params->{'pageinfo'}{'startitem'};
-	
+
 	# Get just the items we need for this loop.
 	$rs = $rs->slice($offset, $limit);
 
@@ -594,9 +605,9 @@ sub fillInSearchResults {
 		} elsif ($type eq 'album') {
 
 			$form{'hierarchy'} = 'album,track';
-		
+
 		} elsif ($type eq 'genre') {
-		
+
 			$form{'hierarchy'} = 'genre,contributor,album,track';
 		}
 =cut
@@ -608,14 +619,14 @@ sub fillInSearchResults {
  		}
 
 		$obj->displayAsHTML(\%form, $descend);
-		
+
 		$form{$type}        = $form{'item'};
 		$form{'attributes'} ||= sprintf('&%s.id=%d', $type, $form{'item'});
 
 		$itemCount++;
 
 		push @{$params->{'browse_items'}}, \%form;
-		
+
 		main::idleStreams() unless $itemCount % 5;
 	}
 }

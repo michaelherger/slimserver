@@ -1,8 +1,7 @@
 package Slim::Formats::RemoteMetadata;
 
-# $Id$
 
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -101,7 +100,7 @@ if you want the standard metadata functions to handle the data.
   Slim::Formats::RemoteMetadata->registerParser(
       match => qr/soma\.fm/,
       func  => \&parser,
-  ) );
+  );
 
   sub parser {
       my ( $client, $url, $metadata ) = @_;

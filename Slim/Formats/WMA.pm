@@ -1,8 +1,7 @@
 package Slim::Formats::WMA;
 
-# $Id$
 
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
@@ -19,6 +18,7 @@ my $sourcelog = logger('player.source');
 my %tagMapping = (
 	'Author'                => 'ARTIST',
 	'Title'                 => 'TITLE',
+	'WM/BeatsPerMinute'     => 'BPM',
 	'WM/AlbumArtist'        => 'ALBUMARTIST',
 	'WM/AlbumTitle'         => 'ALBUM',
 	'WM/Composer'           => 'COMPOSER',
@@ -67,6 +67,9 @@ sub getTag {
 			$tags->{$new} = delete $tags->{$old};
 		}
 	}
+
+	# Sometimes the BPM is not an integer so we try to convert.
+	$tags->{BPM} = int($tags->{BPM}) if defined $tags->{BPM};
 
 	# Add additional info
 	my $stream = $info->{streams}->[0];

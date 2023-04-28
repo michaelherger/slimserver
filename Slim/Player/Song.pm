@@ -1,8 +1,7 @@
 package Slim::Player::Song;
 
-# $Id$
 
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -64,6 +63,8 @@ my @_playlistCloneAttributes = qw(
 			startOffset streamLength
 			seekdata initialAudioBlock
 			_canSeek _canSeekError
+			stripHeader
+			wantFormat
 
 			_duration _bitrate _streambitrate _streamFormat
 			_transcoded directstream
@@ -80,7 +81,7 @@ sub new {
 
 	my $client = $owner->master();
 
-	my $objOrUrl = Slim::Player::Playlist::song($client, $index) || return undef;
+	my $objOrUrl = Slim::Player::Playlist::track($client, $index) || return undef;
 
 	# Bug: 3390 - reload the track if it's changed.
 	my $url      = blessed($objOrUrl) && $objOrUrl->can('url') ? $objOrUrl->url : $objOrUrl;
@@ -106,14 +107,6 @@ sub new {
 	$url = $track->url;
 
 	main::INFOLOG && $log->info("index $index -> $url");
-
-# XXX - thsi test does not work with last.fm - not sure why it was here in the first place
-#	if (!Slim::Music::Info::isURL($url)) {
-#		logError("[$url] Unrecognized type " . Slim::Music::Info::contentType($url));
-#
-#		logError($client->string('PROBLEM_CONVERT_FILE'));
-#		return undef;
-#	}
 
 	my $handler = Slim::Player::ProtocolHandlers->handlerForURL( $url );
 	if (!$handler) {
@@ -222,7 +215,7 @@ sub _getNextPlaylistTrack {
 }
 
 sub getNextSong {
-	my ($self, $successCb, $failCb) = @_;
+	my ($self, $successCb, $failCb, $redir) = @_;
 
 	my $handler = $self->currentTrackHandler();
 
@@ -241,7 +234,7 @@ sub getNextSong {
 	}
 
 	my $track   = $self->currentTrack();
-	my $url     = $track->url;
+	my $url     = $redir || $track->url;
 	my $client  = $self->master();
 
 	# If we have (a) a scannable playlist track,
@@ -261,9 +254,9 @@ sub getNextSong {
 
 						if ($self->_track() == $track) {
 							# Update of original track, by playlist or redirection
-							$self->_track($newTrack);
-							$self->_currentTrackHandler(Slim::Player::ProtocolHandlers->handlerForURL($newTrack->url));
-
+							$self->_track($newTrack);	
+							$self->_currentTrackHandler($handler->currentTrackHandler($self, $newTrack)) if $handler->can('currentTrackHandler');
+														
 							main::INFOLOG && $log->info("Track updated by scan: $url -> " . $newTrack->url);
 
 							# Replace the item on the playlist so it has the new track/URL
@@ -286,6 +279,8 @@ sub getNextSong {
 						}
 
 						$track = $newTrack;
+						# need to replace streamUrl unless scanner has changed it
+						$self->streamUrl($track->url) if $self->streamUrl eq $url;
 					}
 
 					# maybe we just found or scanned a playlist
@@ -296,11 +291,14 @@ sub getNextSong {
 					# if we just found a playlist					
 					if (!$self->_currentTrack() && $self->isPlaylist()) {
 						main::INFOLOG && $log->info("Found a playlist");
-						$self->getNextSong($successCb, $failCb);	# recurse
-					} else {
-						$self->getNextSong($successCb, $failCb);	# recurse
-						# $successCb->();
 					}
+					
+					# always recurse either for playlist or to continue and do getNextTrack
+					$self->getNextSong($successCb, $failCb);
+				}
+				elsif ($track->can('redir') && $track->redir && !$redir) {
+					# recurse once if we failed and have been redirected
+					$self->getNextSong($successCb, $failCb, $track->redir);
 				}
 				else {
 					# Notify of failure via cant_open, this is used to pick
@@ -343,17 +341,16 @@ sub getNextSong {
 # Some 'native' formats are streamed with a different format to their container
 my %streamFormatMap = (
 	wav => 'pcm',
-	mp4 => 'aac',
 );
 
 sub open {
-	my ($self, $seekdata) = @_;
+	my ($self, $seekdata, $redir) = @_;
 
 	my $handler = $self->currentTrackHandler();
 	my $client  = $self->master();
 	my $track   = $self->currentTrack();
 	assert($track);
-	my $url     = $track->url;
+	my $url = $redir || $track->url;
 
 	# Reset seekOffset - handlers will set this if necessary
 	$self->startOffset(0);
@@ -364,6 +361,14 @@ sub open {
 	main::INFOLOG && $log->info($url);
 
 	$self->seekdata($seekdata) if $seekdata;
+
+	# last chance to get the byte offset if not already provided	
+	if ($self->seekdata && $self->seekdata->{'timeOffset'} && !$self->seekdata->{'sourceStreamOffset'}) {  
+		my $seekdata = $self->getSeekData($self->seekdata->{'timeOffset'});
+		$self->seekdata($seekdata) if $seekdata;
+		main::INFOLOG && $log->info("Adding seekdata ", Data::Dump::dump($self->seekdata));
+	}	
+
 	my $sock;
 	my $format = Slim::Music::Info::contentType($track);
 
@@ -400,11 +405,20 @@ sub open {
 		push (@streamFormats, 'I') if (! $wantTranscoderSeek);
 
 		push @streamFormats, ($handler->isRemote && !Slim::Music::Info::isVolatile($handler) ? 'R' : 'F');
+		
+		my @formats = ( $format );
+		push (@formats, grep { $_ ne $format} keys %{$track->processors}) if $track->can('processors');
 
-		($transcoder, $error) = Slim::Player::TranscodingHelper::getConvertCommand2(
+		# we include processed formats just here because they only applies to remote + 'I' and other
+		# calls to getConvertCommand2 (seek evaluation & Volatile) rule out this case before
+		foreach (@formats) {
+			$self->wantFormat($_);
+			($transcoder, $error) = Slim::Player::TranscodingHelper::getConvertCommand2(
 			$self,
-			$format,
+			$_,
 			\@streamFormats, [], \@wantOptions);
+			last if $transcoder;
+		}	
 
 		if (! $transcoder) {
 			logError("Couldn't create command line for $format playback for [$url]");
@@ -419,10 +433,9 @@ sub open {
 	} else {
 		require Slim::Player::CapabilitiesHelper;
 
-		# Set the correct format for WAV/AAC playback
-		if ( exists $streamFormatMap{$format} ) {
-			$format = $streamFormatMap{$format};
-		}
+		# Set the correct format for WAV playback
+		$self->wantFormat($format);
+		$format = $streamFormatMap{$format} || $format;
 
 		# Is format supported by all players?
 		if (!grep {$_ eq $format} Slim::Player::CapabilitiesHelper::supportedFormats($client)) {
@@ -445,10 +458,13 @@ sub open {
 			rateLimit => 0,
 		};
 	}
-
+	
+	# don't modify $song in getConverterCommand2 
+	$self->stripHeader($transcoder->{'stripHeader'});
+	
 	# TODO work this out for each player in the sync-group
 	my $directUrl;
-	if ($transcoder->{'command'} eq '-' && ($directUrl = $client->canDirectStream($url, $self))) {
+	if ($transcoder->{'command'} eq '-' && ($directUrl = $client->canDirectStream($url, $self)) && (!$redir || $client->canHTTPS)) {
 		main::INFOLOG && $log->info( "URL supports direct streaming [$url->$directUrl]" );
 		$self->directstream(1);
 		$self->streamUrl($directUrl);
@@ -469,6 +485,15 @@ sub open {
 			});
 
 			if (!$sock) {
+				
+				# if we failed on a redirected track, retry once. Direct streaming will be disabled
+				# as redirection from HTTP to HTTPS does not work in direct mode
+				if ($track->can('redir') && $track->redir && !$redir) {
+					main::INFOLOG && $log->info("failed opening, retrying non-redirected url ", $track->redir);
+					$self->streamUrl($track->redir);
+					return $self->open($seekdata, $track->redir);
+				}
+
 				logWarning("stream failed to open [$url].");
 				$self->setStatus(STATUS_FAILED);
 				return (undef, $self->isRemote() ? 'PROBLEM_CONNECTING' : 'PROBLEM_OPENING', $url);
@@ -638,7 +663,7 @@ sub open {
 		$streamController = Slim::Player::SongStreamController->new($self, $sock);
 
 	} else {
-
+		# file or remote 'R' mode failed => no point retrying
 		logError("Can't open [$url] : $!");
 		return (undef, 'PROBLEM_OPENING', $url);
 	}
@@ -874,29 +899,6 @@ sub canDoSeek {
 
 		return $self->_canSeek(0);
 	}
-}
-
-# This is a prototype, that just falls back to protocol-handler providers (pull) for now.
-# It is planned to move the actual metadata maintenance into this module where the
-# protocol-handlers will push the data.
-
-sub metadata {
-	my ($self) = @_;
-
-	my $handler;
-
-	if (($handler = $self->_currentTrackHandler()) && $handler->can('songMetadata')
-		|| ($handler = $self->handler()) && $handler->can('songMetadata') )
-	{
-		return $handler->songMetadata($self);
-	} 
-	elsif (($handler = $self->_currentTrackHandler()) && $handler->can('getMetadataFor')
-		|| ($handler = $self->handler()) && $handler->can('getMetadataFor') )
-	{
-		return $handler->songMetadata($self->master, $self->currentTrackHandler()->url, 0);
-	}
-
-	return undef;
 }
 
 sub icon {

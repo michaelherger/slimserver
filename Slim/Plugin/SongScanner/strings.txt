@@ -1,9 +1,7 @@
 # String file for SongScanner plugin
 
-# $Id: strings.txt,v 1.1 2007-11-07 07:38:15 fishbone Exp $
-
 PLUGIN_SONGSCANNER
-	CS	Prohlížeč skladby
+	CS	Prohledávání skladby
 	DA	Analyse af nummer
 	DE	Titel-Scanner
 	EN	Song Scanner
@@ -11,14 +9,14 @@ PLUGIN_SONGSCANNER
 	FI	Kappaleen haku
 	FR	Analyseur de morceau
 	IT	Analisi brani
-	NL	Nummerscanner
+	NL	Nummer Scanner
 	NO	Sangsøk
 	PL	Moduł przeszukiwania utworów
 	RU	Сканер песен
 	SV	Låtsökaren
 
 PLUGIN_SONGSCANNER_DESC
-	CS	Interface přehrávače pro skok na libovolnou pozici za současného přehrávání skladby (Squeezebox Classic, Squeezebox Boom, Transporter)
+	CS	Rozhraní přehrávače pro přeskakování na libovolné pozice v rámci právě přehrávané skladby (pouze Squeezebox Classic, Squeezebox Boom, Transporter)
 	DA	Kontrolpanel til at springe til vilkårlige steder i det nummer som spilles (Squeezebox Classic, Squeezebox Boom, Transporter)
 	DE	Player-Schnittstelle zum Springen an zufällige Positionen im aktuellen Titel (nur Squeezebox Classic, Squeezebox Boom, Transporter)
 	EN	Player interface for jumping to arbitrary positions within the currently playing song (Squeezebox Classic, Squeezebox Boom, Transporter only)
@@ -26,7 +24,7 @@ PLUGIN_SONGSCANNER_DESC
 	FI	Soittimen käyttöliittymä satunnaisiin paikkoihin hyppäämiseen toistetun kappaleen sisällä (Squeezebox Classic, Squeezebox Boom, Transporter)
 	FR	Interface de la platine permettant d'accéder à des emplacements arbitraires du morceau en cours de lecture (Squeezebox Classic, Squeezebox Boom, Transporter)
 	IT	Interfaccia lettore per passare a posizioni casuali all'interno del brano in corso di riproduzione (Squeezebox Classic, Squeezebox Boom, Transporter)
-	NL	Muzieksysteeminterface om naar willekeurige posities in het huidige nummer te springen (Squeezebox Classic, Squeezebox Boom, Transporter)
+	NL	Muziekspeler interface om naar willekeurige posities in het huidige nummer te springen (Squeezebox Classic, Squeezebox Boom, Transporter)
 	NO	Spillergrensesnitt for å gå til vilkårlige plasseringer i sangen som spilles av (Squeezebox Classic, Squeezebox Boom, Transporter)
 	PL	Interfejs odtwarzacza umożliwiający przejście do dowolnego miejsca w aktualnie odtwarzanym utworze (Squeezebox Classic, Squeezebox Boom, Transporter)
 	RU	Интерфейс плеера для перехода в произвольную позицию воспроизводимой песни (Squeezebox Classic, Squeezebox Boom, Transporter)
@@ -39,7 +37,7 @@ PLUGIN_SONGSCANNER_SET
 	EN	Time:
 	ES	Tiempo:
 	FI	Aika:
-	FR	Heure:
+	FR	Heure :
 	IT	Ora:
 	NL	Tijd:
 	NO	Klokkeslett:
@@ -48,7 +46,7 @@ PLUGIN_SONGSCANNER_SET
 	SV	Tid:
 
 PLUGIN_SONGSCANNER_ERR_UNKNOWNSIZE
-	CS	Není možné prohlížet stopu, protože délka není známa
+	CS	Nelze prohledat skladbu, protože není známa doba trvání
 	DA	Nummeret kan ikke analyseres hurtigere da dets længde er ukendt
 	DE	Scannen im Titel nicht möglich, da Dauer unbekannt
 	EN	Cannot scan through track because duration unknown
@@ -63,7 +61,7 @@ PLUGIN_SONGSCANNER_ERR_UNKNOWNSIZE
 	SV	Det går inte att söka igenom spåret eftersom varaktigheten är okänd
 
 PLUGIN_SONGSCANNER_ERR_NOTRACK
-	CS	Žádná stopa
+	CS	Žádná skladba
 	DA	Ingen numre
 	DE	Kein Titel
 	EN	No track
@@ -86,7 +84,7 @@ PLUGIN_SONGSCANNER_MAX_RATE_FWD
 	FI	Suurin kelausnopeus saavutettiin
 	FR	Le débit maximal d'avance rapide a été atteint
 	IT	È stata raggiunta la velocità di avanzamento massima
-	NL	Maximale vooruitspoelsnelheid bereikt
+	NL	Maximale snelheid voor vooruitspoelen bereikt
 	NO	Maks spolingshastighet forover er nådd
 	PL	Osiągnięto maksymalną szybkość przewijania do przodu
 	RU	Достигнута макс. скорость перемотки вперед
@@ -101,7 +99,7 @@ PLUGIN_SONGSCANNER_MAX_RATE_REW
 	FI	Suurin kelausnopeus saavutettiin
 	FR	Le débit maximal de retour rapide a été atteint
 	IT	È stata raggiunta la velocità di riavvolgimento massima
-	NL	Maximale terugspoelsnelheid bereikt
+	NL	Maximale snelheid voor terugspoelen bereikt
 	NO	Maks spolingshastighet bakover er nådd
 	PL	Osiągnięto maksymalną szybkość przewijania do tyłu
 	RU	Достигнута макс. скорость перемотки назад

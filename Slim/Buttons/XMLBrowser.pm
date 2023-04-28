@@ -1,8 +1,6 @@
 package Slim::Buttons::XMLBrowser;
 
-# $Id$
-
-# Copyright 2005-2009 Logitech.
+# Logitech Media Server Copyright 2005-2020 Logitech.
 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
@@ -294,6 +292,7 @@ sub gotPlaylist {
 			secs    => $item->{'duration'},
 			bitrate => $item->{'bitrate'},
 			cover   => $item->{'cover'} || $item->{'image'} || $item->{'icon'},
+			year	=> $item->{'year'},
 		} );
 		
 		# This loop may have a lot of items and a lot of database updates
@@ -1318,6 +1317,7 @@ sub playItem {
 					secs    => $other->{'duration'},
 					bitrate => $other->{'bitrate'},
 					cover   => $other->{'cover'} || $other->{'image'} || $other->{'icon'},
+					year	=> $other->{'year'},
 				} );
 
 				# This loop may have a lot of items and a lot of database updates
@@ -1337,6 +1337,7 @@ sub playItem {
 				secs    => $item->{'duration'},
 				bitrate => $item->{'bitrate'},
 				cover   => $item->{'cover'} || $item->{'image'} || $item->{'icon'},
+				year	=> $item->{'year'},
 			} );
 			
 			$client->execute([ 'playlist', $action, $url, $title ]);

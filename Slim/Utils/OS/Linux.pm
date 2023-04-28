@@ -1,6 +1,6 @@
 package Slim::Utils::OS::Linux;
 
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -70,23 +70,33 @@ sub getMemInfo() {
 }
 
 sub getFlavor {
+	my $osName = '';
+
+	# parse new-school operating system identification file if available
+	if (-f '/etc/os-release' && open(OS_RELEASE, '/etc/os-release')) {
+		while (<OS_RELEASE>) {
+			if (/^NAME="(.*?)"/i) {
+				$osName = lc($1);
+				last;
+			}
+		}
+
+		close OS_RELEASE;
+	}
+
 	if (-f '/etc/raidiator_version') {
 
 		return 'Netgear RAIDiator';
 
-	} elsif (-f '/etc/squeezeos.version') {
-
-		return 'SqueezeOS';
-
-	} elsif (-f '/etc/debian_version' || -f '/etc/devuan_version') {
+	} elsif ($osName =~ /debian|devuan|ubuntu|raspbian/ || -f '/etc/debian_version' || -f '/etc/devuan_version') {
 
 		return 'Debian';
 
-	} elsif (-f '/etc/redhat_release' || -f '/etc/redhat-release' || -f '/etc/fedora-release') {
+	} elsif ($osName =~ /red.?hat|fedora|centos/ || -f '/etc/redhat_release' || -f '/etc/redhat-release' || -f '/etc/fedora-release') {
 
 		return 'Red Hat';
 
-	} elsif (-f '/etc/SuSE-release') {
+	} elsif ($osName =~ /suse|sles/ || -f '/etc/SuSE-release') {
 
 		return 'SuSE';
 
@@ -102,7 +112,7 @@ sub signalUpdateReady {
 	my ($file) = @_;
 
 	if ($file) {
-		my ($version, $revision) = $file =~ /(\d+\.\d+\.\d+)(?:.*(\d{5,}))?/;
+		my ($version, $revision) = $file =~ /(\d+\.\d+\.\d+)(?:.*?(\d{5,}))?/;
 		$revision ||= 0;
 		$::newVersion = Slim::Utils::Strings::string('SERVER_LINUX_UPDATE_AVAILABLE', "$version - $revision", $file);
 	}

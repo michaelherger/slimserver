@@ -1,8 +1,7 @@
 package Slim::Utils::Strings;
 
-# $Id$
 
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -43,14 +42,15 @@ our @EXPORT_OK = qw(string cstring clientString);
 use Config;
 use Digest::SHA1 qw(sha1_hex);
 use POSIX qw(setlocale LC_TIME LC_COLLATE);
-use File::Basename;
+use File::Basename qw(dirname);
 use File::Slurp qw(read_file write_file);
-use File::Spec::Functions qw(:ALL);
+use File::Spec::Functions qw(catdir);
 use JSON::XS::VersionOneAndTwo;
 use Scalar::Util qw(blessed);
 use Storable;
 
 use Slim::Utils::Log;
+use Slim::Utils::Misc;
 use Slim::Utils::Prefs;
 use Slim::Utils::PluginManager;
 
@@ -86,7 +86,7 @@ sub init {
 	if ($::checkstrings) {
 		checkChangedStrings();
 	}
-	
+
 	# Load cached extra strings from mysb.com
 	loadExtraStrings();
 }
@@ -112,7 +112,7 @@ sub loadStrings {
 
 	my $stringCache = catdir( $prefs->get('cachedir'),
 		Slim::Utils::OSDetect::OS() eq 'unix' ? 'stringcache' : 'strings');
-	
+
 	# Add the os arch to the cache file name, to avoid crashes when going
 	# between 32-bit and 64-bit perl for example
 	$stringCache .= '.' . Slim::Utils::OSDetect::details()->{osArch} . '.bin';
@@ -150,7 +150,7 @@ sub loadStrings {
 		if ($cacheOK && $strings->{'mtimesum'} && $strings->{'mtimesum'} != $sum) {
 			$cacheOK = 0;
 		}
-		
+
 		# force cache renewal on server updates
 		if ($cacheOK && ( !$strings->{'serverRevision'} || $strings->{'serverRevision'} !~ /^$::REVISION$/ )) {
 			$cacheOK = 0;
@@ -159,7 +159,7 @@ sub loadStrings {
 		# check for same list of strings files as that stored in stringcache
 		if ($cacheOK && scalar @{$strings->{'files'}} == scalar @$files) {
 			my %files = map { $_ => 1 } @$files;
-	
+
 			foreach ( @{ $strings->{'files'} } ) {
 				if (!$files{$_}) {
 					$cacheOK = 0;
@@ -169,10 +169,10 @@ sub loadStrings {
 		} else {
 			$cacheOK = 0;
 		}
-		
+
 		# check for same list of disabled plugins
 		if ($cacheOK && scalar keys %{$pluginStrings || {}} == scalar keys %{$strings->{pluginStrings} || {}}) {
-			
+
 			foreach my $dir ( keys %{$pluginStrings || {}} ) {
 				if ($strings->{pluginStrings}->{$dir}) {
 					my $oldTokens = [ sort keys %{$strings->{pluginStrings}->{$dir}} ];
@@ -196,6 +196,9 @@ sub loadStrings {
 
 		main::INFOLOG && $log->info("String cache contains old data - reparsing string files");
 	}
+
+	# clean up legacy files, and left-overs from migrations (eg. macOS Intel -> Apple Silicon)
+	Slim::Utils::Misc::deleteFiles($prefs->get('cachedir'), qr/^string(s|cache)\..*\.bin$/, $stringCache);
 
 	# otherwise reparse all string files
 	unless ($args->{'dontClear'}) {
@@ -237,14 +240,14 @@ sub loadAdditional {
 	if ( $lang =~ /^ZH_HAN.$/i && !exists $strings->{'langchoices'}->{$lang} ) {
 		$lang = 'ZH_CN';
 	}
-	
+
 	if ( exists $strings->{$lang} ) {
 		return $strings->{$lang};
 	}
-	
+
 	for my $file ( @{ $strings->{files} } ) {
 		main::DEBUGLOG && $log->is_debug && $log->debug("Loading string file for additional language $lang: $file");
-		
+
 		my $args = {
 			storeString => sub {
 				local $currentLang = $lang;
@@ -253,16 +256,16 @@ sub loadAdditional {
 		};
 
 		loadFile( $file, $args );
-		
+
 		main::idleStreams();
 	}
-	
+
 	# extra strings delivered by SN
 	eval {
 		local $currentLang = $lang;
 		loadExtraStrings();
 	};
-	
+
 	return $strings->{$lang};
 }
 
@@ -278,7 +281,7 @@ sub stringsFiles {
 	my $pluginStrings;
 	# PluginManager would return a list of tokens for disabled plugins
 	$pluginStrings = pop @pluginDirs if ref $pluginDirs[-1];
-	
+
 	push @files, catdir($serverPath, 'strings.txt');
 
 	# plugin string files
@@ -321,9 +324,9 @@ sub loadFile {
 		logError("Couldn't open $file - FATAL!");
 		die;
 	};
-	
+
 	parseStrings($fh, $file, $args);
-	
+
 	close $fh;
 }
 
@@ -336,7 +339,7 @@ sub parseStrings {
 	my $stringData = {};
 	my $pluginStrings;
 	my $ln = 0;
-	
+
 	$pluginStrings = $strings->{pluginStrings}->{dirname($file)} if $strings->{pluginStrings};
 
 	my $store = $args->{'storeString'} || \&storeString;
@@ -400,7 +403,7 @@ sub storeString {
 
 	return if ($name eq 'LANGUAGE_CHOICES');
 
-	if (main::DEBUGLOG && $log->is_debug && defined $strings->{$currentLang}->{$name} && defined $curString->{$currentLang} && 
+	if (main::DEBUGLOG && $log->is_debug && defined $strings->{$currentLang}->{$name} && defined $curString->{$currentLang} &&
 			$strings->{$currentLang}->{$name} ne $curString->{$currentLang}) {
 		$log->debug("redefined string: $name in $file");
 	}
@@ -432,20 +435,20 @@ my $extraStringsDirty = 0;
 
 sub storeExtraStrings {
 	my $extra = shift;
-	
+
 	# Cache strings to disk so they work on restart
 	my $extraCache = catdir( $prefs->get('cachedir'), 'extrastrings.json' );
-	
+
 	if ( !scalar( keys %{$extraStringsCache} ) && -e $extraCache ) {
 		main::DEBUGLOG && $log->is_debug && $log->debug('Reading extrastrings.json file');
-		
+
 		$extraStringsCache = eval { from_json( read_file($extraCache) ) };
 		if ( $@ ) {
 			$log->error("Failed to read extrastrings.json file: $@");
 			$extraStringsCache = {};
 		}
 	}
-	
+
 	# This function determines if the string hash data has changed
 	my $hash_diff = sub {
 		for my $k ( keys %{ $_[1] } ) {
@@ -455,7 +458,7 @@ sub storeExtraStrings {
 		}
 		return 0;
 	};
-	
+
 	# Turn into a hash
 	$extra = { map { $_->{token} => $_->{strings} } @{$extra} };
 
@@ -473,7 +476,7 @@ sub storeExtraStrings {
 			next if $_ eq $currentLang;
 			delete $strings->{$_} if $strings->{$_};
 		}
-	
+
 		# Batch changes to avoid lots of writes
 		Slim::Utils::Timers::killTimers( $extraCache, \&_writeExtraStrings );
 		Slim::Utils::Timers::setTimer( $extraCache, time() + 5, \&_writeExtraStrings );
@@ -482,9 +485,9 @@ sub storeExtraStrings {
 
 sub _writeExtraStrings {
 	my $extraCache = shift;
-	
+
 	main::DEBUGLOG && $log->is_debug && $log->debug('Writing updated extrastrings.json file');
-	
+
 	$extraStringsDirty = 0;
 	eval { write_file( $extraCache, to_json($extraStringsCache) ) };
 
@@ -499,12 +502,12 @@ Load cached additional strings delivered from SN.
 
 sub loadExtraStrings {
 	my $extraCache = catdir( $prefs->get('cachedir'), 'extrastrings.json' );
-	
+
 	my $cache = $extraStringsCache || {};
 	if ( !($cache && keys %$cache) && -e $extraCache ) {
 		$cache = eval { from_json( read_file($extraCache) ) };
 	}
-	
+
 	for my $string ( keys %{ $cache || {} } ) {
 		storeString( $string, $cache->{$string} );
 	}
@@ -528,7 +531,7 @@ sub string {
 	if ( @_ ) {
 		return sprintf( $string, @_ );
 	}
-	
+
 	return $string;
 }
 
@@ -541,7 +544,7 @@ Also available as cstring().
 
 sub clientString {
 	my $client = shift;
-	
+
 	if ( blessed($client) ) {
 		return $client->string(@_);
 	}
@@ -570,7 +573,7 @@ sub getString {
 	if ( @_ ) {
 		return sprintf( $string, @_ );
 	}
-	
+
 	return $string;
 }
 
@@ -645,7 +648,7 @@ sub failsafeLanguage {
 
 sub clientStrings {
 	my $client = shift;
-	
+
 	my $display = $client->display;
 
 	if (storeFailsafe() && ($display->isa('Slim::Display::Text') || $display->isa('Slim::Display::SqueezeboxG')) ) {
@@ -697,13 +700,13 @@ sub setLocale {
 	$locale .= '.UTF-8' if Slim::Utils::Unicode::currentLocale() =~ /utf8/i;
 
 	setlocale( LC_TIME, $locale );
-	
+
 	# We leave LC_TYPE unchanged.
 	# This is used in Slim::Music::Info::sortFilename() to modify the
 	# behaviour of uc() when sorting native-encoded filenames.
 	# It is also used, probably incorrectly, in Slim::Schema::Genre::add() for ucfirst()
-	
-	# We set LC_COLLATE always to utf8 so that it can be used correctly within 
+
+	# We set LC_COLLATE always to utf8 so that it can be used correctly within
 	# the collate function (perlcollate) for SQLite DB sorting, where the field values
 	# are always UTF-8
 	$locale = string(main::ISWINDOWS ? 'LOCALE_WIN' : 'LOCALE') . '.UTF-8';

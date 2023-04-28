@@ -1,6 +1,9 @@
 package Slim::Plugin::Pandora::ProtocolHandler;
 
-# $Id: ProtocolHandler.pm 11678 2007-03-27 14:39:22Z andy $
+# Logitech Media Server Copyright 2003-2020 Logitech.
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License, 
+# version 2.
 
 # Handler for pandora:// URLs
 
@@ -40,7 +43,7 @@ sub new {
 		url     => $streamUrl,
 		song    => $args->{'song'},
 		client  => $client,
-		bitrate => 128_000,
+		bitrate => $song->bitrate() || 128_000,
 	} ) || return;
 	
 	${*$sock}{contentType} = 'audio/mpeg';
@@ -202,6 +205,7 @@ sub gotNextTrack {
 	}
 	
 	# Save metadata for this track
+	$song->bitrate( $track->{bitrate} );
 	$song->duration( $track->{secs} );
 	$song->pluginData( $track );
 	$song->streamUrl($track->{'audioUrl'});
@@ -239,7 +243,7 @@ sub getSeekData {
 	my ( $class, $client, $song, $newtime ) = @_;
 	
 	return {
-		sourceStreamOffset => ( 128_000 / 8 ) * $newtime,
+		sourceStreamOffset => ( ($song->bitrate || 128_000) / 8 ) * $newtime,
 		timeOffset         => $newtime,
 	};
 }
@@ -250,7 +254,7 @@ sub parseDirectHeaders {
 	my $url     = shift;
 	my @headers = @_;
 	
-	my $bitrate     = 128_000;
+	my $bitrate     = $client->streamingSong->bitrate || 128_000;
 	my $contentType = 'mp3';
 	
 	# Clear previous duration, since we're using the same URL for all tracks
@@ -370,14 +374,6 @@ sub canDoAction {
 	return 1;
 }
 
-sub canDirectStreamSong {
-	my ( $class, $client, $song ) = @_;
-	
-	# We need to check with the base class (HTTP) to see if we
-	# are synced or if the user has set mp3StreamingMethod
-	return $class->SUPER::canDirectStream($client, $song->streamUrl(), $class->getFormatForURL());
-}
-
 # Override replaygain to always use the supplied gain value
 sub trackGain {
 	my ( $class, $client, $url ) = @_;
@@ -388,32 +384,6 @@ sub trackGain {
 	
 	return $gain;
 }
-
-# Track Info menu
-=pod XXX - legacy track info menu from before Slim::Menu::TrackInfo times?
-sub trackInfo {
-	my ( $class, $client, $track ) = @_;
-	
-	my $url = $track->url;
-
-	# SN URL to fetch track info menu
-	my $trackInfoURL = $class->trackInfoURL( $client, $url );
-	
-	# let XMLBrowser handle all our display
-	my %params = (
-		header   => 'PLUGIN_PANDORA_GETTING_TRACK_DETAILS',
-		modeName => 'Pandora Now Playing',
-		title    => Slim::Music::Info::getCurrentTitle( $client, $url ),
-		url      => $trackInfoURL,
-		remember => 0,
-		timeout  => 35,
-	);
-
-	Slim::Buttons::Common::pushMode( $client, 'xmlbrowser', \%params );
-	
-	$client->modeParam( 'handledTransition', 1 );
-}
-=cut
 
 # URL used for CLI trackinfo queries
 sub trackInfoURL {
@@ -447,13 +417,15 @@ sub getMetadataFor {
 	
 	my $icon = $class->getIcon();
 	
+	my $bitrate = $song->bitrate ? ($song->bitrate/1000) . 'k CBR' : '128k CBR';
+	
 	# Could be somewhere else in the playlist
 	if ($song->track->url ne $url) {
 		main::DEBUGLOG && $log->debug($url);
 		return {
 			icon    => $icon,
 			cover   => $icon,
-			bitrate => '128k CBR',
+			bitrate => $bitrate,
 			type    => 'MP3 (Pandora)',
 			title   => 'Pandora',
 			album   => Slim::Music::Info::standardTitle( $client, $url, undef ),
@@ -470,7 +442,7 @@ sub getMetadataFor {
 			icon        => $icon,
 			replay_gain => $track->{trackGain},
 			duration    => $track->{secs},
-			bitrate     => '128k CBR',
+			bitrate     => $bitrate,
 			type        => 'MP3 (Pandora)',
 			info_link   => 'plugins/pandora/trackinfo.html',
 			buttons     => {
@@ -500,7 +472,7 @@ sub getMetadataFor {
 		return {
 			icon    => $icon,
 			cover   => $icon,
-			bitrate => '128k CBR',
+			bitrate => $bitrate,
 			type    => 'MP3 (Pandora)',
 			title   => $song->track()->title(),
 		};

@@ -1,8 +1,7 @@
 package Slim::Web::Pages::Status;
 
-# $Id$
 
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
@@ -126,7 +125,7 @@ sub status {
 		$params->{'currentsong'} = Slim::Player::Source::playingSongIndex($client) + 1;
 		$params->{'thissongnum'} = Slim::Player::Source::playingSongIndex($client);
 		$params->{'songcount'}   = $songcount;
-		Slim::Player::Playlist::song($client)->displayAsHTML($params);
+		Slim::Player::Playlist::track($client)->displayAsHTML($params);
 		
 		Slim::Web::Pages::Common->addSongInfo($client, $params, 1);
 

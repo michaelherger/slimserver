@@ -1,12 +1,13 @@
 package Slim::Utils::OS::Win32;
 
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
 
 use strict;
 use Cwd;
+use File::Basename qw(dirname);
 use File::Spec::Functions qw(catdir);
 use FindBin qw($Bin);
 use Sys::Hostname qw(hostname);
@@ -71,6 +72,12 @@ sub initDetails {
 						elsif ($major == 6 && $minor == 3) {
 							$class->{osDetails}->{'osName'} = $producttype != 1 ? 'Windows 2012 Server R2' : 'Windows 8.1';
 						}
+						elsif ($major == 10 && $minor == 0 && $producttype != 1 && $build && $build >= 20348) {
+							$class->{osDetails}->{'osName'} = 'Windows 2022 Server';
+						}
+						elsif ($major == 10 && $minor == 0 && $build && $build >= 22000) {
+							$class->{osDetails}->{'osName'} = $producttype != 1 ? 'Windows 2022 Server' : 'Windows 11';
+						}
 						elsif ($major == 10 && $minor == 0) {
 							$class->{osDetails}->{'osName'} = $producttype != 1 ? 'Windows 2016 Server' : 'Windows 10';
 						}
@@ -117,10 +124,13 @@ sub initSearchPath {
 
 	$class->SUPER::initSearchPath(@_);
 
-	# TODO: we might want to make this a bit more intelligent
-	# as Perl is not always in that folder (eg. German Windows)
-
-	Slim::Utils::Misc::addFindBinPaths('C:\Perl\bin');
+	# Add the location of perl.exe to the helper applications folder search path.
+	my $perlpath = Slim::Utils::Misc::findbin('perl.exe');
+	if ($perlpath) {
+		Slim::Utils::Misc::addFindBinPaths(dirname($perlpath));
+	} else {
+		 main::INFOLOG && warn ("Perl.exe not found");
+	}
 }
 
 sub initMySQL {}
@@ -192,7 +202,7 @@ sub dirsFor {
 
 		push @dirs, $::prefsdir || $class->writablePath('prefs');
 
-	} elsif ($dir =~ /^(?:music|playlists|videos|pictures)$/) {
+	} elsif ($dir =~ /^(?:music|playlists)$/) {
 
 		my $path;
 
@@ -237,14 +247,6 @@ sub dirsFor {
 		if ($dir =~ /^(?:music|playlists)$/) {
 			$path = Win32::GetFolderPath(Win32::CSIDL_MYMUSIC) unless $path;
 			$fallback = 'My Music';
-		}
-		elsif ($dir eq 'videos') {
-			$path = Win32::GetFolderPath(Win32::CSIDL_MYVIDEO) unless $path;
-			$fallback = 'My Videos';
-		}
-		elsif ($dir eq 'pictures') {
-			$path = Win32::GetFolderPath(Win32::CSIDL_MYPICTURES) unless $path;
-			$fallback = 'My Pictures';
 		}
 
 		# fall back if no path or invalid path is returned
@@ -364,6 +366,11 @@ sub localeDetails {
 	my $lc_time  = POSIX::setlocale(LC_TIME, $locale);
 
 	return ($lc_ctype, $lc_time);
+}
+
+sub noCaseFilename {
+	my ($class, $name) = @_;
+	return Slim::Utils::Unicode::utf8encode_locale($class->SUPER::noCaseFilename($name));
 }
 
 sub getSystemLanguage {
@@ -825,7 +832,7 @@ sub restartServer {
 
 	elsif ($PerlSvc::VERSION) {
 
-		my $restartFlag = catdir( Slim::Utils::Prefs::preferences('server')->get('cachedir') || $class->dirsFor('cache'), 'restart.txt' );
+		my $restartFlag = catdir( Slim::Utils::Prefs::preferences('server')->get('cachedir') || scalar $class->dirsFor('cache'), 'restart.txt' );
 		if (open(RESTART, ">$restartFlag")) {
 			close RESTART;
 			main::stopServer();

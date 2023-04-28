@@ -1,8 +1,6 @@
 package Slim::Menu::SystemInfo;
 
-# $Id: $
-
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -240,6 +238,12 @@ sub infoLibrary {
 
 			{
 				type => 'text',
+				name => cstring($client, 'INFORMATION_PLAYLISTS') . cstring($client, 'COLON') . ' '
+							. Slim::Utils::Misc::delimitThousands($totals->{playlist}),
+			},
+
+			{
+				type => 'text',
 				name => cstring($client, 'INFORMATION_TIME') . cstring($client, 'COLON') . ' '
 							. Slim::Utils::DateTime::timeFormat(Slim::Schema->totalTime($client)),
 			},
@@ -250,34 +254,6 @@ sub infoLibrary {
 			unfold => 1,
 		},
 	};
-
-	# don't bother counting images/videos unless media are enabled
-	if ( main::MEDIASUPPORT ) {
-		my ($request, $results);
-
-		# XXX - no simple access to result sets for images/videos yet?
-		if (main::VIDEO) {
-			$request = Slim::Control::Request::executeRequest( $client, ['video_titles', 0, 0] );
-			$results = $request->getResults();
-
-			unshift @{ $items->{items} }, {
-				type => 'text',
-				name => cstring($client, 'INFORMATION_VIDEOS') . cstring($client, 'COLON') . ' '
-					. ($results && $results->{count} ? Slim::Utils::Misc::delimitThousands($results->{count}) : 0),
-			};
-		}
-
-		if (main::IMAGE) {
-			$request = Slim::Control::Request::executeRequest( $client, ['image_titles', 0, 0] );
-			$results = $request->getResults();
-
-			unshift @{ $items->{items} }, {
-				type => 'text',
-				name => cstring($client, 'INFORMATION_IMAGES') . cstring($client, 'COLON') . ' '
-					. ($results && $results->{count} ? Slim::Utils::Misc::delimitThousands($results->{count}) : 0),
-			};
-		}
-	}
 
 	return $items;
 }
@@ -322,7 +298,7 @@ sub infoServer {
 
 		{
 			type => 'text',
-			name => sprintf("%s%s %s - %s - %s ", 
+			name => sprintf("%s%s %s - %s - %s ",
 						cstring($client, 'INFORMATION_OPERATINGSYSTEM' . ($menu ? '_ABBR' : '')),
 						cstring($client, 'COLON'),
 						$osDetails->{'osName'},
@@ -352,6 +328,13 @@ sub infoServer {
 			name => 'IO::Socket::SSL' . cstring($client, 'COLON') . ' ' . (Slim::Networking::Async::HTTP->hasSSL() ? $IO::Socket::SSL::VERSION : cstring($client, 'BLANK')),
 		},
 	];
+
+	if ( !main::NOMYSB && $prefs->get('sn_timediff') ) {
+		push @{$items}, {
+			type => 'text',
+			name => cstring($client, 'INFORMATION_TIME_DIFF') . cstring($client, 'COLON') . ' ' . sprintf('%s %s', $prefs->get('sn_timediff'), cstring($client, 'SECONDS')),
+		};
+	}
 
 	if ( Slim::Schema::hasLibrary() ) {
 		push @{$items},	{

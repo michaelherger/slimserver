@@ -14,7 +14,7 @@ PLUGIN_SLACKER_MODULE_NAME
 	SV	Slacker
 
 PLUGIN_SLACKER_GETTING_TRACK_DETAILS
-	CS	Získávám podrobnosti o stopě...
+	CS	Získávám podrobnosti o skladbě...
 	DA	Henter detaljer om nummer...
 	DE	Titelinfos werden geladen ...
 	EN	Fetching track details...
@@ -59,7 +59,7 @@ PLUGIN_SLACKER_SESSION_BUMPED
 	SV	Du har loggat in på en annan enhet. Tryck på Play om du vill starta om.
 
 PLUGIN_SLACKER_NO_TRACKS
-	CS	Není možné načíst další stopu, zkuste znovu stiskem PLAY.
+	CS	Nelze načíst další skladbu, stiskněte tlačítko PLAY a zkuste to znovu.
 	DA	Det næste nummer kunne ikke hentes. Tryk på Afspil for at forsøge igen.
 	DE	Nächster Titel konnte nicht geladen werden, drücken Sie zum Wiederholen PLAY.
 	EN	Unable to retrieve next track, press PLAY to try again.
@@ -74,7 +74,7 @@ PLUGIN_SLACKER_NO_TRACKS
 	SV	Det gick inte att hämta nästa spår. Tryck på Spela om du vill försöka igen.
 
 PLUGIN_SLACKER_STREAM_FAILED
-	CS	Zvukový proud odpojen, přeskočení na další stopu.
+	CS	Zvukový proud odpojen, přeskočení na další skladbu.
 	DA	Forbindelsen til streamen blev afbrudt. Springer til næste nummer.
 	DE	Audio-Stream unterbrochen, nächster Titel wird aufgerufen.
 	EN	Audio stream disconnected, skipping to next track.
@@ -106,13 +106,13 @@ PLUGIN_SLACKER_SKIPS_EXCEEDED
 	SV	Du har använt alla dina överhoppningar för den här timmen. Du kan hoppa över låtar senare.
 
 PLUGIN_SLACKER_SKIPS_EXCEEDED_STATION
-	CS	Stanice nedostupná: překročen limit přeskočení za hodinu. Můžete přepnout na jinou stanici nebo zkusit znovu později.
+	CS	Stanice není k dispozici: překročen hodinový limit přeskočení. Můžete přepnout na jinou stanici nebo to zkusit později.
 	DA	Stationen er ikke tilgængelig: Det er ikke muligt at springe over flere numre i denne time. Du kan skifte til en anden station eller prøve igen senere.
 	DE	Sender nicht verfügbar: Kein Überspringen mehr möglich. Sie auf anderen Sender aufrufen oder es später erneut versuchen.
 	EN	Station unavailable: hourly skip limit exceeded.  You may switch to another station or try again later.
 	ES	Emisora no disponible: se ha excedido el límite de omisiones por hora. Puede cambiar a otra emisora o volver a intentarlo más tarde.
 	FI	Asema ei ole käytettävissä: tunnittainen ohitusraja ylittyi.  Vaihda toiselle kanavalle tai yritä myöhemmin uudelleen.
-	FR	Station non disponible: nombre limite de sauts par heure dépassé. Vous pouvez basculer vers une autre station ou réessayer ultérieurement.
+	FR	Station non disponible : nombre limite de sauts par heure dépassé. Vous pouvez basculer vers une autre station ou réessayer ultérieurement.
 	IT	Stazione non disponibile: limite orario superato. È possibile passare a un'altra stazione o riprovare più tardi.
 	NL	Station niet beschikbaar: uurlimiet voor springen overschreden. Je kunt naar een ander station overschakelen of het later opnieuw proberen.
 	NO	Stasjonen er utilgjengelig: grensen for hvor mange sanger du kan hoppe over per time har blitt overskredet. Du kan bytte stasjon eller prøve på nytt senere.
@@ -121,10 +121,11 @@ PLUGIN_SLACKER_SKIPS_EXCEEDED_STATION
 	SV	Station är inte tillgänglig: Du har använt alla dina överhoppningar för den här timmen. Du kan byta till en annan station eller försöka igen senare.
 
 PLUGIN_SLACKER_FAVORITE_TRACK
-	CS	Označit jako Oblíbená položka Slacker
+	CS	Označit jako oblíbená položka Slacker
 	DA	Marker som Slacker-favorit
 	DE	Als Slacker-Favorit kennzeichnen
 	EN	Mark as Slacker favorite
+	EN_GB	Mark as Slacker favourite
 	ES	Marcar como favorito de Slacker
 	FI	Merkitse Slacker-suosikiksi
 	FR	Marquer comme favori Slacker
@@ -136,10 +137,11 @@ PLUGIN_SLACKER_FAVORITE_TRACK
 	SV	Ange som Slacker-favorit
 
 PLUGIN_SLACKER_UNMARK_FAVORITE
-	CS	Odstranit označení Oblíbená položka Slacker
+	CS	Odstranit označení oblíbená položka Slacker
 	DA	Fjern markering som Slacker-favorit
 	DE	Kennzeichnung als Slacker-Favorit aufheben
 	EN	Unmark as Slacker favorite
+	EN_GB	Unmark as Slacker favourite
 	ES	Anular marca de favorito de Slacker
 	FI	Poista Slacker-suosikeista
 	FR	Désélectionner comme favori Slacker
@@ -151,7 +153,7 @@ PLUGIN_SLACKER_UNMARK_FAVORITE
 	SV	Ta bort som Slacker-favorit
 
 PLUGIN_SLACKER_BAN_TRACK
-	CS	Zakázat tuto stopu
+	CS	Zakázat tuto skladbu
 	DA	Forbyd dette nummer
 	DE	Diesen Titel bannen
 	EN	Ban this track

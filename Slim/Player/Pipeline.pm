@@ -1,8 +1,7 @@
 package Slim::Player::Pipeline;
 
-# $Id$
 
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -80,7 +79,7 @@ sub new {
 
 			$newcommand .= $log->is_debug ? ' -D ' : ' -d ';       # socketwrapper debugging (-D = verbose)
 
-			$createMode = $priority; # create window so it is seen
+			$createMode = $priority | Win32::Process::CREATE_NEW_CONSOLE(); # create window so it is seen
 		}
 
 		if ($listenWriter) {
@@ -272,7 +271,7 @@ sub sysread {
 	}
 
 	# First try to stuff the pipe
-	STUFF_PIPE:	while (defined($source)) {
+	while (defined($source)) {
 
 		my $pendingBytes = ${*$self}{'pipeline_pending_bytes'};
 		my $pendingSize  = ${*$self}{'pipeline_pending_size'};
@@ -287,12 +286,13 @@ sub sysread {
 				if (defined $socketReadlen) {
 					# EOF
 					main::INFOLOG && $log->info("EOF on source stream");
-					undef $source;
-					delete ${*$self}{'pipeline_source'};
+					$source->close();
 					$writer->close();
-					last STUFF_PIPE;
-				} elsif ($! == EWOULDBLOCK) {
-					last STUFF_PIPE;		
+					delete ${*$self}{'pipeline_source'};
+					delete ${*$self}{'pipeline_writer'};
+					last;
+				} elsif ($! == EWOULDBLOCK || $! == EINTR) {
+					last;		
 				} else {
 					return undef; # reflect error to caller
 				}
@@ -327,7 +327,7 @@ sub sysread {
 				return undef;	# reflect error to caller
 			}
 
-			last STUFF_PIPE;
+			last;
 		}
 
 	}

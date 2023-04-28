@@ -1,8 +1,6 @@
 package Slim::Formats::APE;
 
-# $Id: APE.pm 5405 2005-12-14 22:02:37Z dean $
-
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -39,6 +37,7 @@ use Audio::Scan;
 my %tagMapping = (
 	'TRACK'	       => 'TRACKNUM',
 	'DATE'         => 'YEAR',
+	'BPM'          => 'BPM',
 	'DISCNUMBER'   => 'DISC',
 	'ALBUM ARTIST' => 'ALBUMARTIST', # bug 10724 - support APEv2 Album Artist
 );
@@ -77,6 +76,9 @@ sub doTagMapping {
 			$tags->{$new} = delete $tags->{$old};
 		}
 	}
+
+	# Sometimes the BPM is not an integer so we try to convert.
+	$tags->{BPM} = int($tags->{BPM}) if defined $tags->{BPM};
 	
 	# Flag if we have embedded cover art
 	if ( exists $tags->{'COVER ART (FRONT)'} ) {

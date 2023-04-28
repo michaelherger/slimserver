@@ -1,6 +1,6 @@
 package Slim::Plugin::DigitalInput::Plugin;
 
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -339,10 +339,10 @@ sub handleWebList {
 
 	if ($client) {
 
-		my $song = Slim::Player::Playlist::song($client);
+		my $track = Slim::Player::Playlist::track($client);
 		
-		if ($song) {
-			$url = $song->url;
+		if ($track) {
+			$url = $track->url;
 
 		
 			my $name;

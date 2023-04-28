@@ -1,10 +1,9 @@
 package Slim::Web::Template::NoWeb;
 
-# $Id$
 
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
-# modify it under the terms of the GNU General Public License, 
+# modify it under the terms of the GNU General Public License,
 # version 2.
 
 use strict;
@@ -30,9 +29,9 @@ sub new {
 	};
 
 	bless $self, $class;
-	
+
 	push @{ $self->{templateDirs} }, Slim::Utils::OSDetect::dirsFor('HTML');
-	
+
 	return $self;
 }
 
@@ -43,7 +42,7 @@ sub addTemplateDirectory {
 
 	# reset cache
 	delete $class->{skinDirs};
-	
+
 	push @{ $class->{templateDirs} }, $dir if ( not grep({$_ eq $dir} @{ $class->{templateDirs} } ));
 }
 
@@ -65,7 +64,7 @@ sub _generateContentFromFile {
 	$params->{'allLinks'} = $prefs->get('additionalPlaylistButtons');
 
 	main::INFOLOG && $log->is_info && $log->info("generating from $path with type: $type");
-	
+
 	if ($type eq 'fill') {
 
 		return $class->_fillTemplate($params, $path, $skin);
@@ -94,7 +93,7 @@ sub _generateContentFromFile {
 
 sub _fillTemplate {}
 
-# Retrieves the file specified as $path, relative to the 
+# Retrieves the file specified as $path, relative to the
 # INCLUDE_PATH of the given skin.
 # Uses binmode to read file if $binary is specified.
 # Returns a reference to the file data.
@@ -110,12 +109,12 @@ sub _getFileContent {
 	}
 
 	main::INFOLOG && $log->is_info && $log->info("Reading http file for ($path)");
-	
+
 	if ( $statOnly ) {
 		($inode, $size, $mtime) = (stat($path))[1,7,9];
 		return (\$content, $mtime, $inode, $size);
 	}
-	
+
 	if ( $contentAsFh ) {
 		my $fh = FileHandle->new($path);
 		binmode $fh if $binary;
@@ -126,7 +125,7 @@ sub _getFileContent {
 
 	if ($template) {
 		($inode, $size, $mtime) = (stat($template))[1,7,9];
-		
+
 		local $/ = undef;
 		binmode($template) if $binary;
 		$content = <$template>;
@@ -141,7 +140,7 @@ sub _getFileContent {
 
 		logError("Couldn't open: $path");
 	}
-	
+
 	return (\$content, $mtime, $inode, $size);
 }
 
@@ -178,7 +177,7 @@ sub fixHttpPath {
 			# we probably don't use Cwd anywhere else
 			require Cwd;
 			$found = Cwd::abs_path($found);
-			
+
 			# reset path if it's outside the skin path ($dir)
 			if ($found !~ m|^$dir|) {
 				$found = '';
@@ -191,7 +190,7 @@ sub fixHttpPath {
 
 			return $found;
 		}
-	} 
+	}
 
 	main::INFOLOG && $log->is_info && $log->info("Couldn't find path: $path");
 
@@ -200,9 +199,9 @@ sub fixHttpPath {
 
 sub _getSkinDirs {
 	my ($class) = @_;
-	
+
 	return $class->{skinDirs} if $class->{skinDirs};
-	
+
 	my @dirs = ();
 	foreach my $skin ('Default', 'EN') {
 		foreach ( @{ $class->{templateDirs} } ) {
@@ -214,16 +213,5 @@ sub _getSkinDirs {
 
 	return $class->{skinDirs};
 }
-
-=head2 detectBrowser ( )
-
-Attempts to figure out what the browser is by user-agent string identification
-
-=cut
-
-sub detectBrowser {
-	return 'unknown';
-}
-
 
 1;

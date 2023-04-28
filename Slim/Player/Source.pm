@@ -1,8 +1,7 @@
 package Slim::Player::Source;
 
-# $Id$
 
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -74,15 +73,15 @@ sub playmode {
 	return _returnPlayMode($controller, $client) unless defined $newmode;
 	
 	if ($newmode eq 'stop') {
-		$controller->stop();
+		$controller->stop($client);
 	} elsif ($newmode eq 'play') {
 		if (!$client->power()) {$client->power(1);}
-		$controller->play(undef, $seekdata, $reconnect, $fadeIn);
+		$controller->play(undef, $seekdata, $reconnect, $fadeIn, $client);
 	} elsif ($newmode eq 'pause') {
-		$controller->pause();
+		$controller->pause($client);
 	} elsif ($newmode eq 'resume') {
 		if (!$client->power()) {$client->power(1);}
-		$controller->resume($fadeIn);
+		$controller->resume($fadeIn, $client);
 	} else {
 		logBacktrace($client->id . " unknown playmode: $newmode");
 	}
@@ -333,6 +332,12 @@ sub _readNextChunk {
 					if ($callback) {
 						# This is a hack but I hesitate to use isa(Pileline) or similar.
 						# Suggestions for better, efficient implementation welcome
+						# Be careful that if the socket is not active anymore, using EWOULDBLOCK is a bad idea. The 
+						# ProtocolHandler's $self might be simply a proxy for what is being really done (e.g. when using
+						# Persistent HTTP and the connection has failed at least once). The Buffered HTTP can handle this
+						# addRead because it will re-place itself in the select() loop, but it's not very elegant.
+						# The advice for future readers is to NOT use EWOULDBLOCK in your ProtocolHandler's sysread() 
+						# use EINTR instead which is a bit slower but totally safe.
 						Slim::Networking::Select::addRead(${*$fd}{'pipeline_reader'} || $fd, sub {_wakeupOnReadable(shift, $client);}, 1);
 					}
 					return undef;	

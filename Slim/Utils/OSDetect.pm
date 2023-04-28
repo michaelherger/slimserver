@@ -1,10 +1,9 @@
 package Slim::Utils::OSDetect;
 
-# $Id$
 
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
-# modify it under the terms of the GNU General Public License, 
+# modify it under the terms of the GNU General Public License,
 # version 2.
 
 =head1 NAME
@@ -46,7 +45,7 @@ sub OS {
 
 sub init {
 	my $newBin = shift;
-	
+
 	if ($os) {
 		return;
 	}
@@ -55,7 +54,7 @@ sub init {
 	if (defined $newBin && -d $newBin) {
 		$Bin = $newBin;
 	}
-	
+
 	# Let's see whether there's a custom OS file (to be used by 3rd party NAS vendors etc.)
 	eval {
 		require Slim::Utils::OS::Custom;
@@ -67,67 +66,57 @@ sub init {
 		warn $@;
 	}
 
-	if (!$os) {		
+	if (!$os) {
 
 		if ($^O =~/darwin/i) {
-			
+
 			require Slim::Utils::OS::OSX;
 			$os = Slim::Utils::OS::OSX->new();
-	
+
 		} elsif ($^O =~ /^m?s?win/i) {
-	
+
 			require Slim::Utils::OS::Win32;
 			$os = Slim::Utils::OS::Win32->new();
-	
+
 		} elsif ($^O =~ /linux/i) {
-			
+
 			require Slim::Utils::OS::Linux;
 			$os = Slim::Utils::OS::Linux->getFlavor();
-	
-			if ($os =~ /RAIDiator/i) {
-	
-				require Slim::Utils::OS::ReadyNAS;
-				$os = Slim::Utils::OS::ReadyNAS->new();
-				
+
 			# we only differentiate Debian/Suse/Red Hat if they've been installed from a package
-			} elsif ($os =~ /debian/i && $0 =~ m{^/usr/sbin/squeezeboxserver}) {
-		
+			if ($os =~ /debian/i && $0 =~ m{^/usr/sbin/squeezeboxserver}) {
+
 				require Slim::Utils::OS::Debian;
 				$os = Slim::Utils::OS::Debian->new();
-		
+
 			} elsif ($os =~ /red hat/i && $0 =~ m{^/usr/libexec/squeezeboxserver}) {
-		
+
 				require Slim::Utils::OS::RedHat;
 				$os = Slim::Utils::OS::RedHat->new();
-		
+
 			} elsif ($os =~ /suse/i && $0 =~ m{^/usr/libexec/squeezeboxserver}) {
-				
+
 				require Slim::Utils::OS::Suse;
 				$os = Slim::Utils::OS::Suse->new();
 
-            } elsif ($os =~ /Synology/i) {
+			} elsif ($os =~ /Synology/i) {
 
-                require Slim::Utils::OS::Synology;
-                $os = Slim::Utils::OS::Synology->new();
+				require Slim::Utils::OS::Synology;
+				$os = Slim::Utils::OS::Synology->new();
 
-			} elsif ($os =~ /squeezeos/i) {
-				
-				require Slim::Utils::OS::SqueezeOS;
-				$os = Slim::Utils::OS::SqueezeOS->new();
-				
 			} else {
-	
+
 				$os = Slim::Utils::OS::Linux->new();
 			}
-	
+
 		} else {
-	
+
 			require Slim::Utils::OS::Unix;
 			$os = Slim::Utils::OS::Unix->new();
-	
+
 		}
 	}
-	
+
 	$os->initDetails();
 	$isWindows = $os->name eq 'win';
 	$isMac     = $os->name eq 'mac';
@@ -174,10 +163,6 @@ sub isDebian {
 
 sub isRHorSUSE {
 	return $os->get('isRedHat', 'isSuse');
-}
-
-sub isSqueezeOS {
-	return $os->get('isSqueezeOS');
 }
 
 sub isWindows {

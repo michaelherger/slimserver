@@ -1,7 +1,5 @@
 # String file for DigitalInput plugin
 
-# $Id: strings.txt 11037 2006-12-24 07:25:38Z mherger $
-
 PLUGIN_DIGITAL_INPUT
 	CS	Digitální vstupy
 	DA	Digitale indgange
@@ -12,7 +10,7 @@ PLUGIN_DIGITAL_INPUT
 	FR	Entrées numériques
 	HE	פריטי קלט דיגיטלי
 	IT	Ingressi digitali
-	NL	Digitale ingangen
+	NL	Digitale Ingangen
 	NO	Digitale innganger
 	PL	Wejścia cyfrowe
 	RU	Цифровые входы
@@ -50,7 +48,7 @@ PLUGIN_DIGITAL_INPUT_BALANCED_AES
 	SV	Balanserat AES/EBU
 
 PLUGIN_DIGITAL_INPUT_BNC_SPDIF
-	CS	BNC Coax S/PDIF
+	CS	Koaxiální BNC S/PDIF
 	DA	BNC, Koaksial, S/PDIF
 	DE	BNC Koax S/PDIF
 	EN	BNC Coax S/PDIF
@@ -66,7 +64,7 @@ PLUGIN_DIGITAL_INPUT_BNC_SPDIF
 	SV	BNC-koaxial S/PDIF
 
 PLUGIN_DIGITAL_INPUT_RCA_SPDIF
-	CS	RCA Coax S/PDIF
+	CS	Koaxiální RCA S/PDIF
 	DA	RCA, Koaksial, S/PDIF
 	DE	Cinch Koax S/PDIF
 	EN	RCA Coax S/PDIF
@@ -104,7 +102,7 @@ PLUGIN_DIGITAL_INPUT_CHOOSE_BELOW
 	EN	Choose a Digital Input option below:
 	ES	Elija una opción de entrada digital:
 	FI	Valitse digitaalinen tulovaihtoehto alta:
-	FR	Sélectionnez une option d'entrée numérique ci-dessous:
+	FR	Sélectionnez une option d'entrée numérique ci-dessous :
 	HE	בחר אחת מאפשרויות הקלט הדיגיטלי הבאות:
 	IT	Scegliere una delle seguenti opzioni di ingresso digitale:
 	NL	Kies hieronder een digitale-ingangsoptie:

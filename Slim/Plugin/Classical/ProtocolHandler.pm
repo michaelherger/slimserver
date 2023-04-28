@@ -1,6 +1,5 @@
 package Slim::Plugin::Classical::ProtocolHandler;
 
-# $Id$
 
 # Handler for classical:// URLs
 
@@ -188,14 +187,6 @@ sub handleDirectError {
 	main::INFOLOG && $log->info("Direct stream failed: $url [$response] $status_line");
 	
 	$client->controller()->playerStreamingFailed( $client, 'PLUGIN_CLASSICAL_STREAM_FAILED' );
-}
-
-sub canDirectStreamSong {
-	my ( $class, $client, $song ) = @_;
-	
-	# We need to check with the base class (HTTP) to see if we
-	# are synced or if the user has set mp3StreamingMethod
-	return $class->SUPER::canDirectStream( $client, $song->streamUrl(), $class->getFormatForURL() );
 }
 
 # Track Info menu

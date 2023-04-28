@@ -1,6 +1,5 @@
 # String file for NetTest plugin
 
-# $Id$
 
 PLUGIN_NETTEST
 	CS	Test sítě
@@ -66,7 +65,7 @@ PLUGIN_NETTEST_TESTING_TO
 	SV	Testar med
 
 PLUGIN_NETTEST_NOT_SUPPORTED
-	CS	Tento přehrávač nepodporuje
+	CS	Tento přehrávač není podporován
 	DA	Ikke understøttet af denne afspiller
 	DE	Auf diesem Player nicht unterstützt
 	EN	Not Supported on this Player
@@ -75,7 +74,7 @@ PLUGIN_NETTEST_NOT_SUPPORTED
 	FR	Non pris en charge par cette platine
 	HE	לא נתמך בנגן זה
 	IT	Non supportato in questo lettore
-	NL	Niet ondersteund op dit muzieksysteem
+	NL	Niet ondersteund op deze muziekspeler
 	NO	Ikke støttet på denne spilleren
 	PL	Nieobsługiwane w tym odtwarzaczu
 	RU	Не поддерживается в этом плеере

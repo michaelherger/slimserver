@@ -1,8 +1,7 @@
 package Slim::Web::Settings::Server::Security;
 
-# $Id$
 
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -24,7 +23,7 @@ sub page {
 }
 
 sub prefs {
-	return (preferences('server'), qw(filterHosts allowedHosts corsAllowedHosts csrfProtectionLevel authorize username) );
+	return (preferences('server'), qw(filterHosts allowedHosts corsAllowedHosts csrfProtectionLevel authorize username insecureHTTPS) );
 }
 
 sub handler {
@@ -60,6 +59,8 @@ sub handler {
 
 		}
 	}
+
+	$paramRef->{enforceInsecureHTTPS} = main::ISWINDOWS ? 1 : 0;
 
 	return $class->SUPER::handler($client, $paramRef, $pageSetup);
 }

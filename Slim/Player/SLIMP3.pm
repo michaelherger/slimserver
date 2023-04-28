@@ -1,4 +1,4 @@
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -196,7 +196,7 @@ sub play {
 	# is still processing the i2c commands we just sent.
 	select(undef,undef,undef,.05);
 
-	if ( $params->{'controller'}->protocolHandler()->isRemote() ) {	
+	if ( $params->{'controller'}->streamUrlHandler()->isRemote() ) {	
 		$client->buffering(bufferSize() / 2);
 	}
 

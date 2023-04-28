@@ -28,8 +28,6 @@ sub isRemote { 1 }
 
 sub getFormatForURL { 'mp4' }
 
-sub formatOverride { 'aac' }
-
 # default buffer 3 seconds of 192k audio
 sub bufferThreshold { 24 * ( $prefs->get('bufferSecs') || 3 ) }
 
@@ -578,14 +576,6 @@ sub _playlistCallback {
 		
 		Slim::Music::Info::setCurrentTitle( $song->track()->url, $title );
 	}
-}
-
-sub canDirectStreamSong {
-	my ( $class, $client, $song ) = @_;
-	
-	# We need to check with the base class (HTTP) to see if we
-	# are synced or if the user has set mp3StreamingMethod
-	return $class->SUPER::canDirectStream($client, $song->streamUrl(), $class->getFormatForURL());
 }
 
 # URL used for CLI trackinfo queries

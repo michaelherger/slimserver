@@ -1,10 +1,9 @@
 package Slim::Web::XMLBrowser;
 
-# $Id$
 
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
-# modify it under the terms of the GNU General Public License, 
+# modify it under the terms of the GNU General Public License,
 # version 2.
 
 # This class displays a generic web interface for XML feeds
@@ -33,12 +32,12 @@ use constant CACHE_TIME => 3600; # how long to cache browse sessions
 
 my $log = logger('formats.xml');
 my $prefs = preferences('server');
-	
+
 # use a timestamp to let cached pages expire on certain events
-my $cacheTimestamp; 
+my $cacheTimestamp;
 if ( !main::SCANNER ) {
 	# Wipe cached data after rescan or library change
-	Slim::Control::Request::subscribe( \&wipeCaches, [['library','rescan'], ['changed','done']] );
+	Slim::Control::Request::subscribe( \&wipeCaches, [['library','rescan','favorites'], ['changed','done','changed']] );
 
 	$prefs->setChange( \&wipeCaches, qw(itemsPerPage thumbSize showArtist showYear additionalPlaylistButtons noGenreFilter noRoleFilter searchSubString browseagelimit
 				composerInArtists conductorInArtists bandInArtists variousArtistAutoIdentification titleFormat titleFormatWeb language useUnifiedArtistsList) );
@@ -60,10 +59,12 @@ sub handleWebIndex {
 	my $item      = $args->{'item'} || {};
 	my $pageicon  = $Slim::Web::Pages::additionalLinks{icons}{$title};
 	
+	main::DEBUGLOG && $log->is_debug && $log->debug( "feed is :" . Data::Dump::dump($feed) );
+	
 	if ($title eq uc($title)) {
 		$title = string($title);
 	}
-	
+
 	# If the feed is already XML data (Podcast List), send it to handleFeed
 	if ( ref $feed eq 'HASH' ) {
 
@@ -78,7 +79,7 @@ sub handleWebIndex {
 
 		return;
 	}
-	
+
 	my $params = {
 		'client'  => $client,
 		'url'     => $feed,
@@ -90,7 +91,7 @@ sub handleWebIndex {
 		'args'    => $asyncArgs,
 		'pageicon'=> $pageicon,
 	};
-	
+
 	# Handle plugins that want to use callbacks to fetch their own URLs
 	if ( ref $feed eq 'CODE' ) {
 		my $callback = sub {
@@ -111,31 +112,31 @@ sub handleWebIndex {
 
 			handleFeed( $opml, $params );
 		};
-		
+
 		# get passthrough params if supplied
 		my $pt = $item->{'passthrough'} || [];
-		
+
 		if ( main::DEBUGLOG && $log->is_debug ) {
 			my $cbname = Slim::Utils::PerlRunTime::realNameForCodeRef($feed);
 			$log->debug( "Fetching OPML from coderef $cbname" );
 			$log->debug($asyncArgs->[1]->{url_query});
 		}
-		
+
 		# XXX: maybe need to pass orderBy through
-		
+
 		return $feed->( $client, $callback, {isWeb => 1, wantMetadata => 1, wantIndex => 1, params => $asyncArgs->[1]}, @{$pt});
 	}
-	
+
 	# Handle type = search at the top level, i.e. Radio Search
 	if ( $type eq 'search' ) {
 		my $query = $asyncArgs->[1]->{q};
-		
+
 		if ( !$query ) {
 			my $index = $asyncArgs->[1]->{index};
 			($query) = $index =~ m/^(?:[a-f0-9]{8})?_([^.]+)/;
 			$query = uri_unescape( $query ) if $query;
 		}
-		
+
 		if ( $query ) {
 			$params->{url} =~ s/{QUERY}/$query/g;
 		}
@@ -153,25 +154,25 @@ sub handleWebIndex {
 			return;
 		}
 	}
-	
+
 	# Lookup this browse session in cache if user is browsing below top-level
 	# This avoids repated lookups to drill down the menu
 	my $index = $params->{args}->[1]->{index};
 	if ( $index && $index =~ /^([a-f0-9]{8})/ ) {
 		my $sid = $1;
-		
+
 		# Do not use cache if this is a search query
 		if ( $asyncArgs->[1]->{q} ) {
 			# Generate a new sid
 			my $newsid = Slim::Utils::Misc::createUUID();
-			
+
 			$params->{args}->[1]->{index} =~ s/^$sid/$newsid/;
 		}
 		else {
 			my $cache = Slim::Utils::Cache->new;
 			if ( my $cached = $cache->get("xmlbrowser_$sid") ) {
 				main::DEBUGLOG && $log->is_debug && $log->debug( "Using cached session $sid" );
-				
+
 				handleFeed( $cached, $params );
 				return;
 			}
@@ -191,21 +192,21 @@ sub handleWebIndex {
 sub handleFeed {
 	my ( $feed, $params ) = @_;
 	my ( $client, $stash, $callback, $httpClient, $response ) = @{ $params->{'args'} };
-	
+
 	my $cache = Slim::Utils::Cache->new;
-	
+
 	$feed->{'title'} ||= Slim::Utils::Strings::getString($params->{'title'});
 	$stash->{'pageicon'}  = $params->{pageicon};
-	
+
 	if ($feed->{'query'}) {
 		$stash->{'mquery'} = join('&amp;', map {$_ . '=' . $feed->{'query'}->{$_}} keys(%{$feed->{'query'}}));
 	}
 
 	my $template = 'xmlbrowser.html';
-	
+
 	# Session ID for this browse session
 	my $sid;
-		
+
 	# select the proper list of items
 	my @index = ();
 
@@ -213,7 +214,7 @@ sub handleFeed {
 		main::DEBUGLOG && $log->is_debug && $log->debug("item_id: ", $stash->{'index'});
 
 		@index = split (/\./, $stash->{'index'});
-		
+
 		if ( length( $index[0] ) >= 8 && $index[0] =~ /^[a-f0-9]{8}/ ) {
 			# Session ID is first element in index
 			$sid = shift @index;
@@ -222,18 +223,18 @@ sub handleFeed {
 	else {
 		# Create a new session ID, unless the list has coderefs
 		my $refs = scalar grep { ref $_->{url} } @{ $feed->{items} };
-		
+
 		if ( !$refs ) {
 			$sid = Slim::Utils::Misc::createUUID();
 		}
 	}
-	
+
 	# breadcrumb
 	my @crumb = ( {
 		'name'  => $feed->{'title'},
 		'index' => $sid,
 	} );
-	
+
 	# Persist search query from top level item
 	if ( $params->{type} && $params->{type} eq 'search' && !scalar @index ) {
 		$crumb[0]->{index} = ($sid || '') . '_' . uri_escape_utf8( $stash->{q}, "^A-Za-z0-9" );
@@ -248,7 +249,7 @@ sub handleFeed {
 	if ($stash->{'action'} && $stash->{'action'} =~ /^(favadd|favdel)$/ && @index) {
 		$favsItem = pop @index;
 	}
-	
+
 	if ( $sid ) {
 		# Cache the feed structure for this session
 
@@ -263,34 +264,34 @@ sub handleFeed {
 	}
 
 	if ( my $levels = scalar @index ) {
-		
+
 		# index links for each crumb item
 		my @crumbIndex = $sid ? ( $sid ) : ();
-		
+
 		# descend to the selected item
 		my $depth = 0;
-		
+
 		my $subFeed = $feed;
 		my $superFeed;
-		
+
 		for my $i ( @index ) {
 			$depth++;
-			
+
 			my ($in) = $i =~ /^(\d+)/;
 			$superFeed = $subFeed;
 			$subFeed = $subFeed->{'items'}->[$in - ($subFeed->{'offset'} || 0)];
-			
+
 			push @crumbIndex, $i;
 			my $crumbText = join '.', @crumbIndex;
-			
+
 			$superFeed->{offset} ||= 0;
 			main::DEBUGLOG && $log->is_debug && $log->debug("Considering $i=$in ($crumbText) from ", $stash->{'index'}, ' offset=', $superFeed->{'offset'});
-			
+
 			my $crumbName = Slim::Control::XMLBrowser::getTitle($subFeed->{name}, $subFeed);
-			
+
 			# Add search query to crumb list
 			my $searchQuery;
-			
+
 			if ( $subFeed->{'type'} && $subFeed->{'type'} eq 'search' && defined $stash->{'q'} ) {
 				# bug 17373 - remove period from search expression, as it breaks our index (and is ignored during the search anyway)
 				$stash->{q} =~ s/\./ /g;
@@ -301,12 +302,12 @@ sub handleFeed {
 			elsif ( $i =~ /(?:\d+)?_(.+)/ ) {
 				$searchQuery = Slim::Utils::Unicode::utf8on(uri_unescape($1));
 			}
-			
+
 			# Add search query to crumbName
 			if ( defined $searchQuery ) {
 				$crumbName .= ' (' . $searchQuery . ')';
 			}
-			
+
 			push @crumb, {
 				'name'  => $crumbName,
 				'index' => $crumbText,
@@ -318,8 +319,8 @@ sub handleFeed {
 
 			# Change type to audio if it's an action request and we have a play attribute
 			# and it's the last item
-			if ( 
-				   $subFeed->{'play'} 
+			if (
+				   $subFeed->{'play'}
 				&& $depth == $levels
 				&& $stash->{'action'}
 				&& $stash->{'action'} =~ /^(?:play|add|insert)$/
@@ -327,9 +328,9 @@ sub handleFeed {
 				$subFeed->{'type'} = 'audio';
 				$subFeed->{'url'}  = $subFeed->{'play'};
 			}
-			
+
 			# Change URL if there is a playlist attribute and it's the last item
-			if ( 
+			if (
 			       $subFeed->{'playlist'}
 				&& $depth == $levels
 				&& $stash->{'action'}
@@ -338,7 +339,7 @@ sub handleFeed {
 				$subFeed->{'type'} = 'playlist';
 				$subFeed->{'url'}  = $subFeed->{'playlist'};
 			}
-			
+
 			# Bug 15343, if we are at the lowest menu level, and we have already
 			# fetched and cached this menu level, check if we should always
 			# re-fetch this menu. This is used to ensure things like the Pandora
@@ -349,7 +350,7 @@ sub handleFeed {
 				main::DEBUGLOG && $log->is_debug && $log->debug("  Forcing refresh of menu");
 				delete $subFeed->{fetched};
 			}
-			
+
 			# short-circuit fetch if possible
 			# If we have an action and we have an equivalent superFeed action
 			# and we are about to fetch the last level then we can just use the feed-defined action.
@@ -370,7 +371,7 @@ sub handleFeed {
 				for (my $i = 0; $i < scalar @vars; $i += 2) {
 					push @params, $vars[$i] . ':' . $subFeed->{$vars[$i+1]} if defined $subFeed->{$vars[$i+1]};
 				}
-				
+
 				main::INFOLOG && $log->is_info && $log->info('CLI action (', $stash->{'action'}, '): ', join(' ', @params));
 
 				Slim::Control::Request::executeRequest( $client, \@params );
@@ -378,12 +379,12 @@ sub handleFeed {
 				my $webroot = $stash->{'webroot'};
 				$webroot =~ s/(.*?)plugins.*$/$1/;
 				$template = 'xmlbrowser_redirect.html';
-				
+
 				my $output = processTemplate($template, $stash);
-				
+
 				# done, send output back to Web module for display
 				$callback->( $client, $stash, $output, $httpClient, $response );
-				
+
 				return;
 			}
 
@@ -391,13 +392,13 @@ sub handleFeed {
 			# current cached feed
 			$subFeed->{'type'} ||= '';
 			if ( defined $subFeed->{'url'} && !$subFeed->{'fetched'} ) {
-				
+
 				# Rewrite the URL if it was a search request
 				if ( $subFeed->{'type'} eq 'search' && defined ( $stash->{'q'} || $searchQuery ) ) {
 					my $search = URI::Escape::uri_escape_utf8($stash->{'q'} || $searchQuery);
 					$subFeed->{'url'} =~ s/{QUERY}/$search/g;
 				}
-				
+
 				# Setup passthrough args
 				my $args = {
 					'client'       => $client,
@@ -416,18 +417,18 @@ sub handleFeed {
 				};
 
 
-				my ($feedAction, $feedActions) = Slim::Control::XMLBrowser::findAction( $superFeed, $subFeed, 
+				my ($feedAction, $feedActions) = Slim::Control::XMLBrowser::findAction( $superFeed, $subFeed,
 					($subFeed->{'type'} eq 'audio') ? 'info' : 'items' );
 				if ($feedAction && !($depth == $levels && $stash->{'action'})) {
 					my @params = @{$feedAction->{'command'}};
-					
+
 					# All items requests take _index and _quantity parameters
 					if ($depth < $levels) {
-						push @params, ($index[$depth], 1); 
+						push @params, ($index[$depth], 1);
 					} else {
-						push @params, (($stash->{'start'} || 0), ($args->{'itemsPerPage'} || $prefs->get('itemsPerPage'))); 
+						push @params, (($stash->{'start'} || 0), ($args->{'itemsPerPage'} || $prefs->get('itemsPerPage')));
 					}
-					
+
 					if (my $params = $feedAction->{'fixedParams'}) {
 						push @params, map { $_ . ':' . $params->{$_}} keys %{$params};
 					}
@@ -435,15 +436,15 @@ sub handleFeed {
 					for (my $i = 0; $i < scalar @vars; $i += 2) {
 						push @params, $vars[$i] . ':' . $subFeed->{$vars[$i+1]} if defined $subFeed->{$vars[$i+1]};
 					}
-					
+
 				    push @params, 'feedMode:1';
 				    push @params, 'wantMetadata:1';
 				    push @params, 'wantIndex:1';
 
 					push @params, 'orderBy:' . $stash->{'orderBy'} if $stash->{'orderBy'};
-					
+
 					main::INFOLOG && $log->is_info && $log->info('CLI browse: ', join(' ', @params));
-					
+
 					my $callback = sub {
 						my $opml = shift;
 
@@ -452,19 +453,19 @@ sub handleFeed {
 
 						handleSubFeed( $opml, $args );
 					};
-					
+
 					my $proxiedRequest = Slim::Control::Request::executeRequest( $client, \@params );
-					
+
 					# wrap async requests
-					if ( $proxiedRequest->isStatusProcessing ) {			
+					if ( $proxiedRequest->isStatusProcessing ) {
 						$proxiedRequest->callbackFunction( sub { $callback->($_[0]->getResults); } );
 					} else {
 						$callback->($proxiedRequest->getResults);
 					}
-				
+
 					return;
 				}
-				
+
 				elsif ( ref $subFeed->{'url'} eq 'CODE' ) {
 					my $callback = sub {
 						my $data = shift;
@@ -492,7 +493,7 @@ sub handleFeed {
 					if (defined $searchQuery && $searchQuery ne '' && $subFeed->{type} && $subFeed->{type} eq 'search') {
 						$search = $searchQuery;
 					}
-					
+
 					if ( main::DEBUGLOG && $log->is_debug ) {
 						my $cbname = Slim::Utils::PerlRunTime::realNameForCodeRef( $subFeed->{url} );
 						$log->debug( "Fetching OPML from coderef $cbname" );
@@ -509,12 +510,12 @@ sub handleFeed {
 						$args{'quantity'} = 1;
 					}
 
-					# first param is a $client object, but undef from webpages					
+					# first param is a $client object, but undef from webpages
 					$subFeed->{url}->( $client, $callback, \%args, @{$pt} );
-				
+
 					return;
 				}
-				
+
 				# No need to check for a cached version of this subfeed URL as getFeedAsync() will do that
 
 				elsif ($subFeed->{'type'} ne 'audio') {
@@ -525,18 +526,18 @@ sub handleFeed {
 						\&handleError,
 						$args,
 					);
-				
+
 					return;
 				}
 			}
 		}
-		
+
 		# If the feed contains no sub-items, display item details
-		if ( (!$subFeed->{'items'} 
+		if ( (!$subFeed->{'items'}
 				 ||
 				 ( ref $subFeed->{'items'} eq 'ARRAY' && !scalar @{ $subFeed->{'items'} })
 			 && !($subFeed->{type} && $subFeed->{type} eq 'search')
-			 && !(ref $subFeed->{'url'}) ) 
+			 && !(ref $subFeed->{'url'}) )
 		) {
 			$subFeed->{'image'} ||= $subFeed->{'cover'} || $subFeed->{'icon'} || Slim::Player::ProtocolHandlers->iconForURL($subFeed->{'play'} || $subFeed->{'url'});
 			$subFeed->{'image'} = proxiedImage($subFeed->{'image'});
@@ -546,37 +547,37 @@ sub handleFeed {
 				'index' => $sid ? join( '.', $sid, @index ) : join( '.', @index ),
 			};
 		}
-		
+
 		# Construct index param for each item in the list
 		my $itemIndex = $sid ? join( '.', $sid, @index ) : join( '.', @index );
 		if ( $stash->{'q'} ) {
 			$itemIndex .= '_' . uri_escape_utf8( $stash->{'q'}, "^A-Za-z0-9" );
 		}
 		$itemIndex .= '.';
-		
+
 		$stash->{'pagetitle'} = Slim::Control::XMLBrowser::getTitle($subFeed->{'name'}, $subFeed);
 		$stash->{'index'}     = $itemIndex;
 		$stash->{'icon'}      = $subFeed->{'icon'};
-		$stash->{'playUrl'}   = $subFeed->{'play'} 
+		$stash->{'playUrl'}   = $subFeed->{'play'}
 								|| ($subFeed->{'type'} && $subFeed->{'type'} eq 'audio'
 									? $subFeed->{'url'}
 									: undef);
-		
+
 		$feed = $subFeed;
 	}
 	else {
 		$stash->{'pagetitle'} = $feed->{'name'} || $feed->{'title'};
-		$stash->{'playUrl'}   = $feed->{'play'};	
-		
+		$stash->{'playUrl'}   = $feed->{'play'};
+
 		if ( $sid ) {
 			$stash->{index} = $sid;
 		}
-		
+
 		# Persist search term from top-level item (i.e. Search Radio)
 		if ( $stash->{q} ) {
 			$stash->{index} .= '_' . uri_escape_utf8( $stash->{'q'}, "^A-Za-z0-9" );
 		}
-		
+
 		if ( $stash->{index} ) {
 			$stash->{index} .= '.';
 		}
@@ -585,22 +586,22 @@ sub handleFeed {
 			$stash->{'index'} = undef;
 		}
 	}
-	
+
 	$stash->{'crumb'}     = \@crumb;
 	$stash->{'image'}     = proxiedImage($feed->{'image'} || $feed->{'cover'} || $stash->{'image'});
 
 	foreach (qw(items type orderByList playlist_id playlistTitle total)) {
 		$stash->{$_} = $feed->{$_} if defined $feed->{$_};
 	}
-	
+
 	# Only want plain URLs as play-URL
 	if ($stash->{'playUrl'} && ref $stash->{'playUrl'}) {
 		delete $stash->{'playUrl'};
 	}
-	
+
 	my $action      = $stash->{'action'};
 	my $streamItem  = $stash->{'streaminfo'}->{'item'} if $stash->{'streaminfo'};
-	
+
 	# Play of a playlist should be playall
 	if ($action
 		&& ($streamItem && $streamItem->{'type'} ? $streamItem->{'type'} eq 'playlist'
@@ -609,26 +610,27 @@ sub handleFeed {
 	) {
 		$action .= 'all';
 	}
-			
+
 	# play/add stream
 	if ( $client && $action && $action =~ /^(play|add)$/ ) {
 		my $url   = $streamItem->{'url'};
 		my $title = $streamItem->{'name'} || $streamItem->{'title'};
-		
+
 		# Podcast enclosures
 		if ( my $enc = $streamItem->{'enclosure'} ) {
 			$url = $enc->{'url'};
 		}
-		
+
 		# Items with a 'play' attribute will use this for playback
 		if ( my $play = $streamItem->{'play'} ) {
 			$url = $play;
 		}
-		
+
 		if ( $url ) {
 
 			main::INFOLOG && $log->info("Playing/adding $url");
-			
+			main::DEBUGLOG && $log->is_debug && $log->debug("streamItem is " . Data::Dump::dump($streamItem));
+
 			# Set metadata about this URL
 			Slim::Music::Info::setRemoteMetadata( $url, {
 				title   => $title,
@@ -636,10 +638,11 @@ sub handleFeed {
 				secs    => $streamItem->{'duration'},
 				bitrate => $streamItem->{'bitrate'},
 				cover   => $streamItem->{'cover'} || $streamItem->{'image'} || $streamItem->{'icon'},
+				year	=> $streamItem->{'year'},
 			} );
-		
+
 			$client->execute([ 'playlist', $action, $url ]);
-		
+
 			my $webroot = $stash->{'webroot'};
 			$webroot =~ s/(.*?)plugins.*$/$1/;
 			$template = 'xmlbrowser_redirect.html';
@@ -651,7 +654,7 @@ sub handleFeed {
 	# play all/add all
 	elsif ( $client && $action && $action =~ /^(playall|addall|insert|remove)$/ ) {
 		$action =~ s/all$//;
-		
+
 		my (@urls, @itemActions);
 		# XXX: Why is $stash->{streaminfo}->{item} added on here, it seems to be undef?
 		for my $item ( @{ $stash->{'items'} }, $streamItem ) {
@@ -668,9 +671,12 @@ sub handleFeed {
 			elsif ( my $itemAction = Slim::Control::XMLBrowser::findAction(undef, $item, $action) ) {
 				push @itemActions, $itemAction if $itemAction->{command} && $itemAction->{fixedParams};
 			}
-			
+
 			next if !$url;
 			
+			main::INFOLOG && $log->info("Playing/adding $url");
+			main::DEBUGLOG && $log->is_debug && $log->debug("item is " . Data::Dump::dump($item));
+
 			# Set metadata about this URL
 			Slim::Music::Info::setRemoteMetadata( $url, {
 				title   => $item->{'name'} || $item->{'title'},
@@ -678,13 +684,14 @@ sub handleFeed {
 				secs    => $item->{'duration'},
 				bitrate => $item->{'bitrate'},
 				cover   => $item->{'cover'} || $item->{'image'} || $item->{'icon'},
+				year	=> $item->{'year'},
 			} );
-			
+
 			main::idleStreams();
-			
+
 			push @urls, $url;
 		}
-		
+
 		if ( @urls || @itemActions ) {
 
 			if ( main::INFOLOG && $log->is_info ) {
@@ -703,7 +710,7 @@ sub handleFeed {
 					push @$command, map {
 						"$_:" . $actionItem->{fixedParams}->{$_}
 					} keys %{ $actionItem->{fixedParams} };
-					
+
 					main::DEBUGLOG && $log->is_debug && $log->debug(Data::Dump::dump($command));
 					$client->execute($command);
 				}
@@ -714,7 +721,7 @@ sub handleFeed {
 			} else {
 				$client->execute([ 'playlist', $action, \@urls ]);
 			}
-			
+
 			my $webroot = $stash->{'webroot'};
 			$webroot =~ s/(.*?)plugins.*$/$1/;
 			$template = 'xmlbrowser_redirect.html';
@@ -724,18 +731,18 @@ sub handleFeed {
 		}
 	}
 	else {
-		
+
 		# Not in use because it messes up title breadcrumbs
 #		if ($feed->{'actions'} && $feed->{'actions'}->{'items'}) {
 #			my $action = $feed->{'actions'}->{'items'};
-#			
+#
 #			my $base = 'clixmlbrowser/clicmd=' . join('+', @{$action->{'command'}});
 #			if (my $params = $action->{'fixedParams'}) {
 #				$base .= '&' . join('&', map { $_ . '=' . $params->{$_}} keys %{$params});
 #			}
-#			
+#
 #			main::INFOLOG && $log->is_info && $log->info($base);
-#			
+#
 #			my @vars = @{$action->{'variables'} || []};
 #			foreach my $item (@{ $stash->{'items'} }) {
 #				my $link = $base;
@@ -747,7 +754,7 @@ sub handleFeed {
 #		}
 
 		main::INFOLOG && $log->info('Item details or list');
-		
+
 		# Check if any of our items contain audio as well as a duration value, so we can display an
 		# 'All Songs' link.  Lists with no duration values are lists of radio stations where it doesn't
 		# make sense to have an All Songs link. (bug 6531)
@@ -759,9 +766,9 @@ sub handleFeed {
 			$stash->{'currentIndex'}   = $crumb[-1]->{index};
 			last;
 		}
-		
+
 		my $itemCount = $feed->{'total'} || scalar @{ $stash->{'items'} };
-		
+
 		my $clientId = ( $client ) ? $client->id : '';
 		my $crumbIndex = $crumb[-1]->{index};
 		$crumbIndex = '' if !defined $crumbIndex;
@@ -770,7 +777,7 @@ sub handleFeed {
 		if ( $stash->{'query'} ) {
 			$otherParams = '&query=' . $stash->{'query'} . $otherParams;
 		}
-			
+
 		$stash->{'pageinfo'} = Slim::Web::Pages::Common->pageInfo({
 				'itemCount'   => $itemCount,
 				'indexList'   => $feed->{'indexList'},
@@ -779,21 +786,21 @@ sub handleFeed {
 				'start'       => $stash->{'start'},
 				'perPage'     => $stash->{'itemsPerPage'},
 		});
-		
+
 		$stash->{'path'} = $params->{'path'} || 'index.html';
 
 		my $offset = $feed->{'offset'} || 0;
 		my $start  = $stash->{'pageinfo'}{'startitem'} || 0;
 		$start = $offset if ($start < $offset);
 		$stash->{'start'} = $start;
-		
+
 		if ($offset || $stash->{'pageinfo'}{'totalpages'} > 1) {
 			my $count = scalar @{ $stash->{'items'} };
 
 			# the following ensures the original array is not altered by creating a slice to show this page only
 			my $finish = $stash->{'pageinfo'}{'enditem'} + 1 - $offset;
 			$finish = $count if ($count < $finish);
-			
+
 			if ($start > $offset || $finish < $count) {
 				main::DEBUGLOG && $log->is_debug && $log->info("start=$start, offset=$offset, count=$count: cutting slice ", $start - $offset, "..$finish");
 				my @items = @{ $stash->{'items'} };
@@ -804,7 +811,7 @@ sub handleFeed {
 				main::DEBUGLOG && $log->is_debug && $log->info("start=$start, offset=$offset, count=$count: no slice needed");
 			}
 		}
-		
+
 		my $item_index = $start;
 		my $format = $stash->{ajaxSearch} || ($stash->{type} || '') eq 'search'
 			? 'TRACKNUM. TITLE - ALBUM - ARTIST'
@@ -816,7 +823,7 @@ sub handleFeed {
 			} else {
 				$_->{'index'} = $stash->{'index'} . $item_index++;
 			}
-			
+
 			if (my $hasMetadata = $_->{'hasMetadata'}) {
 				if ($hasMetadata eq 'track') {
 					$_->{'name'} = Slim::Music::TitleFormatter::infoFormat(undef, $format, 'TITLE', $_);
@@ -825,12 +832,12 @@ sub handleFeed {
 					$_->{'showArtist'} = 1 if ($prefs->get('showArtist') && $_->{'artist'});
 				}
 			}
-			
+
 			# keep track of station icons
 			if ( $_->{url} && !ref $_->{url}
 				&& ( $_->{play} || $_->{playlist} || ($_->{type} && ($_->{type} eq 'audio' || $_->{type} eq 'playlist')) )
-				&& $_->{url} =~ /^http/ 
-				&& $_->{url} !~ m|\.com/api/\w+/v1/opml| 
+				&& $_->{url} =~ /^http/
+				&& $_->{url} !~ m|\.com/api/\w+/v1/opml|
 				&& ( my $cover = $_->{image} || $_->{cover} )
 				&& !Slim::Utils::Cache->new->get("remote_image_" . $_->{url})
 			) {
@@ -838,16 +845,16 @@ sub handleFeed {
 			}
 		}
 
-		# Find special stuff that we either want to pull up into the metadata for the 
+		# Find special stuff that we either want to pull up into the metadata for the
 		# songinfo header block or which needs unfolding.
-		
+
 		{
 			my $details = {};
 			my $i = 0;
-			
+
 			my $roles = join ('|', Slim::Schema::Contributor->contributorRoles());
 			my $allLabels = join ('|', $roles, qw(ALBUM GENRE YEAR ALBUMREPLAYGAIN ALBUMLENGTH COMPILATION));
-			
+
 			foreach my $item ( @{ $feed->{'albumData'} || $stash->{'items'} } ) {
 
 				my $label = $item->{'label'} || '';
@@ -863,13 +870,13 @@ sub handleFeed {
 							index=> $item->{'index'},
 							link => _makeWebLink(undef, $item, 'items', sprintf('%s (%s)', string('ARTIST'), $item->{'name'})),
 						};
-						
+
 						$item->{'ignore'} = 1;
 					}
 
-					elsif ($label eq 'GENRE') { 
+					elsif ($label eq 'GENRE') {
 						$details->{'genres'} ||= [];
-												
+
 						push @{ $details->{'genres'} }, {
 							name => $item->{'name'},
 							link => _makeWebLink(undef, $item, 'items', sprintf('%s (%s)', string($label), $item->{'name'})),
@@ -888,7 +895,7 @@ sub handleFeed {
 						}
 						$item->{'ignore'} = 1;
 						$item->{'type'} = 'redirect';
-					
+
 						# if this is a compilation, provide a link to the album with all artists
 						if ($label eq 'COMPILATION' && $stash->{artist_id}) {
 							$details->{album} = {
@@ -901,14 +908,14 @@ sub handleFeed {
 
 				# unfold items which are folded for smaller UIs;
 				elsif ( $item->{'items'} && ($item->{'unfold'} || $item->{'web'}->{'unfold'}) ) {
-					
+
 					$details->{'unfold'} ||= [];
-					
+
 					my $new_index = 0;
 					foreach my $moreItem ( @{ $item->{'items'} } ) {
 						$moreItem->{'index'} = $item->{'index'} . '.' . $new_index;
 						$new_index++;
-						
+
 						my $label = $moreItem->{'label'} || '';
 						if ($label =~ /^($allLabels)$/) {
 							my $tag = lc $label;
@@ -922,7 +929,7 @@ sub handleFeed {
 							$moreItem->{'type'} = 'redirect';
 						}
 					}
-					
+
 					push @{ $details->{'unfold'} }, {
 						items => $item->{'items'},
 						start => $i,
@@ -931,7 +938,7 @@ sub handleFeed {
 
 				$i++;
 			}
-			
+
 			if (my $c = $details->{'contributors'}) {
 				if ($c->{'TRACKARTIST'} && $c->{'ALBUMARTIST'}) {
 					my $t = join(' ', (sort (map {$_->{'name'}} @{$c->{'TRACKARTIST'}})));
@@ -944,7 +951,7 @@ sub handleFeed {
 				# unfold nested groups of additional items
 				my $new_index = 0;
 				foreach my $group (@{ $details->{'unfold'} }) {
-					
+
 					splice @{ $stash->{'items'} }, ($group->{'start'} + $new_index), 1, @{ $group->{'items'} };
 					$new_index = $#{ $group->{'items'} };
 				}
@@ -955,7 +962,7 @@ sub handleFeed {
 
 			if ($feed->{'hasMetadata'} && $feed->{'hasMetadata'} eq 'album' && $feed->{'albumInfo'}) {
 
-				my $morelink = _makeWebLink({ actions => $feed->{'albumInfo'} }, $feed, 'info', 
+				my $morelink = _makeWebLink({ actions => $feed->{'albumInfo'} }, $feed, 'info',
 											sprintf('%s (%s)', string('INFORMATION'), ($feed->{'album'} || '')));
 
 				$details->{'mixersLink'} = $morelink if $morelink;
@@ -964,16 +971,16 @@ sub handleFeed {
 			if (scalar keys %$details) {
 				# This is really just for Trackinfo
 				if ($stash->{'playUrl'}) {
-					$details->{'playLink'} = 'anyurl?p0=playlist&p1=play&p2=' . 
+					$details->{'playLink'} = 'anyurl?p0=playlist&p1=play&p2=' .
 						Slim::Utils::Misc::escape($stash->{'playUrl'});
-					$details->{'addLink'} = 'anyurl?p0=playlist&p1=add&p2=' . 
+					$details->{'addLink'} = 'anyurl?p0=playlist&p1=add&p2=' .
 						Slim::Utils::Misc::escape($stash->{'playUrl'});
-					$details->{'insertLink'} = 'anyurl?p0=playlist&p1=insert&p2=' . 
+					$details->{'insertLink'} = 'anyurl?p0=playlist&p1=insert&p2=' .
 						Slim::Utils::Misc::escape($stash->{'playUrl'});
-					$details->{'removeLink'} = 'anyurl?p0=playlist&p1=deleteitem&p2=' . 
+					$details->{'removeLink'} = 'anyurl?p0=playlist&p1=deleteitem&p2=' .
 						Slim::Utils::Misc::escape($stash->{'playUrl'});
 				}
-				
+
 				if ($feed->{'favorites_url'} && $favs) {
 					$details->{'favorites_url'} = $feed->{'favorites_url'};
 					$details->{'favorites'} = $favs->hasUrl($feed->{'favorites_url'}) ? 2 : 1;
@@ -990,43 +997,43 @@ sub handleFeed {
 			if ($stash->{'action'} eq 'favadd') {
 
 				my $type = $item->{'favorites_type'} || $item->{'type'} || 'link';
-				
-				if ( $item->{'play'} 
+
+				if ( $item->{'play'}
 				    || ($type eq 'playlist' && $furl =~ /^(file|db):/)
 				) {
 					$type = 'audio';
 				}
-				
+
 				$favs->add(
 					$furl,
-					$item->{'name'}, 
-					$type, 
-					$item->{'parser'}, 
-					1, 
-					proxiedImage($item->{'image'} || $item->{'icon'} || Slim::Player::ProtocolHandlers->iconForURL($furl)) 
+					$item->{'name'},
+					$type,
+					$item->{'parser'},
+					1,
+					proxiedImage($item->{'image'} || $item->{'icon'} || Slim::Player::ProtocolHandlers->iconForURL($furl))
 				);
 			} elsif ($stash->{'action'} eq 'favdel') {
 				$favs->deleteUrl( $furl );
 			}
 		}
 	}
-	
+
 	# Add play & favourites links and anchors if we can
 	my $anchor = '';
 	my $songinfo = $stash->{'songinfo'};
 	for my $item (@{$stash->{'items'} || []}) {
-		
+
 		next if $item->{'ignore'};
-		
+
 		if ($favs) {
 			my $furl = _favoritesUrl($item);
 			if ($furl && !defined $item->{'favorites'}) {
 				$item->{'favorites'} = $favs->hasUrl( $furl ) ? 2 : 1;
 			}
 		}
-		
+
 		my $link;
-		
+
 		if ($songinfo) {
 			if (my $playcontrol = $item->{'playcontrol'}) {
 				if ($link = _makePlayLink($feed->{'actions'}, $item, 'play')) {
@@ -1036,19 +1043,19 @@ sub handleFeed {
 				}
 			}
 		}
-		
+
 		$link = _makePlayLink($feed->{'actions'}, $item, 'play');
 		$item->{'playLink'} = $link if $link;
-		
+
 		$link = _makePlayLink($feed->{'actions'}, $item, 'add');
 		$item->{'addLink'} = $link if $link;
-		
+
 		$link = _makePlayLink($feed->{'actions'}, $item, 'insert');
 		$item->{'insertLink'} = $link if $link;
-		
+
 		$link = _makePlayLink($feed->{'actions'}, $item, 'remove');
 		$item->{'removeLink'} = $link if $link;
-		
+
 		$link = _makeWebLink({actions => $feed->{'actions'}}, $item, 'info', sprintf('%s (%s)', string('INFORMATION'), ($item->{'name'}|| '')));
 		$item->{'mixersLink'} = $link if $link;
 
@@ -1057,7 +1064,7 @@ sub handleFeed {
 			$item->{'anchor'} = $anchor = $textkey;
 		}
 	}
-	
+
 	# Ignore the All Songs link added by browse library at the end if we will add our own link.
 	# This is a horrible hack really.
 	if ($stash->{'items'}) {
@@ -1066,11 +1073,11 @@ sub handleFeed {
 			$item->{'ignore'} = 1;
 		}
 	}
-	
+
 #	$log->error(Data::Dump::dump($stash->{'items'}));
 
 	my $output = processTemplate($template, $stash);
-	
+
 	# done, send output back to Web module for display
 	$callback->( $client, $stash, $output, $httpClient, $response );
 }
@@ -1078,18 +1085,18 @@ sub handleFeed {
 sub handleError {
 	my ( $error, $params ) = @_;
 	my ( $client, $stash, $callback, $httpClient, $response ) = @{ $params->{'args'} };
-	
+
 	my $template = 'xmlbrowser.html';
-	
+
 	$params->{title} ||= '';
 	my $title = ( $params->{title} && uc($params->{title}) eq $params->{title} ) ? Slim::Utils::Strings::getString($params->{title}) : $params->{title};
-	
+
 	$stash->{'pagetitle'} = $title;
 	$stash->{'pageicon'}  = $params->{pageicon};
 	$stash->{'msg'} = sprintf(string('WEB_XML_ERROR'), $title, $error);
-	
+
 	my $output = processTemplate($template, $stash);
-	
+
 	# done, send output back to Web module for display
 	$callback->( $client, $stash, $output, $httpClient, $response );
 }
@@ -1099,7 +1106,7 @@ sub handleError {
 sub handleSubFeed {
 	my ( $feed, $params ) = @_;
 	my ( $client, $stash, $callback, $httpClient, $response ) = @{ $params->{'args'} };
-	
+
 	# If there's a command we need to run, run it.  This is used in various
 	# places to trigger actions from an OPML result, such as to start playing
 	# a new Pandora radio station
@@ -1108,21 +1115,21 @@ sub handleSubFeed {
 		main::DEBUGLOG && $log->is_debug && $log->debug( "Executing command: " . Data::Dump::dump(\@p) );
 		$client->execute( \@p );
 	}
-	
+
 	# find insertion point for sub-feed data in the original feed
 	my $parent = $params->{'parent'};
 	my $subFeed = $parent;
 	for my $i ( @{ $params->{'currentIndex'} } ) {
 		# Skip sid and sid + top-level search query
 		next if length($i) >= 8 && $i =~ /^[a-f0-9]{8}/;
-		
+
 		# If an index contains a search query, strip it out
 		$i =~ s/_.+$//g;
-		
+
 		$subFeed = $subFeed->{'items'}->[$i - ($subFeed->{'offset'} || 0)];
 	}
 
-	if (($subFeed->{'type'} && $subFeed->{'type'} eq 'replace' || $feed->{'replaceparent'}) && 
+	if (($subFeed->{'type'} && $subFeed->{'type'} eq 'replace' || $feed->{'replaceparent'}) &&
 		$feed->{'items'} && scalar @{$feed->{'items'}} == 1) {
 		# if child has 1 item and requests, update previous entry to avoid new menu level
 		delete $subFeed->{'url'};
@@ -1137,10 +1144,10 @@ sub handleSubFeed {
 
 	# set flag to avoid fetching this url again
 	$subFeed->{'fetched'} = 1;
-	
+
 	# Pass-through forceRefresh flag
 	$subFeed->{forceRefresh} = 1 if $feed->{forceRefresh};
-	
+
 	foreach (qw(offset total actions albumData albumInfo orderByList indexList playlist_id playlistTitle)) {
 		$subFeed->{$_} = $feed->{$_} if defined $feed->{$_};
 	}
@@ -1148,7 +1155,7 @@ sub handleSubFeed {
 	foreach (qw(image cover)) {
 		$subFeed->{$_} = proxiedImage($feed->{$_}) if defined $feed->{$_};
 	}
-	
+
 	# Mark this as coming from subFeed, so that we know to ignore forceRefresh
 	$params->{fromSubFeed} = 1;
 
@@ -1160,17 +1167,17 @@ sub handleSubFeed {
 	# No caching for callback-based plugins
 	# XXX: this is a bit slow as it has to re-fetch each level
 	if ( ref $subFeed->{'url'} eq 'CODE' ) {
-		
+
 		# Clear passthrough data as it won't be needed again
 		delete $subFeed->{'passthrough'};
 	}
-	
+
 	handleFeed( $parent, $params );
 }
 
 sub processTemplate {
 	my $page = Slim::Web::HTTP::filltemplatefile( @_ );
-	
+
 	Slim::Utils::Cache->new->set($_[1]->{renderCacheKey}, $page, 86400) if $page && $_[1]->{renderCacheKey};
 
 	return $page;
@@ -1178,17 +1185,17 @@ sub processTemplate {
 
 sub init {
 	my $class = shift;
-	
+
 	my $url   = 'clixmlbrowser/.*';
-	
+
 	Slim::Web::Pages->addPageFunction( $url, \&webLink);
 }
 
 sub _webLinkDone {
 	my ($client, $feed, $title, $args) = @_;
-	
+
 	# pass CLI command as result to XMLBrowser
-	
+
 	__PACKAGE__->handleWebIndex( {
 			client  => $client,
 			feed    => $feed,
@@ -1220,13 +1227,13 @@ sub webLink {
 			$log->warn("Unrecognized parameter syntax: $_");
 		}
 	}
-	
+
 	my @verbs = split(/\+/, delete $params{'clicmd'});
 	if (!scalar @verbs) {
 		$log->error("Missing clicmd parameter");
 		return;
 	}
-	
+
 	my ($index, $quantity) = (($args->{'start'} || 0), ($args->{'itemsPerPage'} || $prefs->get('itemsPerPage')));
 	my $itemId = $args->{'index'};
 	if (defined $itemId) {
@@ -1237,31 +1244,31 @@ sub webLink {
 			$quantity = 1;
 		}
 	}
-	
+
 	push @verbs, ($index, $quantity);
-	
+
 	my $title = delete $params{'linktitle'};
 	$title = Slim::Utils::Unicode::utf8decode(uri_unescape($title)) if $title;
-	
+
 	push @verbs, map { $_ . ':' . $params{$_} } keys %params;
 	push @verbs, 'feedMode:1';
 	push @verbs, 'wantMetadata:1';	# We always want everything we can get
 	push @verbs, 'wantIndex:1';	# We always want everything we can get
-	
+
 	push @verbs, 'orderBy:' . $args->{'orderBy'} if $args->{'orderBy'};
 
 	my $renderCacheKey;
 	if ( !main::NOBROWSECACHE && $cacheables{ $args->{path} } && !($args->{url_query} && $args->{url_query} =~ /\baction=/) && !($args->{url_query} && $args->{url_query} =~ /\bindex=\d+\.\d+\.\d+/) && !Slim::Music::Import->stillScanning() ) {
-		
+
 		# let cache expire between server restarts
 		$cacheTimestamp ||= time();
-		
+
 		# cache key needs to make sure we respect the various prefs and cookies which control the display mode...
-		$renderCacheKey = join(':', 
-			'blweb', 
-			$cacheTimestamp, 
-			$index, 
-			$quantity, 
+		$renderCacheKey = join(':',
+			'blweb',
+			$cacheTimestamp,
+			$index,
+			$quantity,
 			(map { $params{$_} || '' } qw(mode sort index), @Slim::Menu::BrowseLibrary::topLevelArgs),
 			(map { $args->{$_} || '' } qw(artwork player sess index start systemSkin skinOverride systemLanguage webroot thumbSize serverResizesArt orderBy)),
 			Slim::Music::VirtualLibraries->getLibraryIdForClient($client),
@@ -1273,15 +1280,15 @@ sub webLink {
 			return;
 		}
 	}
-		
+
 	$args->{renderCacheKey} = $renderCacheKey;
 
 	# execute CLI command
 	main::INFOLOG && $log->is_info && $log->info('Use CLI: ', join(' ', (defined $client ? $client->id : 'noClient'), @verbs));
 	my $proxiedRequest = Slim::Control::Request::executeRequest( $client, \@verbs );
-		
+
 	# wrap async requests
-	if ( $proxiedRequest->isStatusProcessing ) {			
+	if ( $proxiedRequest->isStatusProcessing ) {
 		$proxiedRequest->callbackFunction( sub { _webLinkDone($client, $_[0]->getResults, $title, $allArgs); } );
 		return undef;
 	} else {
@@ -1291,7 +1298,7 @@ sub webLink {
 
 sub addCacheable {
 	my ( $class, $regex ) = @_;
-	
+
 	if ( ref $regex ne 'Regexp' ) {
 		$log->error( 'addCacheable called without a regular expression' );
 		return;
@@ -1306,88 +1313,89 @@ sub wipeCaches {
 
 sub _makeWebLink {
 	my ($feed, $item, $action, $title) = @_;
-	
+
 	my ($feedAction, $feedActions) = Slim::Control::XMLBrowser::findAction($feed, $item, $action);
 	if ($feedAction) {
 		my $cmd = join('+', @{$feedAction->{'command'}});
 		return undef unless $cmd;
-		
+
 		my $link = 'clixmlbrowser/clicmd=' . $cmd;
 		if (my $params = $feedAction->{'fixedParams'}) {
 			$link .= join('&', '', map { $_ . '=' . $params->{$_}} keys %{$params});
 		}
-		
+
 		my @vars = exists $feedAction->{'variables'} ? @{$feedAction->{'variables'}} : @{$feedActions->{'commonVariables'} || []};
 		for (my $i = 0; $i < scalar @vars; $i += 2) {
 			if (defined $item->{$vars[$i+1]}) {
-				$link .= '&' . $vars[$i] . '=' . $item->{$vars[$i+1]};
-			} else {
+				$link .= '&' . $vars[$i] . '=' . Slim::Utils::Misc::escape($item->{$vars[$i+1]});
+			} elsif ($vars[$i+1] ne 'extid') {
+				# XXX - why would we return here?
 				return undef;
 			}
 		}
-		
+
 		$link .= '&linktitle=' . Slim::Utils::Misc::escape($title) if $title;
-		 
+
 		$link .= '/';
-		
+
 #		main::DEBUGLOG && $log->debug($link);
-		
+
 		return $link;
 	}
 }
 
 sub _makePlayLink {
 	my ($feedActions, $item, $action) = @_;
-	
+
 	return undef if $item->{type} && $item->{type} eq 'text';
-	
+
 	my ($feedAction, $feedActions) = Slim::Control::XMLBrowser::findAction({actions => $feedActions}, $item, $action);
 	if ($feedAction) {
 		my @p = @{$feedAction->{'command'}};
-		
+
 		if (my $params = $feedAction->{'fixedParams'}) {
 			push @p, map { $_ . ':' . $params->{$_}} keys %{$params};
 		}
-		
+
 		my @vars = exists $feedAction->{'variables'} ? @{$feedAction->{'variables'}} : @{$feedActions->{'commonVariables'} || []};
 		for (my $i = 0; $i < scalar @vars; $i += 2) {
 			push @p, $vars[$i] . ':' . $item->{$vars[$i+1]} if defined $item->{$vars[$i+1]};
 		}
-		
+
 		my $link = 'anyurl?p0=' . shift @p;
 		my $i = 1;
-		
+
 		foreach (@p) {
 			$link .= "&p$i=$_";
 			$i++;
 		}
-		
+
 #		main::DEBUGLOG && $log->debug($link);
-		
+
 		return $link;
 	}
-	
+
 	return undef unless $action =~ /^(add|play|insert|remove)/;
-		
-	my $playUrl = $item->{'play'} 
+
+	my $playUrl = $item->{'play'}
 					|| ($item->{'type'} && $item->{'type'} eq 'audio'
 						? $item->{'url'}
 						: undef);
 	if ($playUrl && !ref $playUrl) {
-		
+
 		if ($action eq 'remove') {
 			my $link = 'anyurl?p0=playlist&p1=deleteitem&p2=' . Slim::Utils::Misc::escape($playUrl);
 			return $link;
 		} else {
 			my $link = 'anyurl?p0=playlist&p1=' . $action . '&p2=' . Slim::Utils::Misc::escape($playUrl);
-	
+
 			my $title = $item->{'title'} || $item->{'name'};
-			
+
 			# bug 17881: don't set the track title when we're dealing with a local file, and the title is the filename (BMF)
 			$title = '' if $title && $item->{filename} && $item->{filename} eq $title;
-			
+
 			$link .= '&p3=' . Slim::Utils::Misc::escape($title) if $title;
-			 
+
 			return $link;
 		}
 	}
@@ -1395,15 +1403,15 @@ sub _makePlayLink {
 
 sub _favoritesUrl {
 	my $item = shift;
-	
+
 	my $favorites_url    = $item->{favorites_url} || $item->{play} || $item->{url};
-	
+
 	if ( $favorites_url && !ref $favorites_url ) {
 		if ( !$item->{favorites_url} && $item->{type} && $item->{type} eq 'playlist' && $item->{playlist} ) {
 			$favorites_url = $item->{playlist};
 		}
-		
-		
+
+
 		return $favorites_url;
 	}
 }

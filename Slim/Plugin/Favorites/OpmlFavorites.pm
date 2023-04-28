@@ -2,7 +2,6 @@ package Slim::Plugin::Favorites::OpmlFavorites;
 
 # An opml based favorites handler
 
-# $Id$
 
 use strict;
 
@@ -47,7 +46,7 @@ sub new {
 		if ($request->getRequestString() eq 'rescan done'){
 			$favs->_urlindex;
 		}
-		
+
 	}, [['rescan'], ['done']]);
 
 	return $favs;
@@ -72,12 +71,12 @@ sub migrate {
 sub filename {
 	my $class = shift;
 	my $dir = shift;
-	
+
 	# Shortcut if filename supplied
 	return $dir if ($dir && -f $dir);
 
 	$dir ||= Slim::Utils::OSDetect::dirsFor('prefs');
-	
+
 	return catdir($dir, "favorites.opml");
 }
 
@@ -132,7 +131,7 @@ sub _urlindex {
 		}
 
 		# look up icon if not defined or an album or track (can change during rescan)
-		if ( !$entry->{'icon'} || ($entry->{'URL'} && $entry->{'URL'} =~ /^(?:db:album|file:)/) ) {
+		if ( !$entry->{'icon'} || ($entry->{'URL'} && $entry->{'URL'} =~ /^(?:db:album|file:)/ && $entry->{'icon'} !~ /^http/) ) {
 			$entry->{'icon'} = $class->icon($entry->{'URL'});
 		}
 
@@ -181,14 +180,15 @@ sub _loadOldFavorites {
 
 sub xmlbrowser {
 	my $class = shift;
+	my $dontBrowseDb = shift;
 
 	my $hash = $class->SUPER::xmlbrowser;
 
 	# optionally let the user browse into local favorite items
-	if ( !$prefs->get('dont_browsedb')) {
+	if ( !$prefs->get('dont_browsedb') && !$dontBrowseDb ) {
 		$class->_prepareDbItems($hash->{'items'});
 	}
-	
+
 	$hash->{'favorites'} = 1;
 
 	return $hash;
@@ -201,9 +201,7 @@ sub _prepareDbItems {
 
 	foreach my $item (@$items) {
 		if ( $item->{'url'} =~ /^db:(\w+)\.(\w+)=(.+)/ ) {
-			my ($class, $key, $value) = ($1, $2, $3);
-			
-			$class = ucfirst($class);
+			my $dbClass = $1;
 
 			$dbBrowseModes ||= {
 				Album       => [ 'album_id', \&Slim::Menu::BrowseLibrary::_tracks, {
@@ -218,15 +216,48 @@ sub _prepareDbItems {
 					$artistHandler->{feed}->(@_) if $artistHandler;
 				} ],
 			};
-			
-			if ( $dbBrowseModes->{$class} ) {
+
+			next unless $dbBrowseModes->{ucfirst($dbClass)};
+
+			my $queryParams = {};
+			my @joins;
+
+			my $query = $item->{url};
+			$query =~ s/^db://;
+
+			foreach my $condition (split /&(?:amp;)?/, $query) {
+				if ($condition =~ /^(\w+)\.(\w+)=(.+)/) {
+					my ($dbClass2, $key, $value) = ($1, $2, $3);
+
+					if ($dbBrowseModes->{ucfirst($dbClass2)}) {
+						if (!utf8::is_utf8($value) && !utf8::decode($value)) { $log->warn("The following value is not UTF-8 encoded: $value"); }
+
+						if (utf8::is_utf8($value)) {
+							utf8::decode($value);
+							utf8::encode($value);
+						}
+
+						$key = URI::Escape::uri_unescape($key);
+						$value = URI::Escape::uri_unescape($value);
+
+						if ($dbClass2 ne $dbClass) {
+							$key = "$dbClass2.$key";
+							push @joins, $dbClass2;
+						}
+
+						$queryParams->{$key} = $value;
+					}
+				}
+			}
+
+			if ( keys %$queryParams ) {
 				$item->{'type'} = 'playlist';
 				$item->{'play'} = $item->{'url'} . '&libraryTracks.library=-1';
 				$item->{'url'}  = \&_dbItem;
 				$item->{'passthrough'} = [{
-					class => $class,
-					key   => $key,
-					value => $value,
+					class => ucfirst($dbClass),
+					query => $queryParams,
+					'join' => \@joins,
 				}];
 			}
 		}
@@ -238,32 +269,23 @@ sub _prepareDbItems {
 
 sub _dbItem {
 	my ($client, $callback, $args, $pt) = @_;
-	
-	my $class  = ucfirst( delete $pt->{'class'} );
-	my $key   = URI::Escape::uri_unescape(delete $pt->{'key'});
-	my $value = URI::Escape::uri_unescape(delete $pt->{'value'});
 
-	if (!utf8::is_utf8($value) && !utf8::decode($value)) { $log->warn("The following value is not UTF-8 encoded: $value"); }
+	my $dbClass  = ucfirst( delete $pt->{'class'} );
 
-	if (utf8::is_utf8($value)) {
-		utf8::decode($value);
-		utf8::encode($value);
-	}
-	
-	if ( my $dbBrowseMode = $dbBrowseModes->{$class} ) {
-		my $obj = Slim::Schema->single( ucfirst($class), { $key => $value } );
-	
+	if ( my $dbBrowseMode = $dbBrowseModes->{$dbClass} ) {
+		my $obj = Slim::Schema->search( $dbClass, $pt->{'query'}, { join => $pt->{'join'} } )->single();
+
 		if ($obj && $obj->id) {
 			$pt->{'searchTags'} = [ $dbBrowseMode->[0] . ':' . $obj->id, 'library_id:-1' ];
-			
+
 			while ( my ($k, $v) = each %{ $dbBrowseMode->[2] || {} } ) {
 				$pt->{$k} = $v
 			}
-			
+
 			return $dbBrowseMode->[1]->($client, $callback, $args, $pt);
 		}
 	}
-	
+
 	# something went wrong
 	# XXX - better error handling
 	$callback->({
@@ -316,7 +338,7 @@ sub add {
 		$url = $url->url;
 	}
 
-	$url =~ s/\?sessionid.+//i;	# Bug 3362, ignore sessionID's within URLs (Live365)
+	$url =~ s/\?sessionid.+//i;	# Bug 3362, ignore sessionID's within URLs
 
 	if ( main::INFOLOG && $log->is_info ) {
 		$log->info(sprintf("url: %s title: %s type: %s parser: %s icon: %s", $url, $title, $type, $parser, $icon));
@@ -342,7 +364,7 @@ sub add {
 	if ($parser) {
 		$entry->{'parser'} = $parser;
 	}
-	
+
 	if ( $url =~ /\.opml$/ ) {
 		delete $entry->{'type'};
 	}
@@ -368,7 +390,7 @@ sub findUrl {
 	my $class  = shift;
 	my $url    = shift;
 
-	$url =~ s/\?sessionid.+//i;	# Bug 3362, ignore sessionID's within URLs (Live365)
+	$url =~ s/\?sessionid.+//i;	# Bug 3362, ignore sessionID's within URLs
 
 	my $index = $class->{'url-index'}->{ $url };
 
@@ -392,7 +414,7 @@ sub deleteUrl {
 		$url = $url->url;
 	}
 
-	$url =~ s/\?sessionid.+//i;	# Bug 3362, ignore sessionID's within URLs (Live365)
+	$url =~ s/\?sessionid.+//i;	# Bug 3362, ignore sessionID's within URLs
 
 	if (exists $class->{'url-index'}->{ $url }) {
 

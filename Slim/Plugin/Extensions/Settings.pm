@@ -9,7 +9,7 @@ use Slim::Utils::OSDetect;
 
 use Digest::MD5;
 
-use constant MAX_DOWNLOAD_WAIT => 20;
+use constant MAX_DOWNLOAD_WAIT => 120;
 
 my $prefs = preferences('plugin.extensions');
 my $log   = logger('plugin.extensions');
@@ -44,6 +44,9 @@ sub handler {
 
 		my $auto = $params->{'auto'} ? 1 : 0;
 		$prefs->set('auto', $auto) if $auto != $prefs->get('auto');
+
+		my $useUnsupported = $params->{'useUnsupported'} ? 1 : 0;
+		$prefs->set('useUnsupported', $useUnsupported) if $useUnsupported != $prefs->get('useUnsupported');
 
 		# handle changes to repos
 
@@ -101,10 +104,10 @@ sub handler {
 
 	for my $repo (keys %$repos) {
 		Slim::Plugin::Extensions::Plugin::getExtensions({
-			'name'   => $repo, 
-			'type'   => 'plugin', 
+			'name'   => $repo,
+			'type'   => 'plugin',
 			'target' => Slim::Utils::OSDetect::OS(),
-			'version'=> $::VERSION, 
+			'version'=> $::VERSION,
 			'lang'   => $Slim::Utils::Strings::currentLang,
 			'details'=> 1,
 			'cb'     => \&_getReposCB,
@@ -135,17 +138,20 @@ sub _getReposCB {
 		my $pageInfo = $class->_addInfo($client, $params, $data);
 
 		my $finalize;
-		my $timeout = MAX_DOWNLOAD_WAIT;
+		my $timeout = Time::HiRes::time() + MAX_DOWNLOAD_WAIT;
 
 		$finalize = sub {
 			Slim::Utils::Timers::killTimers(undef, $finalize);
 
 			# if a plugin is still being downloaded, wait a bit longer, or the user might restart the server before we're done
-			if ( $timeout-- > 0 && Slim::Utils::PluginDownloader->downloading ) {
+			if ( Time::HiRes::time() <= $timeout && Slim::Utils::PluginDownloader->downloading ) {
 				Slim::Utils::Timers::setTimer(undef, time() + 1, $finalize);
 
 				main::DEBUGLOG && $log->is_debug && $log->debug("PluginDownloader is still busy - waiting a little longer...");
 				return;
+			}
+			elsif ( Time::HiRes::time() > $timeout ) {
+				$log->warn("Plugin download timed out");
 			}
 
 			$callback->($client, $params, $pageInfo, @$args);
@@ -161,7 +167,7 @@ sub _addInfo {
 	my ($current, $active, $inactive, $hide) = Slim::Plugin::Extensions::Plugin::getCurrentPlugins();
 
 	my @results = sort { $a->{'weight'} !=  $b->{'weight'} ?
-						 $a->{'weight'} <=> $b->{'weight'} : 
+						 $a->{'weight'} <=> $b->{'weight'} :
 						 $a->{'title'} cmp $b->{'title'} } values %{$data->{'results'}};
 
 	my @res;
@@ -181,18 +187,37 @@ sub _addInfo {
 
 		if ($entry->{'action'} eq 'install' && $entry->{'url'} && $entry->{'sha'}) {
 
-			if ($prefs->get('auto') ||
-				($params->{'saveSettings'} && (exists $params->{"update:$plugin"} || exists $params->{"install:$plugin"})) ) {
+			# we distinguish between plugins that are to be installed from new
+			# and already installed plugins for which an update is available
 
-				# install now if in auto mode or install or update has been explicitly selected
-				main::INFOLOG && $log->info("installing $plugin from $entry->{url}");
+			if (!defined $current->{$plugin}) {
+				# plugin is not installed, so this is a new install
 
-				Slim::Utils::PluginDownloader->install({ name => $plugin, url => $entry->{'url'}, sha => $entry->{'sha'} });
+				# install now, but only if explicitly selected on the extensions settings page
+				if ($params->{'saveSettings'} && exists $params->{"install:$plugin"}) {
 
-			} else {
+					main::INFOLOG && $log->info("installing $plugin from $entry->{url}");
+					Slim::Utils::PluginDownloader->install({ name => $plugin, url => $entry->{'url'}, sha => lc($entry->{'sha'}) });
 
-				# add to update list
-				push @updates, $entry->{'info'};
+				}
+			}
+			else {
+				# plugin already installed, this is an update
+
+				# install update now if in auto mode or if explicitly selected
+				if ($prefs->get('auto') ||
+					($params->{'saveSettings'} && exists $params->{"update:$plugin"}) ) {
+
+					main::INFOLOG && $log->info("installing $plugin from $entry->{url}");
+					Slim::Utils::PluginDownloader->install({ name => $plugin, url => $entry->{'url'}, sha => lc($entry->{'sha'}) });
+
+				}
+
+				# otherwise just add to update list
+				else {
+					push @updates, $entry->{'info'};
+				}
+
 			}
 
 			$hide->{$plugin} = 1;
@@ -240,6 +265,7 @@ sub _addInfo {
 	$params->{'repos'}    = \@repos;
 	$params->{'auto'}     = $prefs->get('auto');
 	$params->{'rand'}     = $rand;
+	$params->{'useUnsupported'} = $prefs->get('useUnsupported');
 
 	# don't offer the restart before the plugin download has succeeded.
 	my $needsRestart = Slim::Utils::PluginManager->needsRestart || Slim::Utils::PluginDownloader->downloading;

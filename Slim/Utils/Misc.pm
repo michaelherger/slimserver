@@ -1,10 +1,9 @@
 package Slim::Utils::Misc;
 
-# $Id$
 
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
-# modify it under the terms of the GNU General Public License, 
+# modify it under the terms of the GNU General Public License,
 # version 2.
 
 =head1 NAME
@@ -23,7 +22,7 @@ assert, bt, msg, msgf, errorMsg, specified
 
 =head1 DESCRIPTION
 
-L<Slim::Utils::Misc> serves as a collection of miscellaneous utility 
+L<Slim::Utils::Misc> serves as a collection of miscellaneous utility
  functions useful throughout Logitech Media Server and third party plugins.
 
 =cut
@@ -35,6 +34,8 @@ our @EXPORT = qw(assert msg msgf errorMsg specified);
 
 use File::Basename qw(basename);
 use File::Spec::Functions qw(:ALL);
+use File::Path qw(mkpath rmtree);
+use File::Temp qw(tempdir);
 use File::Slurp;
 use FindBin qw($Bin);
 use POSIX qw(strftime);
@@ -62,11 +63,15 @@ my $scannerlog = logger('scan.scanner');
 my $ospathslog = logger('os.paths');
 my $osfileslog = logger('os.files');
 
+my $WEBLINK_SUPPORTED_UA_RE = qr/\b(?:iPeng|SqueezePad|OrangeSqueeze|Squeeze-Control)\b/i;
+my $WEBBROWSER_UA_RE = qr/\b(?:FireFox|Chrome|Safari|Mozilla)\b/i;
+
 my $canFollowAlias = 0;
 
 if (main::ISWINDOWS) {
 	require Win32::File;
 	require Slim::Utils::OS::Win32;
+	require File::Which;
 }
 elsif ($^O =~/darwin/i) {
 	# OSX 10.3 doesn't have the modules needed to follow aliases
@@ -75,6 +80,7 @@ elsif ($^O =~/darwin/i) {
 
 # Cache our user agent string.
 my $userAgentString;
+my $tempdir;
 
 my %pathToFileCache = ();
 my %fileToPathCache = ();
@@ -84,9 +90,9 @@ my @findBinPaths    = ();
 
 my $MAX_CACHE_ENTRIES = $prefs->get('dbhighmem') ? 512 : 32;
 
-$prefs->setChange( sub { 
+$prefs->setChange( sub {
 	%mediadirsCache = ();
-}, 'mediadirs', 'ignoreInAudioScan', 'ignoreInVideoScan', 'ignoreInImageScan');
+}, 'mediadirs', 'ignoreInAudioScan');
 
 =head1 METHODS
 
@@ -198,7 +204,7 @@ sub pathFromMacAlias { if (main::ISMAC) {
 	my $path = '';
 
 	return $path unless $fullpath && $canFollowAlias;
-	
+
 	return Slim::Utils::OS::OSX->pathFromMacAlias($fullpath);
 } }
 
@@ -207,7 +213,7 @@ sub pathFromMacAlias { if (main::ISMAC) {
 	Given a file:// style url, return the filepath to the caller
 
 	If the option $noCache argument is set, the result is  not cached
-	
+
 	Returns the pathname as a (possibly-encoded) byte-string, not a Unicode (decoded) string
 
 =cut
@@ -222,7 +228,7 @@ sub pathFromFileURL {
 
 	if ($url !~ /^file:\/\//i) {
 
-		logWarning("Path isn't a file URL: $url");
+		logBacktrace("Path isn't a file URL: $url");
 
 		return $url;
 	}
@@ -304,7 +310,7 @@ sub fileURLFromPath {
 	}
 
 	return $path if (Slim::Music::Info::isURL($path));
-	
+
 	# All paths should be in raw bytes, warn if it appears to be UTF-8
 	# XXX remove this later, before release
 =pod
@@ -318,7 +324,7 @@ sub fileURLFromPath {
 		}
 	}
 =cut
-	
+
 	# Bug 15511
 	# URI::file->new() will strip trailing space from path. Use a trailing / to defeat this if necessary.
 	my $addedSlash;
@@ -360,25 +366,6 @@ sub unescape {
 	return $in;
 }
 
-# See http://www.onlamp.com/pub/a/onlamp/2006/02/23/canary_trap.html
-# XXX - no longer used?
-=pod
-sub removeCanary {
-	my $string = shift;
-
-	for (my $i = 0;  ++$i <= 5;) {  
-
-		last if $$string =~ s/^=://;
-
-		$$string = unescape($$string);
-
-		last if $$string =~ s/^=://;
-	}
-
-	return $string;
-}
-=cut
-
 sub anchorFromURL {
 	my $url = shift;
 
@@ -415,11 +402,13 @@ sub crackURL {
 	my $urlstring = join('|', Slim::Player::ProtocolHandlers->registeredHandlers);
 
 	$string =~ m|(?:$urlstring)://(?:([^\@\/:]+):?([^\@\/]*)\@)?([^:/]+):*(\d*)(\S*)|i;
-	
+
 	my ($user, $pass, $host, $port, $path) = ($1, $2, $3, $4, $5);
 
-	$path ||= '/';
+	$path = '/' . $path if $path !~ m|^/|;
 	$port ||= ((Slim::Networking::Async::HTTP->hasSSL() && $string =~ /^https/) ? 443 : 80);
+
+	my $proxied = "http://$host:$port$path" if $prefs->get('webproxy') && $host !~ /(?:localhost|127.0.0.1)/;
 
 	if ( main::DEBUGLOG && $ospathslog->is_debug ) {
 		$ospathslog->debug("Cracked: $string with [$host],[$port],[$path]");
@@ -427,7 +416,36 @@ sub crackURL {
 		$ospathslog->debug("   pass: [$pass]") if $pass;
 	}
 
-	return ($host, $port, $path, $user, $pass);
+	return ($host, $port, $path, $user, $pass, $proxied);
+}
+
+sub isWebBrowser {
+	my $client = shift || return;
+	return $client && $client->controllerUA && ($client->controllerUA =~ $WEBLINK_SUPPORTED_UA_RE || $client->controllerUA =~ $WEBBROWSER_UA_RE);
+}
+
+sub canFollowWeblinks {
+	my $client = shift || return;
+	return unless $client->controllerUA;
+	return 1 if isWebBrowser($client);
+	return $client->controllerUA =~ $WEBLINK_SUPPORTED_UA_RE;
+}
+
+=head2 cloneProtocol( $url, $model )
+
+borrow the protocol from $model if missing in $url
+
+=cut
+
+sub cloneProtocol {
+	my ($url, $model) = @_;
+
+	return $url if $url =~ m|^\w+://|;
+
+	$url =~ s|^//||;
+	$model =~ m|^(\w+://)|;
+
+	return $1 . $url;
 }
 
 =head2 fixPath( $file, $base)
@@ -449,17 +467,17 @@ sub fixPath {
 	}
 
 	my $base = $_[1] && ( $fixPathCache{$_[1]} || Slim::Utils::Unicode::encode_locale($_[1]) );
-	
+
 	if (scalar keys %fixPathCache > $MAX_CACHE_ENTRIES) {
 		%fixPathCache = ();
 	}
-	
+
 	$fixPathCache{$_[1]} ||= $base if $base;
 
 	my $fixed;
 
-	if (Slim::Music::Info::isURL($file)) { 
-		
+	if (Slim::Music::Info::isURL($file)) {
+
 		my $uri = URI->new($file) || return $file;
 
 		if ($uri->scheme() eq 'file') {
@@ -469,7 +487,7 @@ sub fixPath {
 
 		return $uri->as_string;
 	}
-	
+
 	# sometimes a playlist parser would send us invalid data like html/xml code - skip it
 	if ( $file =~ /\s*<.*>/ ) {
 		return $file;
@@ -477,7 +495,7 @@ sub fixPath {
 
 	if (Slim::Music::Info::isFileURL($base)) {
 		$base = pathFromFileURL($base);
-	} 
+	}
 
 	# People sometimes use playlists generated on Windows elsewhere.
 	# See Bug 236
@@ -487,7 +505,7 @@ sub fixPath {
 		$file =~ s/\\/\//g;
 	}
 
-	# the only kind of absolute file we like is one in 
+	# the only kind of absolute file we like is one in
 	# the music directory or the playlist directory...
 	my $mediadirs = Slim::Utils::Misc::getMediaDirs();
 	my $savedplaylistdir = Slim::Utils::Misc::getPlaylistDir();
@@ -580,13 +598,13 @@ sub fixPath {
 
 sub stripRel {
 	my $file = shift;
-	
+
 	main::INFOLOG && $ospathslog->is_info && $ospathslog->info("Original: $file");
 
 	while ($file =~ m#[\/\\]\.\.[\/\\]#) {
 		$file =~ s#[^\/\\]+[\/\\]\.\.[\/\\]##sg;
 	}
-	
+
 	main::INFOLOG && $ospathslog->is_info && $ospathslog->info("Stripped: $file");
 
 	return $file;
@@ -600,21 +618,74 @@ sub stripRel {
 
 sub getLibraryName {
 	my $hostname = $prefs->get('libraryname') || '';
-	
+
 	if (!$hostname || $hostname =~ /^(?:''|"")$/) {
 		$hostname = Slim::Utils::Network::hostName();
 
-		# may return several lines of hostnames, just take the first.	
+		# may return several lines of hostnames, just take the first.
 		$hostname =~ s/\n.*//;
-	
+
 		# may return a dotted name, just take the first part
 		$hostname =~ s/\..*//;
 	}
-		
+
 	# Bug 13217, replace Unicode quote with ASCII version (commonly used in Mac server name)
 	$hostname =~ s/\x{2019}/'/g;
 
 	return $hostname;
+}
+
+=head2 getTempDir()
+
+	Get LMS-private temp dir
+
+=cut
+
+sub getTempDir {
+	return $tempdir;
+}
+
+=head2 makeTempDir()
+
+	make and clean LMS-private temp dir
+
+=cut
+
+sub makeTempDir {
+	return if $tempdir;
+
+	if ($::tmpdir) {
+		$tempdir = catdir($::tmpdir, 'squeezeboxserver');
+
+		if (-d $tempdir) {
+			rmtree($tempdir, { keep_root => 1 });
+			return;
+		}
+
+		mkpath($tempdir);
+		return if -d $tempdir;
+
+		$ospathslog->warn("can't make custom temp dir $tempdir");
+	}
+
+	$tempdir = catdir($prefs->get('cachedir'), 'tmp');
+
+	if (-d $tempdir) {
+		rmtree($tempdir, { keep_root => 1 });
+		return;
+	}
+
+	mkpath($tempdir);
+
+	if (!-d $tempdir) {
+		$tempdir = tempdir( DIR => $prefs->get('cachedir'), CLEANUP => 1 );
+		$ospathslog->warn("can't make private temp dir, trying $tempdir");
+	}
+
+	if (!-d $tempdir) {
+		$tempdir = tempdir( CLEANUP => 1 );
+		$ospathslog->warn("still can't make private temp dir, using $tempdir");
+	}
 }
 
 =head2 getAudioDir()
@@ -648,27 +719,27 @@ sub getPlaylistDir {
 sub getMediaDirs {
 	my $type = shift || '';
 	my $filter = shift;
-	
+
 	# need to clone the cached value, as the caller might be modifying it
 	return [ map { $_ } @{$mediadirsCache{$type}} ] if !$filter && $mediadirsCache{$type};
-	
+
 	my $mediadirs = getDirsPref('mediadirs');
-	
+
 	if ($type) {
 		my $ignoreList = { map { $_, 1 } @{ getDirsPref({
 			audio => 'ignoreInAudioScan',
-			video => 'ignoreInVideoScan',
-			image => 'ignoreInImageScan',
 		}->{$type}) } };
-		
+
 		$mediadirs = [ grep { !$ignoreList->{$_} } @$mediadirs ];
-		$mediadirs = [ grep { $_ } map {
+
+		my %seen;
+		$mediadirs = [ grep { $_ && !$seen{$filter}++ } map {
 			($filter eq $_ || $filter =~ /^\Q$_\E/) && $filter
 		} @$mediadirs] if $filter;
 	}
-	
+
 	$mediadirsCache{$type} = [ map { $_ } @$mediadirs ] unless $filter;
-	
+
 	return $mediadirs
 }
 
@@ -676,29 +747,9 @@ sub getAudioDirs {
 	return getMediaDirs('audio', shift);
 }
 
-sub getVideoDirs {
-	return (main::VIDEO && main::MEDIASUPPORT) ? getMediaDirs('video', shift) : [];
-}
-
-sub getImageDirs {
-	return (main::IMAGE && main::MEDIASUPPORT) ? getMediaDirs('image', shift) : [];
-}
-
 # get list of folders which are disabled for all media
-sub getInactiveMediaDirs {
-	my @mediadirs = @{ getDirsPref('ignoreInAudioScan') };
-	
-	if (main::IMAGE && main::MEDIASUPPORT && scalar @mediadirs) {
-		my $ignoreList = { map { $_, 1 } @{ getImageDirs() } };
-		@mediadirs = grep { !$ignoreList->{$_} } @mediadirs; 
-	}
-
-	if (main::VIDEO && main::MEDIASUPPORT && scalar @mediadirs) {
-		my $ignoreList = { map { $_, 1 } @{ getVideoDirs() } };
-		@mediadirs = grep { !$ignoreList->{$_} } @mediadirs; 
-	}
-	
-	return \@mediadirs;
+sub getInactiveAudioDirs {
+	return getDirsPref('ignoreInAudioScan');
 }
 
 sub getDirsPref {
@@ -714,11 +765,11 @@ sub getDirsPref {
 sub inMediaFolder {
 	my $path = shift;
 	my $mediadirs = getMediaDirs();
-	
+
 	foreach ( @$mediadirs ) {
-		return 1 if _checkInFolder($path, $_); 
+		return 1 if _checkInFolder($path, $_);
 	}
-	
+
 	return 0;
 }
 
@@ -755,13 +806,17 @@ my %_ignoredItems = Slim::Utils::OSDetect::getOS->ignoredItems();
 $_ignoredItems{'.'}  = 1;
 $_ignoredItems{'..'} = 1;
 
+# some items which are exposed on shares on popular platforms
+$_ignoredItems{'#recycle'} = 1;
+$_ignoredItems{'#snapshot'} = 1;
+
 # Don't include old Shoutcast recently played items.
 $_ignoredItems{'ShoutcastBrowser_Recently_Played'} = 1;
 
 =head2 fileFilter( $dirname, $item )
 
 	Verify whether we want to include a file or folder in our search.
-	This helper function is used to guarantee identical filtering across 
+	This helper function is used to guarantee identical filtering across
 	different browse/scan procedures
 
 =cut
@@ -774,7 +829,7 @@ sub fileFilter {
 	my $showHidden = shift;		# optionally allow Windows to use hidden artwork, as eg. WMP is storing it as system files
 
 	if (my $filter = $_ignoredItems{$item}) {
-		
+
 		# '1' items are always to be ignored
 		return 0 if $filter eq '1';
 
@@ -782,7 +837,7 @@ sub fileFilter {
 		if ($parts[1] && (!defined $parts[2] || length($parts[2]) == 0)) {
 			# replace back slashes on Windows
 			$parts[1] =~ s/\\/\//g;
-			
+
 			return 0 if $filter eq $parts[1];
 		}
 
@@ -813,7 +868,7 @@ sub fileFilter {
 	if ( !$hasStat ) {
 		lstat($fullpath);
 	}
-	
+
 	return 0 unless (-l _ || -d _ || -f _);
 
 	# Make sure we can read the file, honoring ACLs. This check is optional and provided by a plugin only.
@@ -825,7 +880,7 @@ sub fileFilter {
 	}
 
 	my $target;
- 
+
 	# a file can be an Alias on Mac
 	if (main::ISMAC && -f _ && (stat _)[7] == 0 && $validRE && ($target = pathFromMacAlias($fullpath))) {
 		unless (-d $target) {
@@ -844,7 +899,7 @@ sub fileFilter {
 			return 0 if $target !~ $validRE;
 		}
 	}
-	
+
 	return 1;
 }
 
@@ -857,16 +912,24 @@ sub fileFilter {
 sub folderFilter {
 	my @path = splitdir(shift);
 	my $folder = pop @path;
-	
+
+	# Skip this folder (and subfolders) if there is a sentinel file.
+	my $skipsentinel = $prefs->get('skipsentinel');
+	if ( $skipsentinel && -f catdir(@path, $folder, $skipsentinel) ) {
+		main::INFOLOG && $scannerlog->is_info &&
+			$scannerlog->info("Skipping: " . catdir(@path, $folder));
+		return 0;
+	}
+
 	my $hasStat = shift || 0;
 	my $validRE = shift;
 	my $file = catdir(@path);
-	
+
 	# Bug 15209, Hack for UNC bug where catdir turns \\foo into \foo
 	if ( main::ISWINDOWS && $path[0] eq '' && $path[1] eq '' && $file !~ /^\\{2}/ ) {
 		$file = '\\' . $file;
 	}
-	
+
 	return fileFilter($file, $folder, $validRE, $hasStat);
 }
 
@@ -879,7 +942,7 @@ sub folderFilter {
 =cut
 
 sub cleanupFilename {
-	my $filename = shift; 
+	my $filename = shift;
 
 	$filename =~ tr|:\x00-\x1f\/\\| |s;
 	$filename =~ s/^\.//;
@@ -890,7 +953,7 @@ sub cleanupFilename {
 
 =head2 readDirectory( $dirname, [ $validRE, $recursive ])
 
-	Return the contents of a directory $dirname as an array.  Optionally return only 
+	Return the contents of a directory $dirname as an array.  Optionally return only
 	those items that match a regular expression given by $validRE. Optionally do a
 	recursive search.
 
@@ -900,20 +963,24 @@ sub readDirectory {
 	my $dirname  = shift;
 	my $validRE  = shift || Slim::Music::Info::validTypeExtensions();
 	my $recursive = shift;
-	
+
 	my @diritems = ();
 
 	my $native_dirname = Slim::Utils::Unicode::encode_locale($dirname);
-	
+
 	if (main::ISWINDOWS) {
 		my ($volume) = splitpath($native_dirname);
 
 		if ($volume && isWinDrive($volume) && !Slim::Utils::OS::Win32->isDriveReady($volume)) {
-			
+
 			main::DEBUGLOG && $osfileslog->is_debug && $osfileslog->debug("drive [$dirname] not ready");
 
 			return @diritems;
 		}
+
+		# At some point Windows seems to have started returning content of the "current directory" on the drive
+		# if the path wasn't absolute. Make sure we start with a slash if only a drive letter is given. - mh
+		$native_dirname .= '/' if $native_dirname =~ /^[a-z]:$/i;
 	}
 
 	if ($recursive) {
@@ -924,20 +991,20 @@ sub readDirectory {
 	}
 	else {
 		opendir(DIR, $native_dirname) || do {
-	
+
 			main::DEBUGLOG && $osfileslog->is_debug && $osfileslog->debug("opendir on [$dirname] failed: $!");
-	
+
 			return @diritems;
 		};
-	
+
 		main::INFOLOG && $osfileslog->is_info && $osfileslog->info("Reading directory: $dirname");
-	
+
 		while (defined (my $item = readdir(DIR)) ) {
 			# call idle streams to service timers - used for blocking animation.
 			if (!scalar @diritems % 20) {
 				main::idleStreams();
 			}
-	
+
 	        # readdir returns only bytes, so try and decode the
 	        # filename to UTF-8 here or the later calls to -d/-f may fail,
 	        # causing directories and files to be skipped.
@@ -948,14 +1015,14 @@ sub readDirectory {
 			# was caused by the incoming $dirname having the uft8 flag set,
 			# so that concatenating the dirname and an entry would result in a UTF-8
 			# string that was incorrectly auto-decoded.
-	
+
 			next unless fileFilter($native_dirname, $item, $validRE);
-	
+
 			push @diritems, $item;
 		}
-	
+
 		closedir(DIR);
-		
+
 		@diritems = Slim::Music::Info::sortFilename(@diritems);
 	}
 
@@ -975,17 +1042,17 @@ $params is a hash with the following keys, by order of priority:
 #obj: a track object (of content type 'dir')
 #id: a track id
 #url: a url
-	
+
 
 =cut
 
 sub findAndScanDirectoryTree {
 	my $params = shift;
-	
+
 	# Find the db entry that corresponds to the requested directory.
 	# If we don't have one - that means we're starting out from the root audiodir.
 	my $topLevelObj;
-		
+
 	if (blessed($params->{'obj'})) {
 
 		$topLevelObj = $params->{'obj'};
@@ -995,14 +1062,14 @@ sub findAndScanDirectoryTree {
 		$topLevelObj = Slim::Schema->find('Track', $params->{'id'});
 
 	} else {
-		
+
 		my $url = $params->{'url'};
-		
+
 		if (defined $url) {
 			if (!Slim::Music::Info::isURL($url)) {
 				$url = fileURLFromPath($url);
 			}
-	
+
 			$topLevelObj = Slim::Schema->objectForUrl({
 				'url'      => $url,
 				'create'   => 1,
@@ -1016,7 +1083,7 @@ sub findAndScanDirectoryTree {
 		my $topPath = $topLevelObj->path;
 
 		if ( my $alias = Slim::Utils::Misc::pathFromMacAlias($topPath) ) {
-	
+
 			$topLevelObj = Slim::Schema->objectForUrl({
 				'url'      => $alias,
 				'create'   => 1,
@@ -1031,6 +1098,8 @@ sub findAndScanDirectoryTree {
 
 		logError("Couldn't find a topLevelObj!");
 
+		main::INFOLOG && $scannerlog->is_info && $scannerlog->info("Params: " . Data::Dump::dump($params));
+
 		return ();
 	}
 
@@ -1039,7 +1108,7 @@ sub findAndScanDirectoryTree {
 	my $path    = $topLevelObj->path;
 	my $fsMTime = (stat($path))[9] || 0;
 	my $dbMTime = $topLevelObj->timestamp || 0;
-	
+
 	main::DEBUGLOG && $scannerlog->is_debug && $scannerlog->debug( "findAndScanDirectoryTree( $path ): fsMTime: $fsMTime, dbMTime: $dbMTime" );
 
 	if ($fsMTime != $dbMTime && !$topLevelObj->remote) {
@@ -1076,18 +1145,18 @@ Delete all files matching $typeRegEx in folder $dir
 
 sub deleteFiles {
 	my ($dir, $typeRegEx, $excludeFile) = @_;
-	
+
 	opendir my ($dirh), $dir;
-	
+
 	my @files = grep { /$typeRegEx/ } readdir $dirh;
-	
+
 	closedir $dirh;
-	
+
 	for my $file ( @files ) {
 		next if $excludeFile && $file eq basename($excludeFile);
 		unlink catdir( $dir, $file ) or logError("Unable to remove file: $file: $!");
 	}
-	
+
 }
 
 
@@ -1116,11 +1185,11 @@ sub parseRevision {
 
 	# The revision file may not exist for svn copies.
 	my $tempBuildInfo = eval { File::Slurp::read_file(
-		catdir(Slim::Utils::OSDetect::dirsFor('revision'), 'revision.txt')
+		catdir(scalar Slim::Utils::OSDetect::dirsFor('revision'), 'revision.txt')
 	) } || "TRUNK\nUNKNOWN";
-	
+
 	my ($revision, $builddate) = split (/\n/, $tempBuildInfo);
-	
+
 	# if we're running from a git clone, report the last commit ID and timestamp
 	# "git -C ..." is only available in recent git version, more recent than what CentOS provides...
 	if ( !main::ISWINDOWS && $revision eq 'TRUNK' && `cd $Bin && git show -s --format=%h\\|%ci 2> /dev/null` =~ /^([0-9a-f]+)\|(\d{4}-\d\d-\d\d.*)/i ) {
@@ -1169,17 +1238,17 @@ sub userAgentString {
 
 sub assert {
 	$_[0] && return;
-	
+
 	my $msg = $_[1];
 	msg($msg) if $msg;
-	
+
 	bt();
 }
 
 =head2 bt( [ $return ] )
 
 	Useful for tracking the source of a problem during the execution of the server.
-	use bt() to output in the log a list of function calls leading up to the point 
+	use bt() to output in the log a list of function calls leading up to the point
 	where bt() has been used.
 
 	Optional argument $return, if set, will pass the combined message string back to the
@@ -1203,10 +1272,10 @@ sub bt {
 
 		if ($subroutine=~/assert$/) {
 			$assertfile = $filename;
-			$assertline = $line;			
+			$assertline = $line;
 		}
 	}
-	
+
 	if ($assertfile) {
 		open SRC, $assertfile;
 		my $line;
@@ -1220,7 +1289,7 @@ sub bt {
 			}
 		}
 	}
-	
+
 	$msg.="\n";
 
 	return $msg if $return;
@@ -1230,7 +1299,7 @@ sub bt {
 
 =head2 msg( $entry, [ $forceLog ], [ $suppressTimestamp ])
 
-	Outputs an entry to the server log file. 
+	Outputs an entry to the server log file.
 	$entry is a string for the log.
 	optional argument $suppressTimestamp can be set to remove the event timestamp from the long entry.
 
@@ -1287,7 +1356,7 @@ sub errorMsg {
 =cut
 
 sub delimitThousands {
-	my $len = shift || return 0; 
+	my $len = shift || return 0;
 
 	my $sep = Slim::Utils::Strings::string('THOUSANDS_SEP');
 
@@ -1311,7 +1380,7 @@ sub specified {
 
 =head2 arrayDiff( $left, $right)
 
-	
+
 
 =cut
 
@@ -1340,25 +1409,25 @@ sub arrayDiff {
 
 sub shouldCacheURL {
 	my $url = shift;
-	
+
 	# No caching unless it's http
 	return 0 unless $url =~ /^http/i;
-	
+
 	# No caching for local network hosts
 	# This is determined by either:
 	# 1. No dot in hostname
 	# 2. host is a private IP address type
 	my $host = URI->new($url)->host;
-	
+
 	return 0 if $host !~ /\./;
-	
+
 	# If the host doesn't start with a number, cache it
 	return 1 if $host !~ /^\d/;
-	
+
 	if ( Slim::Utils::Network::ip_is_private($host) ) {
 		return 0;
 	}
-	
+
 	return 1;
 }
 

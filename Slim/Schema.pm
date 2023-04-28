@@ -1,8 +1,7 @@
 package Slim::Schema;
 
-# $Id$
 
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -124,16 +123,16 @@ Must be called before any other actions. Generally from L<Slim::Music::Info>
 
 sub init {
 	my ( $class, $dsn, $sql ) = @_;
-	
+
 	return if $initialized;
-	
+
 	my $dbh = $class->_connect($dsn, $sql) || do {
 
 		# Not much we can do if there's no DB.
 		logBacktrace("Couldn't connect to database! Fatal error: [$!] Exiting!");
 		exit;
 	};
-	
+
 	if (Slim::Utils::OSDetect->getOS()->sqlHelperClass()->canCacheDBHandle()) {
 		$_dbh = $dbh;
 	}
@@ -146,14 +145,10 @@ sub init {
 	eval {
 		local $dbh->{HandleError} = sub {};
 		$dbh->do('SELECT name FROM metainformation') || die $dbh->errstr;
-		
+
 		# when upgrading from SBS to LMS let's check the additional tables,
 		# as the schema numbers might be overlapping, not causing a re-build
 		$dbh->do('SELECT id FROM images LIMIT 1') || die $dbh->errstr;
-		$dbh->do('SELECT id FROM videos LIMIT 1') || die $dbh->errstr;
-
-		# always reset the isScanning flag upon restart
-		Slim::Utils::OSDetect::isSqueezeOS() && $dbh->do("UPDATE metainformation SET value = '0' WHERE name = 'isScanning'");
 	};
 
 	# If we couldn't select our new 'name' column, then drop the
@@ -203,7 +198,7 @@ sub init {
 	}
 
 	$trackAttrs = Slim::Schema::Track->attributes;
-	
+
 	if ( main::STATISTICS ) {
 		$trackPersistentAttrs = Slim::Schema::TrackPersistent->attributes;
 	}
@@ -212,7 +207,7 @@ sub init {
 	$class->storage->debugobj('Slim::Schema::Debug');
 
 	$class->updateDebug;
-	
+
 	# Bug 17609, avoid a possible locking issue by ensuring VA object is up to date at init time
 	# instead of waiting until the first time it's called, for example through artistsQuery.
 	$class->variousArtistsObject;
@@ -245,7 +240,7 @@ sub init {
 
 		$prefs->set('migratedMovCT' => 1);
 	}
-	
+
 	if ( !main::SCANNER ) {
 		# Wipe cached data after rescan
 		Slim::Control::Request::subscribe( sub {
@@ -262,18 +257,18 @@ sub hasLibrary {
 
 sub _connect {
 	my ( $class, $dsn, $sql ) = @_;
-	
+
 	$sql ||= [];
-	
+
 	my ($driver, $source, $username, $password) = $class->sourceInformation;
 
 	# For custom exceptions
 	$class->storage_type('Slim::Schema::Storage');
-	
+
 	my $sqlHelperClass = Slim::Utils::OSDetect->getOS()->sqlHelperClass();
 	my $on_connect_do = $sqlHelperClass->on_connect_do();
-	
-	$class->connection( $dsn || $source, $username, $password, { 
+
+	$class->connection( $dsn || $source, $username, $password, {
 		RaiseError    => 1,
 		AutoCommit    => 1,
 		PrintError    => 0,
@@ -283,9 +278,9 @@ sub _connect {
 			@{$sql},
 		]
 	} ) || return;
-	
+
 	$sqlHelperClass->postConnect( $class->storage->dbh );
-	
+
 	return $class->storage->dbh;
 }
 
@@ -311,10 +306,10 @@ Debugging is normally disabled, but must be enabled if either logging for databa
 
 sub updateDebug {
 	my $class  = shift;
-	
+
 	# May not have a DB
 	return if !hasLibrary();
-	
+
 	my $debug  = (main::INFOLOG && logger('database.sql')->is_info) || main::PERFMON;
 
 	$class->storage->debug($debug);
@@ -334,7 +329,7 @@ sub disconnect {
 	$initialized = 0;
 }
 
-=head2 sourceInformation() 
+=head2 sourceInformation()
 
 Returns in order: database driver name, DBI DSN string, username, password
 from the current settings.
@@ -345,17 +340,17 @@ sub sourceInformation {
 	my $class = shift;
 
 	my $sqlHelperClass = Slim::Utils::OSDetect->getOS()->sqlHelperClass();
-	
+
 	my $source   = $sqlHelperClass->source();
 	my $username = $prefs->get('dbusername');
 	my $password = $prefs->get('dbpassword');
-	
+
 	my ($driver) = ($source =~ /^dbi:(\w+):/);
 
 	return ($driver, $source, $username, $password);
 }
 
-=head2 wipeDB() 
+=head2 wipeDB()
 
 Wipes and reinitializes the database schema. Calls the schema_clear.sql script
 for the current database driver.
@@ -366,14 +361,14 @@ WARNING - All data in the database will be dropped!
 
 sub wipeDB {
 	my $class = shift;
-	
+
 	my $log = logger('scan.import');
 
 	main::INFOLOG && $log->is_info && $log->info("Start schema_clear");
 
 	my ($driver) = $class->sourceInformation;
 
-	eval { 
+	eval {
 		Slim::Utils::SQLHelper->executeSQLFile(
 			$driver, $class->storage->dbh, "schema_clear.sql"
 		);
@@ -384,7 +379,7 @@ sub wipeDB {
 	if ($@) {
 		logError("Failed to clear & migrate schema: [$@]");
 	}
-	
+
 	main::INFOLOG && $log->is_info && $log->info("End schema_clear");
 }
 
@@ -396,17 +391,17 @@ Calls the schema_optimize.sql script for the current database driver.
 
 sub optimizeDB {
 	my $class = shift;
-	
+
 	my $log = logger('scan.import');
 
 	main::INFOLOG && $log->is_info && $log->info("Start schema_optimize");
 
 	my ($driver) = $class->sourceInformation;
 
-	my $progress = Slim::Utils::Progress->new({ 
-		'type'  => 'importer', 
-		'name'  => 'dboptimize', 
-		'total' => 2, 
+	my $progress = Slim::Utils::Progress->new({
+		'type'  => 'importer',
+		'name'  => 'dboptimize',
+		'total' => 2,
 		'bar'   => 1
 	});
 
@@ -414,7 +409,7 @@ sub optimizeDB {
 		Slim::Utils::SQLHelper->executeSQLFile(
 			$driver, $class->storage->dbh, "schema_optimize.sql"
 		);
-	
+
 		$progress->update();
 		$class->forceCommit;
 
@@ -428,26 +423,6 @@ sub optimizeDB {
 	}
 
 	main::INFOLOG && $log->is_info && $log->info("End schema_optimize");
-
-=pod
-	# print some stats about index usage
-	my $stats_sth = $class->dbh->prepare( qq{
-		SELECT idx, stat
-		FROM   sqlite_stat1
-		WHERE  idx IS NOT NULL
-		AND    idx NOT LIKE 'sqlite_auto%'
-		ORDER BY tbl
-	} );
-	
-	my ($idx, $stats);
-	
-	$stats_sth->execute;
-	$stats_sth->bind_columns( \$idx, \$stats );
-	
-	while ( $stats_sth->fetch ) {
-		$log->error( sprintf('%30s: %s', $idx, $stats) );
-	}
-=cut
 }
 
 =head2 migrateDB()
@@ -465,18 +440,18 @@ sub migrateDB {
 
 	# Migrate to the latest schema version - see SQL/$driver/schema_\d+_up.sql
 	my $dbix = DBIx::Migration->new({
-		dbh   => $dbh,  
-		dir   => catdir(Slim::Utils::OSDetect::dirsFor('SQL'), $driver),
+		dbh   => $dbh,
+		dir   => catdir(scalar Slim::Utils::OSDetect::dirsFor('SQL'), $driver),
 		debug => $log->is_debug,
 	});
-	
+
 	# Hide errors that aren't really errors
 	my $cur_handler = $dbh->{HandleError};
 	my $new_handler = sub {
 		return 1 if $_[0] =~ /no such table/;
 		goto $cur_handler;
 	};
-	
+
 	local $dbh->{HandleError} = $new_handler;
 
 	my $old = $dbix->version || 0;
@@ -533,12 +508,12 @@ Returns a L<DBIx::Class::ResultSet> for the specified class.
 
 A shortcut for resultset()
 
-=cut 
+=cut
 
 sub rs {
 	my $class   = shift;
 	my $rsClass = ucfirst shift;
-	
+
 	if ( !exists $RS_CACHE{$rsClass} ) {
 		$RS_CACHE{$rsClass} = $class->resultset($rsClass);
 	}
@@ -552,7 +527,7 @@ Returns a L<DBIx::Class::ResultSet> for the specified class.
 
 A shortcut for resultset($class)->search($cond, $attr)
 
-=cut 
+=cut
 
 sub search {
 	my $class   = shift;
@@ -567,7 +542,7 @@ Returns a single result from a search on the specified class' L<DBIx::Class::Res
 
 A shortcut for resultset($class)->single($cond)
 
-=cut 
+=cut
 
 sub single {
 	my $class   = shift;
@@ -582,7 +557,7 @@ Returns the count result from a search on the specified class' L<DBIx::Class::Re
 
 A shortcut for resultset($class)->count($cond, $attr)
 
-=cut 
+=cut
 
 sub count {
 	my $class   = shift;
@@ -601,18 +576,18 @@ before returning.
 
 Overrides L<DBIx::Class::ResultSet::find>
 
-=cut 
+=cut
 
 sub find {
 	my $class   = shift;
 	my $rsClass = ucfirst(shift);
-	
+
 	# If we only have a single attribute and it is not a reference and it is negative
 	# then this indicates a remote track.
 	if (@_ == 1 && ! ref $_[0] && $_[0] < 0) {
 		return Slim::Schema::RemoteTrack->fetchById($_[0]);
 	}
-	
+
 	return if !$initialized;
 
 	my $object  = eval { $class->rs($rsClass)->find(@_) };
@@ -647,7 +622,7 @@ sub searchTypes {
 	return qw(contributor album genre track);
 }
 
-=head2 contentType( $urlOrObj ) 
+=head2 contentType( $urlOrObj )
 
 Fetch the content type for a URL or Track Object.
 
@@ -709,7 +684,7 @@ sub contentType {
 	if ((!defined $contentType || $contentType eq $defaultType) && $blessed) {
 
 		$contentType = Slim::Music::Info::typeFromPath($url);
-	} 
+	}
 
 	# Only set the cache if we have a valid contentType
 	if (defined $contentType && $contentType ne $defaultType) {
@@ -738,7 +713,7 @@ Required $args:
 
 =over 4
 
-=item * 
+=item *
 
 The URL to look for.
 
@@ -811,7 +786,7 @@ sub objectForUrl {
 
 	if (!$url) {
 
-		logBacktrace("Null track request! Returning undef."); 
+		logBacktrace("Null track request! Returning undef.");
 		return undef;
 	}
 
@@ -822,14 +797,20 @@ sub objectForUrl {
 
 	# Pull the track object for the DB
 	my $track = $self->_retrieveTrack($url, $playlist);
-	
+	my $isRemote = Slim::Music::Info::isRemoteURL($url);
+
+	# Check to see if we have a remote track stored in our database
+	if (!$track && $isRemote && !$create && !$readTag) {
+		$track = $self->_retrieveTrack($url, $playlist, 'integrateRemote');
+	}
+
 	# Bug 14648: Check to see if we have a playlist with remote tracks
-	if (!$track && defined $playlistId && Slim::Music::Info::isRemoteURL($url)) {
+	if (!$track && defined $playlistId && $isRemote) {
 
 		if (my $playlistObj = $self->find('Playlist', $playlistId)) {
 			# Parse the playlist file to cause the RemoteTrack objects to be created
 			Slim::Formats::Playlists->parseList($playlistObj->url);
-			
+
 			# try again
 			$track = $self->_retrieveTrack($url, $playlist);
 		}
@@ -856,24 +837,28 @@ sub objectForUrl {
 
 sub _createOrUpdateAlbum {
 	my ($self, $attributes, $trackColumns, $isCompilation, $contributorId, $hasAlbumArtist, $create, $track, $basename) = @_;
-	
+
 	my $dbh = $self->dbh;
-	
+
 	# Now handle Album creation
 	my $title     = $attributes->{ALBUM};
 	my $disc      = $attributes->{DISC};
 	my $discc     = $attributes->{DISCC};
 	# Bug 10583 - Also check for MusicBrainz Album Id
 	my $brainzId  = $attributes->{MUSICBRAINZ_ALBUM_ID};
-	
+	my $extId     = $attributes->{EXTID} || $attributes->{ALBUM_EXTID};
+
+	# if we have a disc number from an online service, default disc count to 1
+	$discc ||= 1 if $extId && $disc;
+
 	my $isDebug = main::DEBUGLOG && $log->is_debug;
-	
+
 	# Bug 17322, strip leading/trailing spaces from name
 	if ( $title ) {
 		$title =~ s/^ +//;
 		$title =~ s/ +$//;
 	}
-	
+
 	# Bug 4361, Some programs (iTunes) tag things as Disc 1/1, but
 	# we want to ignore that or the group discs logic below gets confused
 	# Bug 10583 - Revert disc 1/1 change.
@@ -885,40 +870,48 @@ sub _createOrUpdateAlbum {
 	#	$log->debug( '-- Ignoring useless DISCC tag value of 1' );
 	#	$disc = $discc = undef;
 	#}
-	
+
 	my $albumId;
 	my $albumHash = {};
-	
+
 	if ($track && !$trackColumns) {
 		$trackColumns = { $track->get_columns };
 	}
 
 	my $noAlbum = string('NO_ALBUM');
-	
+
 	if ( !$create && $track ) {
 		$albumHash = Slim::Schema::Album->findhash( $track->album->id );
+		my $differentTitle = Slim::Utils::Text::ignoreCase($title, 1) ne $albumHash->{titlesearch};
 
 		# Bug: 4140
-		# If the track is from a FLAC cue sheet, the original entry
-		# will have a 'No Album' album. See if we have a real album name.
-		if ( $title && $albumHash->{title} && $albumHash->{title} eq $noAlbum && $title ne $noAlbum ) {
+		# If the track is from a FLAC cue sheet, the original entry will have a 'No Album' album. See if we have a real album name.
+		# If the album name has changed in other ways, we'll have to see whether the new name already exists.
+		# But don't rescan with online libraries - we're handling them in the Online Library integration importer.
+		if (
+			!$albumHash->{extid} && $title && $albumHash->{title}
+			&& ( ($albumHash->{title} eq $noAlbum && $title ne $noAlbum) || $differentTitle )
+		) {
+			# https://github.com/Logitech/slimserver/issues/547
+			# check whether new album already exists if we're changing album title
+			$albumId = $albumHash->{id} if $differentTitle;
 			$create = 1;
 		}
 	}
-	
+
 	# If the album does not have a title, use the singleton "No Album" album
 	if ( $create && (!defined $title || $title eq '') ) {
-		# let the external scanner make an attempt to find any existing "No Album" in the 
+		# let the external scanner make an attempt to find any existing "No Album" in the
 		# database before we assume there are none from previous scans
 		if ( !defined $_unknownAlbumId ) {
 			$_unknownAlbumId = $dbh->selectrow_array( qq{
 				SELECT id FROM albums WHERE title = ?
 			}, undef, $noAlbum );
 		}
-		
+
 		if ( !defined $_unknownAlbumId ) {
 			my $sortkey = Slim::Utils::Text::ignoreCaseArticles($noAlbum);
-			
+
 			$albumHash = {
 				title       => $noAlbum,
 				titlesort   => $sortkey,
@@ -927,14 +920,14 @@ sub _createOrUpdateAlbum {
 				year        => 0,
 				contributor => $vaObjId || $self->variousArtistsObject->id,
 			};
-			
+
 			$_unknownAlbumId = $self->_insertHash( albums => $albumHash );
 
 			main::DEBUGLOG && $isDebug && $log->debug(sprintf("-- Created NO ALBUM as id: [%d]", $_unknownAlbumId));
 		}
 		else {
 			# Bug 17370, detect if No Album is a "compilation" (more than 1 artist with No Album)
-			# We have to check the other tracks already on this album, and if the artists differ 
+			# We have to check the other tracks already on this album, and if the artists differ
 			# from the current track's artists, we have a compilation
 			my $is_comp = $self->mergeSingleVAAlbum( $_unknownAlbumId, 1 );
 
@@ -947,13 +940,13 @@ sub _createOrUpdateAlbum {
 		}
 
 		main::DEBUGLOG && $isDebug && $log->debug("-- Track has no album");
-		
+
 		return $_unknownAlbumId;
 	}
-	
+
 	# Used for keeping track of the album name.
 	$basename ||= dirname($trackColumns->{'url'});
-	
+
 	if ($create) {
 
 		# Calculate once if we need/want to test for disc
@@ -962,7 +955,7 @@ sub _createOrUpdateAlbum {
 		my $checkDisc = 0;
 
 		# Bug 10583 - Revert disc 1/1 change. Use MB Album Id in addition (unique id per disc, not per set!)
-		if (!$prefs->get('groupdiscs') && 
+		if (!$prefs->get('groupdiscs') &&
 			(($disc && $discc) || ($disc && !$discc) || $brainzId)) {
 
 			$checkDisc = 1;
@@ -982,11 +975,14 @@ sub _createOrUpdateAlbum {
 		# get() doesn't run the UTF-8 trigger, and ->title() calls
 		# Slim::Schema::Album->title() which has different behavior.
 
-		if ( 
-			   $lastAlbum->{_dirname}
-			&& $lastAlbum->{_dirname} eq $basename
-			&& $lastAlbum->{title} eq $title
-			&& (!$checkDisc || (($disc || '') eq ($lastAlbum->{disc} || 0)))
+		if (
+			($extId && $lastAlbum->{extid} && $extId eq $lastAlbum->{extid} && $disc && $disc == $lastAlbum->{disc})
+			||
+			(  $lastAlbum->{_dirname}
+				&& $lastAlbum->{_dirname} eq $basename
+				&& $lastAlbum->{title} eq $title
+				&& (!$checkDisc || (($disc || '') eq ($lastAlbum->{disc} || 0)))
+			)
 		) {
 			delete $lastAlbum->{_dirname};
 			$albumHash = $lastAlbum;
@@ -998,14 +994,14 @@ sub _createOrUpdateAlbum {
 			my $search = [];
 			my $values = [];
 			my $join;
-			
+
 			# Don't use year as a search criteria. Compilations in particular
 			# may have different dates for each track...
 			# If re-added here then it should be checked also above, otherwise
 			# the server behaviour changes depending on the track order!
 			# Maybe we need a preference?
 			# This used to do: #'year'  => $trackColumns{'year'},
-			
+
 			push @{$search}, 'albums.title = ?';
 			push @{$values}, $title;
 
@@ -1015,10 +1011,22 @@ sub _createOrUpdateAlbum {
 				main::DEBUGLOG && $isDebug && $log->debug(sprintf("-- Checking for MusicBrainz Album Id: %s", $brainzId));
 			}
 
+			if (defined $extId) {
+				push @{$search}, 'albums.extid = ?';
+				push @{$values}, $extId;
+				main::DEBUGLOG && $isDebug && $log->debug(sprintf("-- Checking for External Album Id: %s", $extId));
+			}
+
+			if ($albumId) {
+				push @{$search}, 'albums.id != ?';
+				push @{$values}, $albumId;
+				main::DEBUGLOG && $isDebug && $log->debug("-- Checking whether we need to merge existing albums");
+			}
+
 			my $checkContributor;
-			
+
 			# Add disc to the search criteria if needed
-			if ($checkDisc) {
+			if ($checkDisc && !$extId) {
 				if ($disc) {
 					push @{$search}, 'albums.disc = ?';
 					push @{$values}, $disc;
@@ -1026,27 +1034,27 @@ sub _createOrUpdateAlbum {
 
 				$checkContributor = 1;
 			}
-			elsif ($discc) {
+			elsif ($discc && !$extId) {
 				# If we're not checking discs - ie: we're in
 				# groupdiscs mode, check discc if it exists,
 				# in the case where there are multiple albums
 				# of the same name by the same artist. bug3254
-				
+
 				push @{$search}, 'albums.discc = ?';
 				push @{$values}, $discc;
-				
+
 				$checkContributor = 1;
 			}
-			elsif ( defined $disc && !defined $discc ) {
+			elsif ( defined $disc && !defined $discc && !$extId ) {
 
 				# Bug 3920 - In the case where there's two
 				# albums of the same name, but one is
 				# multidisc _without_ having a discc set.
 				push @{$search}, 'albums.disc IS NOT NULL';
-				
+
 				$checkContributor = 1;
 			}
-			
+
 			if ( $checkContributor && defined $contributorId ) {
 				# Bug 4361, also match on contributor, so we don't group
 				# different multi-disc albums together just because they
@@ -1055,16 +1063,16 @@ sub _createOrUpdateAlbum {
 				if ( $isCompilation && !$hasAlbumArtist ) {
 					$contributor = $self->variousArtistsObject->id;
 				}
-				
+
 				push @{$search}, 'albums.contributor = ?';
 				push @{$values}, $contributor;
 			}
 
 			# Bug 3662 - Only check for undefined/null values if the
 			# values are undefined.
-			if ( !defined $disc ) {
+			if ( !defined $disc && !$extId ) {
 				push @{$search}, 'albums.disc IS NULL';
-				
+
 				if ( !defined $discc ) {
 					push @{$search}, 'albums.discc IS NULL';
 				}
@@ -1074,7 +1082,7 @@ sub _createOrUpdateAlbum {
 			# of trying to match on the artist. Having the
 			# compilation bit means that this is 99% of the time a
 			# Various Artist album, so a contributor match would fail.
-			if ( defined $isCompilation ) {
+			if ( defined $isCompilation && !$extId ) {
 				# in the database this is 0 or 1
 				push @{$search}, 'albums.compilation = ?';
 				push @{$values}, $isCompilation;
@@ -1093,33 +1101,41 @@ sub _createOrUpdateAlbum {
 			if (
 				# In checkDisc mode, try "same folder" only if none of MUSICBRAINZ_ALBUM_ID,
 				# DISC and DISCC are known.
-				($checkDisc && !defined $brainzId && !defined $disc && !defined $discc) ||
+				($checkDisc && !defined $brainzId && !defined $disc && !defined $discc && !$extId) ||
 				# When not checking discs (i.e., "Group Discs" mode), try "same folder"
 				# as a last resort if both DISC and DISCC are unknown.
-				(!$checkDisc && !defined $disc && !defined $discc)
+				(!$checkDisc && !defined $disc && !defined $discc && !$extId)
 			) {
 				push @{$search}, 'tracks.url LIKE ?';
 				push @{$values}, "$basename%";
 				$join = 1;
 			}
-			
+
+			# with an online library item we don't have a path to check, but we hopefully have
+			# consistent disc information (complete or none at all)
+			if ($extId && $disc && !$prefs->get('groupdiscs')) {
+				push @{$search}, 'tracks.disc = ?';
+				push @{$values}, $disc;
+				$join = 1;
+			}
+
 			main::DEBUGLOG && $isDebug && $log->debug( "-- Searching for an album with: " . Data::Dump::dump($search, $values) );
-			
+
 			my $sql = 'SELECT albums.* FROM albums ';
 			$sql   .= 'JOIN tracks ON (albums.id = tracks.album) ' if $join;
 			$sql   .= 'WHERE ';
 			$sql   .= join( ' AND ', @{$search} );
 			$sql   .= ' LIMIT 1';
-			
+
 			my $sth = $dbh->prepare_cached($sql);
 			$sth->execute( @{$values} );
-			
+
 			$albumHash = $sth->fetchrow_hashref || {};
-			
+
 			$sth->finish;
-			
+
 			main::DEBUGLOG && $isDebug && $albumHash->{id} && $log->debug(sprintf("-- Found the album id: [%d]", $albumHash->{id}));
-			
+
 			# We've found an album above - and we're not looking
 			# for a multi-disc or compilation album; check to see
 			# if that album already has a track number that
@@ -1135,11 +1151,11 @@ sub _createOrUpdateAlbum {
 					AND    tracknum = ?
 					LIMIT 1
 				} );
-				
+
 				$sth->execute( $albumHash->{id}, $trackColumns->{tracknum} );
 				my ($matchTrack) = $sth->fetchrow_array;
 				$sth->finish;
-				
+
 				if ( $matchTrack && dirname($matchTrack) ne $basename ) {
 					main::INFOLOG && $log->is_info && $log->info(sprintf("-- Track number mismatch with album id: [%d]", $albumHash->{id}));
 					$albumHash = {};
@@ -1152,7 +1168,7 @@ sub _createOrUpdateAlbum {
 			}
 		}
 	}
-	
+
 	# Always normalize the sort, as ALBUMSORT could come from a TSOA tag.
 	$albumHash->{titlesort} = Slim::Utils::Text::ignoreCaseArticles( $attributes->{ALBUMSORT} || $title );
 
@@ -1164,13 +1180,13 @@ sub _createOrUpdateAlbum {
 
 	# Bug 3255 - add album contributor which is either VA or the primary artist, used for sort by artist
 	my $vaObjId = $vaObjId || $self->variousArtistsObject->id;
-	
+
 	if ( $isCompilation && !$hasAlbumArtist ) {
 		$albumHash->{contributor} = $vaObjId
 	}
 	elsif ( defined $contributorId ) {
 		$albumHash->{contributor} = $contributorId;
-		
+
 		# Set compilation to 1 if the primary contributor is VA
 		if ( $contributorId == $vaObjId ) {
 			$albumHash->{compilation} = 1;
@@ -1183,7 +1199,7 @@ sub _createOrUpdateAlbum {
 	for my $gainTag ( qw(REPLAYGAIN_ALBUM_GAIN REPLAYGAIN_ALBUM_PEAK) ) {
 		my $shortTag = lc($gainTag);
 		   $shortTag =~ s/^replaygain_album_(\w+)$/replay_$1/;
-		
+
 		# Bug 8034, this used to not change gain/peak values if they were already set,
 		# bug we do want to update album gain tags if they are changed.
 		if ( $attributes->{$gainTag} ) {
@@ -1192,7 +1208,7 @@ sub _createOrUpdateAlbum {
 			$attributes->{$gainTag} =~ s/,/\./g; # bug 6900, change comma to period
 
 			$albumHash->{$shortTag} = $attributes->{$gainTag};
-			
+
 			# Bug 15483, remove non-numeric gain tags
 			if ( $albumHash->{$shortTag} !~ /^[\d\-\+\.]+$/ ) {
 				my $file = Slim::Utils::Misc::pathFromFileURL($trackColumns->{url});
@@ -1237,7 +1253,11 @@ sub _createOrUpdateAlbum {
 	else {
 		$albumHash->{year} = undef;
 	}
-	
+
+	if ( $extId ) {
+		$albumHash->{extid} = $extId;
+	}
+
 	# Bug 7731, filter out duplicate keys that end up as array refs
 	while ( my ($tag, $value) = each %{$albumHash} ) {
 		if ( ref $value eq 'ARRAY' ) {
@@ -1249,13 +1269,13 @@ sub _createOrUpdateAlbum {
 		# Update the album title - the user might have changed it.
 		$albumHash->{title} = $title;
 	}
-	
-	# Link album cover to track cover			
+
+	# Link album cover to track cover
 	# Future TODO: if an album has multiple images i.e. Ghosts,
 	# prefer cover.jpg instead of embedded artwork for album?
 	# Would require an additional cover column in the albums table
-	if ( $trackColumns->{coverid} ) {
-		$albumHash->{artwork} = $trackColumns->{coverid};
+	if ( $trackColumns->{coverid} || ($trackColumns->{cover} && $trackColumns->{cover} =~ /^https?/) ) {
+		$albumHash->{artwork} = $trackColumns->{coverid} || $trackColumns->{cover};
 	}
 
 	if ( main::DEBUGLOG && $isDebug ) {
@@ -1270,30 +1290,30 @@ sub _createOrUpdateAlbum {
 			$log->debug("--- $tag : $value") if defined $value;
 		}
 	}
-	
+
 	# Detect if this album is a compilation when an explicit compilation tag is not available
-	# This takes the place of the old mergeVariousArtists method 
+	# This takes the place of the old mergeVariousArtists method
 	if ( !defined $isCompilation && $albumHash->{id} ) {
-		# We have to check the other tracks already on this album, and if the artists differ 
+		# We have to check the other tracks already on this album, and if the artists differ
 		# from the current track's artists, we have a compilation
 		my $is_comp = $self->mergeSingleVAAlbum( $albumHash->{id}, 1 );
-		
+
 		if ( $is_comp ) {
 			$albumHash->{compilation} = 1;
 			$albumHash->{contributor} = $vaObjId || $self->variousArtistsObject->id;
-			
+
 			main::DEBUGLOG && $isDebug && $log->debug( "Is a Comp : " . $albumHash->{title} );
 		}
 		else {
 			$albumHash->{compilation} = 0;
-			
+
 			main::DEBUGLOG && $isDebug && $log->debug( "Not a Comp : " . $albumHash->{title} );
 		}
 	}
-	
+
 	# Bug: 3911 - don't add years for tracks without albums.
 	$self->_createYear( $albumHash->{year} );
-	
+
 	# create/update album
 	if ( $albumHash->{id} ) {
 		# Update the existing album
@@ -1302,19 +1322,19 @@ sub _createOrUpdateAlbum {
 	else {
 		# Create a new album
 		$albumHash->{id} = $self->_insertHash( albums => $albumHash );
-		
+
 		main::DEBUGLOG && $isDebug && $log->debug(sprintf("-- Created album (id: [%d])", $albumHash->{id}));
 	}
-	
+
 	# Just cache some stuff about the last Album so we can find it
 	# again cheaply when we add the next track.
 	# This really does away with lastTrack needing to be a hash
 	# but perhaps this should be a dirname-indexed hash instead,
 	# perhaps even LRU, although LRU is surprisingly costly.
 	# This depends on whether we need to cope with out-of-order scans
-	# and I don't really know. 
+	# and I don't really know.
 	$lastAlbum = $albumHash;
-	$lastAlbum->{_dirname} = $basename;
+	$lastAlbum->{_dirname} = $basename unless $albumHash->{extid};
 
 	return $albumHash->{id};
 }
@@ -1322,21 +1342,21 @@ sub _createOrUpdateAlbum {
 # Years have their own lookup table.
 sub _createYear {
 	my ($self, $year) = @_;
-	
+
 	if (defined $year) {
 		# Bug 17322, strip leading/trailing spaces from name
 		$year =~ s/^ +//;
 		$year =~ s/ +$//;
-		
+
 		if ($year =~ /^\d+$/) {
 			# Using native DBI here to improve performance during scanning
 			my $dbh = Slim::Schema->dbh;
-			
+
 			my $sth = $dbh->prepare_cached('SELECT 1 FROM years WHERE id = ?');
 			$sth->execute($year);
 			my ($exists) = $sth->fetchrow_array;
 			$sth->finish;
-		
+
 			if ( !$exists ) {
 				$sth = $dbh->prepare_cached( 'INSERT INTO years (id) VALUES (?)' );
 				$sth->execute($year);
@@ -1345,22 +1365,31 @@ sub _createYear {
 	}
 }
 sub _createComments {
-	my ($self, $comments, $trackId) = @_;
-	
+	my ($self, $comments, $trackId, $create) = @_;
+
 	if ( $comments ) {
 		# Using native DBI here to improve performance during scanning
 		my $dbh = Slim::Schema->dbh;
-		
+
+		if (!$create) {
+			my $sth_delete = $dbh->prepare_cached( qq{
+				DELETE FROM comments
+				WHERE track = ?
+			} );
+
+			$sth_delete->execute( $trackId );
+		}
+
 		# Add comments if we have them:
-		my $sth = $dbh->prepare_cached( qq{
-			REPLACE INTO comments
+		my $sth_insert = $dbh->prepare_cached( qq{
+			INSERT INTO comments
 			(track, value)
 			VALUES
 			(?, ?)
 		} );
-		
-		for my $comment (@{$comments}) {	
-			$sth->execute( $trackId, $comment );
+
+		for my $comment (@{$comments}) {
+			$sth_insert->execute( $trackId, $comment );
 
 			main::DEBUGLOG && $log->is_debug && $log->debug("-- Track has comment '$comment'");
 		}
@@ -1369,19 +1398,19 @@ sub _createComments {
 
 sub _createTrack {
 	my ($self, $columnValueHash, $persistentColumnValueHash, $source) = @_;
-	
+
 	# Create the track
 	# Using native DBI here to improve performance during scanning
 	my $dbh = $self->dbh;
-	
+
 	my $id = $self->_insertHash( tracks => $columnValueHash );
-	
+
 	if ( main::INFOLOG && $log->is_info && $columnValueHash->{'title'} ) {
 		 $log->info(sprintf("Created track '%s' (id: [%d])", $columnValueHash->{'title'}, $id));
 	}
 
 	### Create TrackPersistent row
-	
+
 	if ( main::STATISTICS && $columnValueHash->{'audio'} ) {
 		# Pull the track persistent data
 		my $trackPersistentHash = Slim::Schema::TrackPersistent->findhash(
@@ -1394,7 +1423,7 @@ sub _createTrack {
 			$persistentColumnValueHash->{added}  = time();
 			$persistentColumnValueHash->{url}    = $columnValueHash->{url};
 			$persistentColumnValueHash->{urlmd5} = $columnValueHash->{urlmd5};
-			
+
 			# Create a new persistent row
 			my @pcols      = keys %{$persistentColumnValueHash};
 			my $pcolstring = join( ',', @pcols );
@@ -1408,15 +1437,15 @@ sub _createTrack {
 				main::INFOLOG && $log->is_info && $log->info("Updating persistent ", $columnValueHash->{url}, " : $key to $val");
 				$trackPersistentHash->{$key} = $val;
 			}
-			
+
 			# Always update url/urlmd5 as these values may have changed if we looked up using musicbrainz_id
 			$trackPersistentHash->{url}    = $columnValueHash->{url};
 			$trackPersistentHash->{urlmd5} = $columnValueHash->{urlmd5};
-			
+
 			$self->_updateHash( tracks_persistent => $trackPersistentHash, 'id' );
 		}
 	}
-	
+
 	return $id;
 }
 
@@ -1438,7 +1467,7 @@ Optional $args:
 
 =over 4
 
-=item * attributes 
+=item * attributes
 
 A hash ref with data to populate the object.
 
@@ -1467,7 +1496,7 @@ Returns a new L<Slim::Schema::Track> or L<Slim::Schema::Playlist> object on succ
 sub _newTrack {
 	my $self = shift;
 	my $args = shift;
-	
+
 	my $isDebug = main::DEBUGLOG && $log->is_debug;
 	my $isInfo  = main::INFOLOG && $log->is_info;
 
@@ -1499,7 +1528,7 @@ sub _newTrack {
 		main::INFOLOG && $isInfo && $log->info("readTags is ". $args->{'readTags'});
 
 		$attributeHash = { %{Slim::Formats->readTags($url)}, %$attributeHash  };
-		
+
 		# Abort early if readTags returned nothing, meaning the file is probably bad/missing
 		if ( !scalar keys %{$attributeHash} ) {
 			$LAST_ERROR = 'Unable to read tags from file';
@@ -1524,9 +1553,9 @@ sub _newTrack {
 	if ($playlist) {
 		delete $attributeHash->{'YEAR'};
 	}
-	
+
 	### Work out Track columns
-	
+
 	# Creating the track only wants lower case values from valid columns.
 	my %columnValueHash = ();
 	my %persistentColumnValueHash = ();
@@ -1540,10 +1569,10 @@ sub _newTrack {
 
 		# XXX - different check from updateOrCreate, which also checks val != ''
 		if (defined $val && exists $trackAttrs->{$key}) {
-			
+
 			# Bug 7731, filter out duplicate keys that end up as array refs
 			$val = $val->[0] if ( ref $val eq 'ARRAY' );
-			
+
 			main::DEBUGLOG && $isDebug && $log->debug("  $key : $val");
 			$columnValueHash{$key} = $val;
 		}
@@ -1553,7 +1582,7 @@ sub _newTrack {
 
 			# Bug 7731, filter out duplicate keys that end up as array refs
 			$val = $val->[0] if ( ref $val eq 'ARRAY' );
-			
+
 			main::DEBUGLOG && $isDebug && $log->debug("  (persistent) $key : $val");
 			$persistentColumnValueHash{$key} = $val;
 		}
@@ -1563,24 +1592,24 @@ sub _newTrack {
 	# We don't use it anyways.
 	$columnValueHash{'url'} = $url;
 	$columnValueHash{'urlmd5'} = md5_hex($url);
-	
+
 	# Use an explicit record id if it was passed as an argument.
 	if ($trackId) {
 		$columnValueHash{'id'} = $trackId;
 	}
-	
+
 	# Record time this track was added/updated
 	my $now = time();
 	$columnValueHash{added_time} = $now;
 	$columnValueHash{updated_time} = $now;
 
 	my $ct = $columnValueHash{'content_type'};
-	
-	# For simple (odd) cases, just create the Track row and return
-	if (!defined $ct || $ct eq 'dir' || $ct eq 'lnk' || !$columnValueHash{'audio'}) {
+
+	# For simple cases, just create the Track row and return
+	if (($playlist && $columnValueHash{extid}) || !defined $ct || $ct eq 'dir' || $ct eq 'lnk' || !$columnValueHash{'audio'}) {
 		return $self->_createTrack(\%columnValueHash, \%persistentColumnValueHash, $source);
 	}
-	
+
 	# Make a local variable for COMPILATION, that is easier to handle
 	my $isCompilation = undef;
 	my $compilation = $deferredAttributes->{'COMPILATION'};
@@ -1595,26 +1624,26 @@ sub _newTrack {
 			main::DEBUGLOG && $isDebug && $log->debug("-- Track is NOT a compilation");
 		}
 	}
-	
+
 	### Create Contributor rows
 	# Walk through the valid contributor roles, adding them to the database.
 	my $contributors = $self->_mergeAndCreateContributors($deferredAttributes, $isCompilation, 1);
-	
+
 	# Set primary_artist for the track
 	if ( my $artist = $contributors->{ARTIST} || $contributors->{TRACKARTIST} ) {
 		$columnValueHash{primary_artist} = $artist->[0];
 	}
-	
+
 	### Find artwork column values for the Track
 	if ( !$columnValueHash{cover} && $columnValueHash{audio} ) {
 		# Track does not have embedded artwork, look for standalone cover
 		# findStandaloneArtwork returns either a full path to cover art or 0
 		# to indicate no artwork was found.
 		my $cover = Slim::Music::Artwork->findStandaloneArtwork( \%columnValueHash, $deferredAttributes, $dirname );
-		
+
 		$columnValueHash{cover} = $cover;
 	}
-	
+
 	if ( $columnValueHash{cover} ) {
 		# Generate coverid value based on artwork, mtime, filesize
 		$columnValueHash{coverid} = Slim::Schema::Track->generateCoverId( {
@@ -1626,7 +1655,7 @@ sub _newTrack {
 	}
 
 	### Create Album row
-	my $albumId = $self->_createOrUpdateAlbum($deferredAttributes, 
+	my $albumId = $self->_createOrUpdateAlbum($deferredAttributes,
 		\%columnValueHash,														# trackColumns
 		$isCompilation,
 		$contributors->{'ALBUMARTIST'}->[0] || $contributors->{'ARTIST'}->[0],	# primary contributor-id
@@ -1635,19 +1664,19 @@ sub _newTrack {
 		undef,																	# Track
 		$dirname,
 	);
-	
+
 	### Create Track row
 	$columnValueHash{'album'} = $albumId if !$playlist;
 	$trackId = $self->_createTrack(\%columnValueHash, \%persistentColumnValueHash, $source);
 
 	### Create ContributorTrack & ContributorAlbum rows
-	$self->_createContributorRoleRelationships($contributors, $trackId, $albumId);	
+	$self->_createContributorRoleRelationships($contributors, $trackId, $albumId);
 
 	### Create Genre rows
 	$self->_createGenre($deferredAttributes->{'GENRE'}, $trackId, 1);
-	
+
 	### Create Comment rows
-	$self->_createComments($deferredAttributes->{'COMMENT'}, $trackId);
+	$self->_createComments($deferredAttributes->{'COMMENT'}, $trackId, 1);
 
 	$self->forceCommit if $args->{'commit'};
 
@@ -1707,11 +1736,11 @@ sub updateOrCreate {
 	my $args = shift;
 
 	my $trackIdOrTrack = $self->updateOrCreateBase($args);
-	
+
 	return undef if !defined $trackIdOrTrack;
-	
+
 	return $trackIdOrTrack if blessed $trackIdOrTrack;
-	
+
 	return Slim::Schema->rs($args->{'playlist'} ? 'Playlist' : 'Track')->find($trackIdOrTrack);
 }
 
@@ -1727,10 +1756,11 @@ sub updateOrCreateBase {
 	my $readTags      = $args->{'readTags'} || 0;
 	my $checkMTime    = $args->{'checkMTime'};
 	my $playlist      = $args->{'playlist'};
+	my $integrateRemote = $args->{'integrateRemote'};
 	my $isNew         = $args->{'new'} || 0; # save a query if caller knows the track is new
 
 	my $trackId;
-	
+
 	# XXX - exception should go here. Coming soon.
 	my ($track, $url, $blessed) = _validTrackOrURL($urlOrObj);
 
@@ -1746,22 +1776,22 @@ sub updateOrCreateBase {
 	$attributeHash->{urlmd5} = md5_hex($url);
 
 	# Short-circuit for remote tracks
-	if (Slim::Music::Info::isRemoteURL($url)) {
+	if (!$integrateRemote && Slim::Music::Info::isRemoteURL($url)) {
 		my $class = $playlist ? 'Slim::Schema::RemotePlaylist' : 'Slim::Schema::RemoteTrack';
 
 		($attributeHash, undef) = $self->_preCheckAttributes({
 			'url'        => $url,
 			'attributes' => $attributeHash,
 		});
-		
+
 		return $class->updateOrCreate($track ? $track : $url, $attributeHash);
 	}
 
 	# Track will be defined or not based on the assignment above.
 	if ( !defined $track && !$isNew ) {
-		$track = $self->_retrieveTrack($url, $playlist);
+		$track = $self->_retrieveTrack($url, $playlist, $integrateRemote);
 	}
-	
+
 	# XXX - exception should go here. Coming soon.
 	# _retrieveTrack will always return undef or a track object
 	if ($track) {
@@ -1780,7 +1810,7 @@ sub updateOrCreateBase {
 			# XXX native DBI
 			$trackPersistent = $track->retrievePersistent();
 		}
-	
+
 		# Bug: 2335 - readTags is set in Slim::Formats::Playlists::CUE - when
 		# we create/update a cue sheet to have a CT of 'cur'
 		if (defined $attributeHash->{'CONTENT_TYPE'} && $attributeHash->{'CONTENT_TYPE'} eq 'cur') {
@@ -1801,7 +1831,7 @@ sub updateOrCreateBase {
 			'url'        => $url,
 			'attributes' => $attributeHash,
 		});
-		
+
 		# Update timestamp
 		$attributeHash->{updated_time} = time();
 
@@ -1831,11 +1861,12 @@ sub updateOrCreateBase {
 			$self->_postCheckAttributes({
 				'track'      => $track,
 				'attributes' => $deferredAttributes,
+				'integrateRemote' => $integrateRemote
 			});
 		}
 
 		$self->forceCommit if $commit;
-		
+
 		if ($track && $attributeHash->{'CONTENT_TYPE'}) {
 			$contentTypeCache{$url} = $attributeHash->{'CONTENT_TYPE'};
 		}
@@ -1848,6 +1879,7 @@ sub updateOrCreateBase {
 			'readTags'   => $readTags,
 			'commit'     => $commit,
 			'playlist'   => $playlist,
+			'integrateRemote' => $integrateRemote
 		});
 
 	}
@@ -1887,7 +1919,7 @@ sub variousArtistsObject {
 		$vaObj->namesort( Slim::Utils::Text::ignoreCaseArticles($vaString) );
 		$vaObj->namesearch( Slim::Utils::Text::ignoreCase($vaString, 1) );
 		$vaObj->update;
-		
+
 		# this will not change while in the external scanner
 		$vaObjId = $vaObj->id if main::SCANNER;
 	}
@@ -1952,14 +1984,14 @@ sub totalTime {
 	my ($self, $client) = @_;
 
 	my $library_id = Slim::Music::VirtualLibraries->getLibraryIdForClient($client);
-	
+
 	$TOTAL_CACHE->{$library_id} ||= {};
 	my $totalCache = $TOTAL_CACHE->{$library_id};
 
 	if (!$totalCache->{totalTime}) {
 		my $dbh = $self->dbh;
 		my $sth;
-		
+
 		if ($library_id) {
 			$sth = $dbh->prepare_cached('SELECT SUM(secs) FROM tracks, library_track WHERE library_track.library=? AND library_track.track=tracks.id AND tracks.audio=1');
 			$sth->execute($library_id);
@@ -1968,11 +2000,11 @@ sub totalTime {
 			$sth = $dbh->prepare_cached('SELECT SUM(secs) FROM tracks WHERE tracks.audio=1');
 			$sth->execute();
 		}
-		
+
 		($totalCache->{totalTime}) = $sth->fetchrow_array;
 		$sth->finish;
 	}
-	
+
 	return $totalCache->{totalTime};
 }
 
@@ -1984,13 +2016,13 @@ Merge a single VA album
 
 sub mergeSingleVAAlbum {
 	my ( $class, $albumid, $returnIsComp ) = @_;
-	
+
 	my $importlog = main::INFOLOG ? logger('scan.import') : undef;
 	my $isInfo    = main::INFOLOG && $importlog->is_info;
-	
+
 	my $dbh  = $class->dbh;
 	my ($is_comp, $is_comp_db);
-	
+
 	# if album already is flagged as a compilation, we don't need to continue the evaluation
 	if ($returnIsComp) {
 		my $iscomp_sth = $dbh->prepare_cached( qq{
@@ -1998,16 +2030,16 @@ sub mergeSingleVAAlbum {
 			FROM   albums
 			WHERE  id = ?
 		} );
-		
+
 		$iscomp_sth->execute($albumid);
 		($is_comp_db) = $iscomp_sth->fetchrow_array;
 		$iscomp_sth->finish;
-		
+
 		return 1 if $is_comp_db;
 	}
-	
+
 	my $role = Slim::Schema::Contributor->typeToRole('ARTIST');
-	
+
 	my $track_contribs_sth = $dbh->prepare_cached( qq{
 		SELECT contributor, track
 		FROM   contributor_track
@@ -2015,22 +2047,22 @@ sub mergeSingleVAAlbum {
 			SELECT id
 			FROM tracks
 			WHERE album = ?
-		) 
+		)
 		AND	  role = ?
 		ORDER BY contributor, track
 	} );
-	
+
 	# Check track contributors to see if all tracks have the same contributors
 	my ($contributor, $trackid);
 	my %track_contribs;
-	
+
 	$track_contribs_sth->execute( $albumid, $role );
 	$track_contribs_sth->bind_columns( \$contributor, \$trackid );
-	
+
 	while ( $track_contribs_sth->fetch ) {
 		$track_contribs{ $contributor } .= $trackid . ':';
 	}
-	
+
 	my $track_list;
 	for my $tracks ( values %track_contribs ) {
 		if ( $track_list && $track_list ne $tracks ) {
@@ -2040,19 +2072,19 @@ sub mergeSingleVAAlbum {
 		}
 		$track_list = $tracks;
 	}
-	
+
 	if ( $returnIsComp ) {
 		# Optimization used to avoid extra query when updating an album entry
 		return $is_comp;
 	}
-		
+
 	if ( $is_comp ) {
 		my $comp_sth = $dbh->prepare_cached( qq{
 			UPDATE albums
 			SET    compilation = 1, contributor = ?
 			WHERE  id = ?
 		} );
-				
+
 		# Flag as a compilation, set primary contrib to Various Artists
 		$comp_sth->execute( $vaObjId || $class->variousArtistsObject->id, $albumid );
 	}
@@ -2063,7 +2095,7 @@ sub mergeSingleVAAlbum {
 			SET    compilation = 0
 			WHERE  id = ?
 		} );
-		
+
 		# Cache that the album is not a compilation so it's not constantly
 		# checked during every mergeVA phase.  Scanner::Local will reset
 		# compilation to undef when a new/deleted/changed track requires
@@ -2084,7 +2116,7 @@ sub wipeCaches {
 	$self->forceCommit;
 
 	%contentTypeCache = ();
-	
+
 	$TOTAL_CACHE = {};
 
 	# clear the references to these singletons
@@ -2096,7 +2128,7 @@ sub wipeCaches {
 	$self->lastTrackURL('');
 	$self->lastTrack({});
 	$lastAlbum = {};
-	
+
 	main::INFOLOG && logger('scan.import')->info("Wiped all in-memory caches.");
 }
 
@@ -2108,7 +2140,7 @@ Wipe the lastAlbum cache, if it contains the album $id
 
 sub wipeLastAlbumCache {
 	my ( $self, $id ) = @_;
-	
+
 	if ( defined $id && exists $lastAlbum->{id} && $lastAlbum->{id} == $id ) {
 		$lastAlbum = {};
 	}
@@ -2126,7 +2158,7 @@ sub wipeAllData {
 	$self->schemaUpdated(undef);
 	$self->wipeCaches;
 	$self->wipeDB;
-	
+
 	require Slim::Utils::ArtworkCache;
 	Slim::Utils::ArtworkCache->new()->wipe();
 
@@ -2144,7 +2176,7 @@ sub forceCommit {
 
 	if (!$initialized) {
 
-		logWarning("Trying to commit transactions before DB is initialized!");
+		main::INFOLOG && $log->is_info && $log->info("Trying to commit transactions before DB is initialized!");
 		return;
 	}
 
@@ -2235,7 +2267,7 @@ sub rating {
 	my ( $class, $track, $rating ) = @_;
 
 	my $impl = $prefs->get('ratingImplementation');
-	
+
 	if ( !$impl || !exists $ratingImplementations{$impl} ) {
 		$impl = 'LOCAL_RATING_STORAGE';
 	}
@@ -2255,19 +2287,19 @@ sub _defaultRatingImplementation {
 		$track->update;
 		Slim::Schema->forceCommit;
 	}
-	
+
 	return $track->rating;
 }
 
 sub _retrieveTrack {
-	my ($self, $url, $playlist) = @_;
+	my ($self, $url, $playlist, $integrateRemote) = @_;
 
 	return undef if !$url;
 	return undef if ref($url);
 
 	my $track;
-	
-	if (Slim::Music::Info::isRemoteURL($url)) {
+
+	if (!$integrateRemote && Slim::Music::Info::isRemoteURL($url)) {
 		return Slim::Schema::RemoteTrack->fetch($url, $playlist);
 	}
 
@@ -2275,7 +2307,7 @@ sub _retrieveTrack {
 	my $dirname = dirname($url);
 	my $source  = $playlist ? 'Playlist' : 'Track';
 
-	if (!$playlist && defined $self->lastTrackURL && $url eq $self->lastTrackURL) {
+	if (!$playlist && $dirname ne '.' && defined $self->lastTrackURL && $url eq $self->lastTrackURL) {
 
 		$track = $self->lastTrack->{$dirname};
 
@@ -2290,8 +2322,8 @@ sub _retrieveTrack {
 		if (!$playlist || $track->audio) {
 			$self->lastTrackURL($url);
 			$self->lastTrack->{$dirname} = $track;
-			
-			# Set the contentTypeCache entry here is case 
+
+			# Set the contentTypeCache entry here is case
 			# it was guessed earlier without knowing the real type
 			$contentTypeCache{$url} = $track->content_type;
 		}
@@ -2329,11 +2361,11 @@ sub _checkValidity {
 	# XXX - exception should go here. Coming soon.
 	return undef unless blessed($track);
 	return undef unless $track->can('get');
-	
+
 	# Remote tracks are always assumed to be valid
 	# Maybe we will add a timeout mechanism later
 	return $track if $track->isRemoteURL();
-	
+
 	my $isDebug = main::DEBUGLOG && $log->is_debug;
 
 	my $url = $track->get('url');
@@ -2344,11 +2376,11 @@ sub _checkValidity {
 		main::DEBUGLOG && $isDebug && $log->debug("Re-reading tags from $url as it has changed.");
 
 		my $oldid = $track->id;
-		
+
 		# Do a cascading delete for has_many relationships - this will
 		# clear out Contributors, Genres, etc.
 		$track->delete;
-		
+
 		# Add the track back into database with the same id as the record deleted.
 		my $trackId = $self->_newTrack({
 			'id'       => $oldid,
@@ -2356,10 +2388,10 @@ sub _checkValidity {
 			'readTags' => 1,
 			'commit'   => 1,
 		});
-		
+
 		$track = Slim::Schema->rs('Track')->find($trackId) if (defined $trackId);
 	}
-	
+
 	# Track may have been deleted by _hasChanged
 	return undef unless $track->in_storage;
 
@@ -2371,7 +2403,7 @@ sub _checkValidity {
 
 sub _hasChanged {
 	my ($self, $track, $url) = @_;
-	
+
 	my $isDebug = main::DEBUGLOG && $log->is_debug;
 
 	# We return 0 if the file hasn't changed
@@ -2384,7 +2416,7 @@ sub _hasChanged {
 
 #	main::DEBUGLOG && $isDebug && $log->debug("Checking for [$filepath] - size & timestamp.");
 
-	# Return if it's a directory - they expire themselves 
+	# Return if it's a directory - they expire themselves
 	# Todo - move directory expire code here?
 	return 0 if -d $filepath;
 	return 0 if $filepath =~ /\.lnk$/i;
@@ -2420,11 +2452,11 @@ sub _hasChanged {
 		return 1;
 
 	} else {
-		
+
 		# Bug 4402, if the entire volume/drive this file is on is unavailable,
 		# it's likely removable storage and shouldn't be deleted
 		my $offline;
-			
+
 		if ( main::ISWINDOWS ) {
 			# win32, check the drive letter
 			my $parent = Path::Class::File->new($filepath)->dir;
@@ -2446,7 +2478,7 @@ sub _hasChanged {
 			# XXX: Linux/Unix, not sure how to tell if a given path
 			# is from an unmounted filesystem
 		}
-		
+
 		if ( $offline ) {
 			main::DEBUGLOG && $isDebug && $log->debug( "Drive/Volume containing [$filepath] seems to be offline, skipping" );
 			return 0;
@@ -2498,7 +2530,7 @@ sub _preCheckAttributes {
 			$attributes->{ $key } = $val;
 		}
 	}
-	
+
 	# Bug 9359, don't allow tags named 'ID'
 	if ( exists $attributes->{'ID'} ) {
 		delete $attributes->{'ID'};
@@ -2517,7 +2549,7 @@ sub _preCheckAttributes {
 	if ($attributes->{'TITLE'}) {
 		# Create a canonical title to search against.
 		$attributes->{'TITLESEARCH'} = Slim::Utils::Text::ignoreCase($attributes->{'TITLE'}, 1);
-	
+
 		if (!$attributes->{'TITLESORT'}) {
 			$attributes->{'TITLESORT'} = Slim::Utils::Text::ignoreCaseArticles($attributes->{'TITLE'});
 		} else {
@@ -2536,7 +2568,7 @@ sub _preCheckAttributes {
 	}
 
 	# Some tag formats - APE? store the type of channels instead of the number of channels.
-	if (defined $attributes->{'CHANNELS'}) { 
+	if (defined $attributes->{'CHANNELS'}) {
 		if ($attributes->{'CHANNELS'} =~ /stereo/i) {
 			$attributes->{'CHANNELS'} = 2;
 		} elsif ($attributes->{'CHANNELS'} =~ /mono/i) {
@@ -2548,10 +2580,10 @@ sub _preCheckAttributes {
 	# Same for DISC - Bug 2821
 	for my $tag (qw(YEAR DISC DISCC BPM CHANNELS)) {
 
-		if ( 
-		    defined $attributes->{$tag} 
+		if (
+		    defined $attributes->{$tag}
 		    &&
-		    ( $attributes->{$tag} !~ /^\d+$/ || $attributes->{$tag} == 0 ) 
+		    ( $attributes->{$tag} !~ /^\d+$/ || $attributes->{$tag} == 0 )
 		) {
 			delete $attributes->{$tag};
 		}
@@ -2570,7 +2602,7 @@ sub _preCheckAttributes {
 	for my $tag (qw(YEAR RATING)) {
 		$attributes->{$tag} ||= 0;
 	}
-	
+
 	# Bug 4803, ensure rating is an integer that fits into tinyint
 	if ( $attributes->{RATING} && ($attributes->{RATING} !~ /^\d+$/ || $attributes->{RATING} > 255) ) {
 		logWarning("Invalid RATING tag '" . $attributes->{RATING} . "' in " . Slim::Utils::Misc::pathFromFileURL($url));
@@ -2582,27 +2614,7 @@ sub _preCheckAttributes {
 	}
 
 	# Munge the replaygain values a little
-	for my $gainTag (qw(REPLAYGAIN_TRACK_GAIN REPLAYGAIN_TRACK_PEAK)) {
-
-		my $shortTag = $gainTag;
-		   $shortTag =~ s/^REPLAYGAIN_TRACK_(\w+)$/REPLAY_$1/;
-
-		if (defined $attributes->{$gainTag}) {
-		    
-			$attributes->{$shortTag} = delete $attributes->{$gainTag};
-			$attributes->{$shortTag} =~ s/\s*dB//gi;
-			$attributes->{$shortTag} =~ s/\s//g;  # bug 15965
-			$attributes->{$shortTag} =~ s/,/\./g; # bug 6900, change comma to period
-			
-			# Bug 15483, remove non-numeric gain tags
-			if ( $attributes->{$shortTag} !~ /^[\d\-\+\.]+$/ ) {
-				my $file = Slim::Utils::Misc::pathFromFileURL($url);
-				$log->error("Invalid ReplayGain tag found in $file: $gainTag -> " . $attributes->{$shortTag} );
-				
-				delete $attributes->{$shortTag};
-			}
-		}
-	}
+	processReplayGainTags($attributes, $url);
 
 	# We can take an array too - from vorbis comments, so be sure to handle that.
 	my $comments = [];
@@ -2627,10 +2639,6 @@ sub _preCheckAttributes {
 	# Look for tags we don't want to expose in comments, and splice them out.
 	for my $c ( @{$rawcomments} ) {
 		next unless defined $c;
-		
-		# Bug 15630, ignore strings which have the utf8 flag on but are in fact invalid utf8
-		# XXX - I can no longer reproduce the issues reported in 15630, but it's causing bug 17863 -michael
-		#next if utf8::is_utf8($c) && !Slim::Utils::Unicode::looks_like_utf8($c);
 
 		#ignore SoundJam and iTunes CDDB comments, iTunSMPB, iTunPGAP
 		if ($c =~ /SoundJam_CDDB_/ ||
@@ -2641,7 +2649,7 @@ sub _preCheckAttributes {
 
 			next;
 		}
-		
+
 		push @$comments, $c;
 	}
 
@@ -2659,17 +2667,17 @@ sub _preCheckAttributes {
 	# Push these back until we have a Track object.
 	for my $tag (Slim::Schema::Contributor->contributorRoles, qw(
 		COMMENT GENRE ARTISTSORT PIC APIC ALBUM ALBUMSORT DISCC
-		COMPILATION REPLAYGAIN_ALBUM_PEAK REPLAYGAIN_ALBUM_GAIN 
-		MUSICBRAINZ_ARTIST_ID MUSICBRAINZ_ALBUMARTIST_ID MUSICBRAINZ_ALBUM_ID 
+		COMPILATION REPLAYGAIN_ALBUM_PEAK REPLAYGAIN_ALBUM_GAIN
+		MUSICBRAINZ_ARTIST_ID MUSICBRAINZ_ALBUMARTIST_ID MUSICBRAINZ_ALBUM_ID
 		MUSICBRAINZ_ALBUM_TYPE MUSICBRAINZ_ALBUM_STATUS
-		ALBUMARTISTSORT COMPOSERSORT CONDUCTORSORT BANDSORT
+		ALBUMARTISTSORT COMPOSERSORT CONDUCTORSORT BANDSORT ALBUM_EXTID ARTIST_EXTID
 	)) {
 
 		next unless defined $attributes->{$tag};
 
 		$deferredAttributes->{$tag} = delete $attributes->{$tag};
 	}
-	
+
 	# If embedded artwork was found, store the length of the artwork
 	if ( $attributes->{'COVER_LENGTH'} ) {
 		$attributes->{'COVER'} = delete $attributes->{'COVER_LENGTH'};
@@ -2680,7 +2688,7 @@ sub _preCheckAttributes {
 
 	# thumb has gone away, since we have GD resizing.
 	delete $attributes->{'THUMB'};
-	
+
 	# RemoteTrack also wants artist and album names
 	if ($attributes->{'REMOTE'}) {
 		foreach (qw/TRACKARTIST ARTIST ALBUMARTIST/) {
@@ -2691,7 +2699,7 @@ sub _preCheckAttributes {
 			}
 		}
 		$attributes->{'ALBUMNAME'} = $deferredAttributes->{'ALBUM'} if $deferredAttributes->{'ALBUM'};
-		
+
 		# XXX maybe also want COMMENT & GENRE
 	}
 
@@ -2720,19 +2728,46 @@ sub _preCheckAttributes {
 	return ($attributes, $deferredAttributes);
 }
 
+sub processReplayGainTags {
+	my ($attributes, $url) = @_;
+
+	# Munge the replaygain values a little
+	for my $gainTag (qw(REPLAYGAIN_TRACK_GAIN REPLAYGAIN_TRACK_PEAK)) {
+
+		my $shortTag = $gainTag;
+		   $shortTag =~ s/^REPLAYGAIN_TRACK_(\w+)$/REPLAY_$1/;
+
+		if (defined $attributes->{$gainTag}) {
+
+			$attributes->{$shortTag} = delete $attributes->{$gainTag};
+			$attributes->{$shortTag} =~ s/\s*dB//gi;
+			$attributes->{$shortTag} =~ s/\s//g;  # bug 15965
+			$attributes->{$shortTag} =~ s/,/\./g; # bug 6900, change comma to period
+
+			# Bug 15483, remove non-numeric gain tags
+			if ( $attributes->{$shortTag} !~ /^[\d\-\+\.]+$/ ) {
+				my $file = Slim::Utils::Misc::pathFromFileURL($url);
+				$log->error("Invalid ReplayGain tag found in $file: $gainTag -> " . $attributes->{$shortTag} );
+
+				delete $attributes->{$shortTag};
+			}
+		}
+	}
+}
+
 sub _createGenre {
 	my ($self, $genre, $trackId, $create) = @_;
-	
+
 	# Genre addition. If there's no genre for this track, and no 'No Genre' object, create one.
 
 	my $isDebug = main::DEBUGLOG && $log->is_debug;
-	
+
 	if ($genre) {
 		# Bug 17322, strip leading/trailing spaces from name
 		$genre =~ s/^ +//;
 		$genre =~ s/ +$//;
 	}
-	
+
 	if ($create && !$genre && !blessed($_unknownGenre)) {
 
 		my $genreName = string('NO_GENRE');
@@ -2776,19 +2811,19 @@ sub _createGenre {
 			SELECT genres.name FROM genre_track JOIN genres ON genres.id = genre_track.genre WHERE genre_track.track = ?
 		} );
 		$sth->execute($trackId);
-		
+
 		# compare the list of ordered, lower case genre names, new and old
 		my $newGenres = join('::', sort map { lc($_->[0]) } @{ $sth->fetchall_arrayref() || [] });
 		my $oldGenres = join('::', sort map { lc($_) } Slim::Music::Info::splitTag($genre));
-		
+
 		if ($newGenres ne $oldGenres) {
 			# Bug 1143: The user has updated the genre tag, and is
 			# rescanning We need to remove the previous associations.
 			my $track = Slim::Schema->rs('Track')->find($trackId);
 			$track->genreTracks->delete_all;
-	
+
 			Slim::Schema::Genre->add($genre, $trackId);
-	
+
 			main::DEBUGLOG && $isDebug && $log->debug("-- Deleted all previous genres for this track");
 			main::DEBUGLOG && $isDebug && $log->debug("-- Track has genre '$genre'");
 		}
@@ -2798,7 +2833,7 @@ sub _createGenre {
 sub _postCheckAttributes {
 	my $self = shift;
 	my $args = shift;
-	
+
 	my $isDebug = main::DEBUGLOG && $log->is_debug;
 
 	my $track      = $args->{'track'};
@@ -2809,15 +2844,15 @@ sub _postCheckAttributes {
 	# etc don't show up if you don't have any.
 	my %cols = $track->get_columns;
 
-	my ($trackId, $trackUrl, $trackType, $trackAudio, $trackRemote) = 
+	my ($trackId, $trackUrl, $trackType, $trackAudio, $trackRemote) =
 		(@cols{qw/id url content_type audio remote/});
 
 	if (!defined $trackType || $trackType eq 'dir' || $trackType eq 'lnk') {
 		$track->update;
 		return undef;
 	}
-	
-	if ($trackRemote || !$trackAudio) {
+
+	if (!$args->{integrateRemote} && ($trackRemote || !$trackAudio)) {
 		$track->update;
 		return;
 	}
@@ -2837,32 +2872,37 @@ sub _postCheckAttributes {
 	}
 
 	$self->_createGenre($attributes->{'GENRE'}, $trackId, $create);
-	
+
 	# Walk through the valid contributor roles, adding them to the database.
 	my $contributors = $self->_mergeAndCreateContributors($attributes, $isCompilation, $create);
 
+	my $artist = $contributors->{ARTIST} || $contributors->{TRACKARTIST};
+	if ($artist) {
+		$cols{primary_artist} = $artist->[0];
+	}
+
 	### Update Album row
-	my $albumId = $self->_createOrUpdateAlbum($attributes, 
+	my $albumId = $self->_createOrUpdateAlbum($attributes,
 		\%cols,																	# trackColumns
 		$isCompilation,
-		$contributors->{'ALBUMARTIST'}->[0] || $contributors->{'ARTIST'}->[0],	# primary contributor-id
+		$artist->[0],	                                          # primary contributor-id
 		defined $contributors->{'ALBUMARTIST'}->[0] ? 1 : 0,					# hasAlbumArtist
 		$create,																# create
 		$track,																	# Track
 	);
-	
+
 	# Don't add an album to container tracks - See bug 2337
 	if (!Slim::Music::Info::isContainer($track, $trackType)) {
 		$track->album($albumId);
 	}
 
-	$self->_createContributorRoleRelationships($contributors, $trackId, $albumId);	
+	$self->_createContributorRoleRelationships($contributors, $trackId, $albumId);
 
 	# Save any changes - such as album.
 	$track->update;
-	
+
 	$self->_createComments($attributes->{'COMMENT'}, $trackId);
-	
+
 	# refcount--
 	%{$contributors} = ();
 }
@@ -2892,13 +2932,13 @@ sub _mergeAndCreateContributors {
 			));
 		}
 	}
-	
+
 	my %contributors = ();
 
 	for my $tag (Slim::Schema::Contributor->contributorRoles) {
 
 		my $contributor = $attributes->{$tag} || next;
-		
+
 		# Bug 17322, strip leading/trailing spaces from name
 		$contributor =~ s/^ +//;
 		$contributor =~ s/ +$//;
@@ -2907,19 +2947,21 @@ sub _mergeAndCreateContributors {
 		# contributors? I think so. ID3 doesn't have
 		# "BANDSORT" or similar at any rate.
 		push @{ $contributors{$tag} }, Slim::Schema::Contributor->add({
-			'artist'   => $contributor, 
+			'artist'   => $contributor,
 			'brainzID' => $attributes->{"MUSICBRAINZ_${tag}_ID"},
 			'sortBy'   => $attributes->{$tag.'SORT'},
+			# only store EXTID for track artist, as we don't have it for other roles
+			'extid'    => $tag eq 'ARTIST' && $attributes->{'ARTIST_EXTID'},
 		});
 
 		main::DEBUGLOG && $isDebug && $log->is_debug && $log->debug(sprintf("-- Track has contributor '$contributor' of role '$tag'"));
 	}
-	
+
 	# Bug 15553, Primary contributor can only be Album Artist or Artist,
 	# so only check for those roles and assign No Artist otherwise
 	my $foundContributor = ($contributors{'ALBUMARTIST'} && $contributors{'ALBUMARTIST'}->[0]
 							|| $contributors{'ARTIST'} && $contributors{'ARTIST'}->[0]);
-		
+
 	main::DEBUGLOG && $isDebug && $log->debug("-- Track has ", scalar (keys %contributors), " contributor(s)");
 
 	# Create a singleton for "No Artist"
@@ -2944,45 +2986,53 @@ sub _mergeAndCreateContributors {
 
 		main::DEBUGLOG && $isDebug && $log->debug("-- Track has no artist");
 	}
-	
+
 	return \%contributors;
 }
 
 sub _createContributorRoleRelationships {
-	
+
 	my ($self, $contributors, $trackId, $albumId) = @_;
-	
+
 	if (!keys %$contributors) {
 		main::DEBUGLOG && $log->debug('Attempt to set empty contributor set for trackid=', $trackId);
 		return;
 	}
-	
+
 	# Wipe track contributors for this track, this is necessary to handle
 	# a changed track where contributors have been removed.  Current contributors
 	# will be re-added by below
 	my $sth_delete_tracks = $self->dbh->prepare_cached( qq{
-		DELETE 
-		FROM contributor_track 
+		DELETE
+		FROM contributor_track
 		WHERE track = ?
 	} );
 	$sth_delete_tracks->execute($trackId);
 
 	# Using native DBI here to improve performance during scanning
-	
+	if ( my $artist = $contributors->{ARTIST} || $contributors->{TRACKARTIST} ) {
+		my $sth_track_artist = $self->dbh->prepare_cached( qq(
+			UPDATE tracks
+			SET primary_artist = ?
+			WHERE id = ?
+		) );
+		$sth_track_artist->execute( $artist->[0], $trackId );
+	}
+
 	my $sth_track = $self->dbh->prepare_cached( qq{
 		REPLACE INTO contributor_track
 		(role, contributor, track)
 		VALUES
 		(?, ?, ?)
 	} );
-	
+
 	my $sth_album = $self->dbh->prepare_cached( qq{
 		REPLACE INTO contributor_album
 		(role, contributor, album)
 		VALUES
 		(?, ?, ?)
 	} );
-	
+
 	while (my ($role, $contributorList) = each %{$contributors}) {
 		my $roleId = Slim::Schema::Contributor->typeToRole($role);
 		for my $contributor (@{$contributorList}) {
@@ -3003,7 +3053,7 @@ my %lastTrackOrUrl = (
 
 sub _validTrackOrURL {
 	my $urlOrObj = shift;
-	
+
 	if ($lastTrackOrUrl{obj} eq $urlOrObj) {
 		return ($lastTrackOrUrl{track}, $lastTrackOrUrl{url}, $lastTrackOrUrl{blessed});
 	}
@@ -3027,7 +3077,7 @@ sub _validTrackOrURL {
 			$url = $urlOrObj;
 		}
 	}
-	
+
 	%lastTrackOrUrl = (
 		obj => $urlOrObj,
 		track => $track,
@@ -3040,7 +3090,7 @@ sub _validTrackOrURL {
 
 sub isaTrack {
 	my $obj = shift;
-	
+
 	return $obj && blessed $obj && ($obj->isa('Slim::Schema::Track') || $obj->isa('Slim::Schema::RemoteTrack'));
 }
 
@@ -3052,12 +3102,12 @@ sub lastError { $LAST_ERROR }
 
 sub totals {
 	my ($class, $client) = @_;
-	
+
 	my $library_id = Slim::Music::VirtualLibraries->getLibraryIdForClient($client);
-	
+
 	$TOTAL_CACHE->{$library_id} ||= {};
 	my $totalCache = $TOTAL_CACHE->{$library_id};
-	
+
 	my %categories = (
 		album => ['albums', 0, 1, 'tags:CC'],
 		contributor => ['artists', 0, 1, 'tags:CC'],
@@ -3065,7 +3115,7 @@ sub totals {
 		track => ['titles', 0, 1, 'tags:CC'],
 		playlist => ['playlists', 0, 1, 'tags:CC'],
 	);
-	
+
 	while (my ($key, $query) = each %categories) {
 		if ( !$totalCache->{$key} ) {
 			push @$query, 'library_id:' . $library_id if $library_id;
@@ -3075,48 +3125,48 @@ sub totals {
 			main::idleStreams();
 		}
 	}
-	
+
 	return $totalCache;
 }
 
 sub _insertHash {
 	my ( $class, $table, $hash ) = @_;
-	
+
 	my $dbh = $class->dbh;
-	
+
 	my @cols      = keys %{$hash};
 	my $colstring = join( ',', @cols );
 	my $ph        = join( ',', map { '?' } @cols );
-	
+
 	my $sth = $dbh->prepare("INSERT INTO $table ($colstring) VALUES ($ph)");
 	$sth->execute( map { $hash->{$_} } @cols );
-	
+
 	return $dbh->last_insert_id(undef, undef, undef, undef);
 }
 
 sub _updateHash {
 	my ( $class, $table, $hash, $pk ) = @_;
-	
+
 	my $id = delete $hash->{$pk};
-	
+
 	# Construct SQL with placeholders for non-null values and NULL for null values
 	my @cols      = keys %{$hash};
 	my $colstring = join( ', ', map { $_ . (defined $hash->{$_} ? ' = ?' : ' = NULL') } @cols );
-	
+
 	my $sth = $class->dbh->prepare("UPDATE $table SET $colstring WHERE $pk = ?");
 	$sth->execute( (grep { defined $_ } map { $hash->{$_} } @cols), $id );
-	
+
 	$hash->{$pk} = $id;
-	
+
 	return 1;
 }
 
 my $canFulltextSearch;
 sub canFulltextSearch {
 	return $canFulltextSearch if defined $canFulltextSearch;
-	
+
 	$canFulltextSearch = Slim::Utils::PluginManager->isEnabled('Slim::Plugin::FullTextSearch::Plugin') && Slim::Plugin::FullTextSearch::Plugin->canFulltextSearch;
-	return $canFulltextSearch; 
+	return $canFulltextSearch;
 }
 
 =head1 SEE ALSO

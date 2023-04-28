@@ -1,8 +1,7 @@
 package Slim::Formats::Playlists::Base;
 
-# $Id$
 
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License, version 2.
@@ -55,6 +54,7 @@ sub _updateMetaData {
 			'url'        => $entry,
 			'attributes' => $attributes,
 			'readTags'   => 1,
+			'playlist'   => Slim::Music::Info::isPlaylist($entry),
 		} );
 	}
 	
@@ -83,7 +83,7 @@ sub _filehandleFromNameOrString {
 
 		$output = FileHandle->new($filename, "w") || do {
 
-			logError("Could't open $filename for writing.");
+			logError("couldn't open $filename for writing.");
 			return undef;
 		};
 

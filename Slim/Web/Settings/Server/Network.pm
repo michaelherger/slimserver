@@ -1,8 +1,7 @@
 package Slim::Web::Settings::Server::Network;
 
-# $Id$
 
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -25,7 +24,7 @@ sub page {
 }
 
 sub prefs {
-	my @prefs = qw(webproxy httpport bufferSecs remotestreamtimeout maxWMArate);
+	my @prefs = qw(webproxy httpport bufferSecs remotestreamtimeout maxWMArate useEnhancedHTTP);
 
 	# only show following for SLIMP3
 	if ($Slim::Player::SLIMP3::SLIMP3Connected) {

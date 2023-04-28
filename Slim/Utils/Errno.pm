@@ -1,8 +1,7 @@
 package Slim::Utils::Errno;
 
-# $Id$
 
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
@@ -40,11 +39,19 @@ our @EXPORT = qw(EWOULDBLOCK EINPROGRESS EINTR ECHILD EBADF);
 
 BEGIN {
         if (main::ISWINDOWS) {
-                *EINTR       = sub () { 10004 };
-                *EBADF       = sub () { 10009 };
-                *ECHILD      = sub () { 10010 };
-                *EWOULDBLOCK = sub () { 10035 };
-                *EINPROGRESS = sub () { 10036 };
+		if (main::ISACTIVEPERL) {
+			*EINTR       = sub () { 10004 };
+			*EBADF       = sub () { 10009 };
+			*ECHILD      = sub () { 10010 };
+			*EWOULDBLOCK = sub () { 10035 };
+			*EINPROGRESS = sub () { 10036 };
+		} else {
+			*EINTR       = sub () { 4 };
+			*EBADF       = sub () { 9 };
+			*ECHILD      = sub () { 10 };
+			*EWOULDBLOCK = sub () { 140 };
+			*EINPROGRESS = sub () { 112 };
+		}
         } else {
                 require Errno;
                 import Errno qw(EWOULDBLOCK EINPROGRESS EINTR ECHILD EBADF);

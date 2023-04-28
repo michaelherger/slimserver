@@ -1,6 +1,6 @@
 package Slim::Plugin::xPL::Plugin;
 
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -14,7 +14,6 @@ package Slim::Plugin::xPL::Plugin;
 # xPL Protocol Support Plugin for Logitech Media Server
 # http://www.xplproject.org.uk/
 
-# $Id: Plugin.pm 10841 2006-12-03 16:57:58Z adrian $
 
 use strict;
 use IO::Socket;
@@ -308,6 +307,12 @@ sub sendXplHBeatMsg {
 	my $trackname = " ";
 	my $power = "1";
 
+	my $station = " ";
+	my $type = " ";
+	my $cover = " ";
+	my $albumArtist;
+	my $title;
+
 	if (defined($client->revision())) {
 		$power = $client->power();
 	}
@@ -316,7 +321,7 @@ sub sendXplHBeatMsg {
 		$playmode = "playing";
 
 		my $track = Slim::Schema->objectForUrl({
-			'url'      => Slim::Player::Playlist::song($client),
+			'url'      => Slim::Player::Playlist::track($client),
 			'create'   => 1,
 			'readTags' => 1,
 		});
@@ -326,19 +331,47 @@ sub sendXplHBeatMsg {
 			my $albumObj = $track->album;
 
 			if (blessed($albumObj) && $albumObj->can('title')) {
-
 				$album = $albumObj->title;
+				# Get album artist if present - for podcasts to match SQ displays
+				my $tmpobj = $albumObj->contributor;                
+				$albumArtist = $tmpobj->name if $tmpobj->can('name');
 			}
 
 			my $artistObj = $track->artist;
 
 			if (blessed($artistObj) && $artistObj->can('name')) {
-
 				$artist = $artistObj->name;
 			}
+						
+			# For remote streams
+			if ($track->remote) {
+				$title = $track->title if $track->can('title');
+				my $remoteMeta = {};
+				my $url = $track->url;
+				my $handler = Slim::Player::ProtocolHandlers->handlerForURL($url);
+				if ( $handler && $handler->can('getMetadataFor') ) {
+					$remoteMeta = $handler->getMetadataFor($client, $url);
+					# Override data from track object (this is same or better)
+					$trackname = $remoteMeta->{title};
+					$artist = $remoteMeta->{artist};
+					$album = $remoteMeta->{album};   # unlikely in practice
+					$cover = $remoteMeta->{cover};   # artwork URL
+					$type = $remoteMeta->{type};
+					if ($type !~ /^ *$/) {
+						$type = "$type, " . $remoteMeta->{bitrate} if $remoteMeta->{bitrate};
+					}
+					# LMS can use meta title, poss shortened, for podcasts (i.e. no stream name)
+					# Defaults to stream (fav.) name. Mask station in that case.
+					$station = $title unless $trackname =~ /\Q$title/;
+				}
+			}
 		}
+		
+		# emulate SQplayer UI
+		$artist = "$albumArtist, $artist" if $albumArtist && $artist ne $albumArtist;
 
-		$trackname = Slim::Music::Info::getCurrentTitle($client, Slim::Player::Playlist::url($client));
+		# prefer separated meta if available: for remote sources this is a concatenation of Artist - Title, as received see HTTP.pm
+		$trackname = Slim::Music::Info::getCurrentTitle($client, Slim::Player::Playlist::url($client)) if $trackname =~ /^ *$/;
 
 		# if the song name has the track number at the beginning, remove it
 		$trackname =~ s/^[0-9]*\.//g;
@@ -353,6 +386,7 @@ sub sendXplHBeatMsg {
 	if (defined($_[1])) {
 		$msg = "status=$playmode";
 		$msg = "$msg\nARTIST=$artist\nALBUM=$album\nTRACK=$trackname\nPOWER=$power";
+		$msg .= "\nSTATION=$station\nTYPE=$type\nURL=$cover";    # additions from basic schema
 
 		sendxplmsg("xpl-stat", "*","audio.basic", $msg, $clientName);
 

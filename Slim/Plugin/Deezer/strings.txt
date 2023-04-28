@@ -14,7 +14,7 @@ PLUGIN_DEEZER_MODULE_NAME
 	SV	Deezer
 
 PLUGIN_DEEZER_ON_DEEZER
-	CS	Na Deezer
+	CS	Na Deezeru
 	DA	På Deezer
 	DE	Auf Deezer
 	EN	On Deezer
@@ -29,7 +29,7 @@ PLUGIN_DEEZER_ON_DEEZER
 	SV	På Deezer
 
 PLUGIN_DEEZER_STREAM_FAILED
-	CS	Selhání zvukového proudu, přechod na další stopu.
+	CS	Selhání zvukového proudu, přechod na další skladbu.
 	DA	Fejl i lydstream, springer til næste spor.
 	DE	Audio-Stream-Fehler, nächster Titel wird aufgerufen.
 	EN	Audio stream failed, skipping to next track.
@@ -44,7 +44,7 @@ PLUGIN_DEEZER_STREAM_FAILED
 	SV	Ljudströmmen fungerar inte, hoppar till nästa spår.
 
 PLUGIN_DEEZER_NO_TRACK
-	CS	Není možné načíst stopu pro rádio.
+	CS	Nelze načíst skladbu pro rádio.
 	DA	Nummeret kunne ikke hentes fra radioen.
 	DE	Titel für Radio kann nicht abgerufen werden.
 	EN	Unable to retrieve track for radio.
@@ -59,7 +59,7 @@ PLUGIN_DEEZER_NO_TRACK
 	SV	Det gick inte att hämta radiospåret.
 
 PLUGIN_DEEZER_ERROR
-	CS	Chyba Deezer
+	CS	Chyba Deezeru
 	DA	Deezer-fejl
 	DE	Deezer-Fehler
 	EN	Deezer Error
@@ -75,7 +75,7 @@ PLUGIN_DEEZER_ERROR
 	SV	Deezer-fel
 
 PLUGIN_DEEZER_NO_NEXT_TRACK
-	CS	Není možné načíst další stopu, zkuste znovu stiskem PLAY.
+	CS	Nelze načíst další skladbu, stiskněte tlačítko PLAY a zkuste to znovu.
 	DA	Det næste nummer kunne ikke hentes. Tryk på Afspil for at forsøge igen.
 	DE	Nächster Titel konnte nicht geladen werden, drücken Sie zum Wiederholen PLAY.
 	EN	Unable to retrieve next track, press PLAY to try again.
@@ -105,9 +105,53 @@ PLUGIN_DEEZER_SKIPS_EXCEEDED
 	SV	Gränsen för att hoppa till nästa ljudspår har överstigits. Försök igen senare.
 
 PLUGIN_DEEZER_SMART_RADIO
+	CS	Deezer Smart Radio
 	EN	Deezer Smart Radio
-	
+	NL	Deezer Smart Radio
+
 PLUGIN_DEEZER_FLOW
-	DE	Deezer Flow (nur Premium+ Nutzer)
-	EN	Deezer Flow (Premium+ users only)
-	FR	Deezer Flow (Premium+ uniquement)
+	CS	Deezer Flow
+	DE	Deezer Flow
+	NL	Deezer Flow
+
+PLUGIN_DEEZER_ALBUMS_PROGRESS
+	CS	Alba Deezeru
+	DE	Deezer Alben
+	EN	Deezer Albums
+	FR	Deezer Albums
+	NL	Deezer Albums
+
+PLUGIN_DEEZER_PROGRESS_READ_ALBUMS
+	CS	Načítání alb (%s)...
+	DE	Lese Alben (%s)...
+	EN	Fetching Albums (%s)...
+	FR	Récupération des albums (%s)...
+	NL	Ophalen Albums (%s)...
+
+PLUGIN_DEEZER_ARTISTS_PROGRESS
+	CS	Interpreti Deezeru
+	DE	Deezer Interpreten
+	EN	Deezer Artists
+	FR	Deezer Artistes
+	NL	Deezer Artiesten
+
+PLUGIN_DEEZER_PROGRESS_READ_ARTISTS
+	CS	Načítání interpretů (%s)...
+	DE	Lese Interpreten (%s)...
+	EN	Fetching Artists (%s)...
+	FR	Récupération des artistes (%s)...
+	NL	Ophalen Artiesten (%s)...
+
+PLUGIN_DEEZER_PLAYLISTS_PROGRESS
+	CS	Seznamy skladeb Deezeru
+	DE	Deezer Wiedergabelisten
+	EN	Deezer Playlists
+	FR	Deezer Listes de lecture
+	NL	Deezer Afspeellijsten
+
+PLUGIN_DEEZER_PROGRESS_READ_PLAYLISTS
+	CS	Načítání seznamů skladeb (%s)...
+	DE	Lese Wiedergabelisten (%s)...
+	EN	Fetching Playlists (%s)...
+	FR	Récupération des listes de lecture (%s)...
+	NL	Ophalen Afspeellijsten (%s)... 

@@ -1,6 +1,5 @@
 package Slim::Utils::Prefs::Client;
 
-# $Id$
 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
@@ -91,6 +90,13 @@ sub migrate {
 			}
 		}
 	}
+}
+
+sub hasPrefs {
+	my ($class, $parent, $client) = @_;
+
+	my $clientid = blessed($client) ? $client->id : $client;
+	return $parent->{'prefs'}->{"$clientPreferenceTag:$clientid"} ? 1 : 0;
 }
 
 sub _root { shift->{'parent'} }

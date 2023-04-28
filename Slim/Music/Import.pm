@@ -1,6 +1,6 @@
 package Slim::Music::Import;
 
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -43,6 +43,7 @@ use base qw(Class::Data::Inheritable);
 use Config;
 use File::Spec::Functions;
 use FindBin qw($Bin);
+use List::Util qw(max);
 use Proc::Background;
 use Scalar::Util qw(blessed);
 
@@ -63,7 +64,7 @@ use Slim::Utils::Progress;
 {
 	my $class = __PACKAGE__;
 
-	for my $accessor (qw(scanPlaylistsOnly scanningProcess doQueueScanTasks)) {
+	for my $accessor (qw(scanPlaylistsOnly scanOnlineLibraryOnly scanningProcess doQueueScanTasks)) {
 
 		$class->mk_classdata($accessor);
 	}
@@ -79,6 +80,21 @@ my $prefs           = preferences('server');
 my %scanQueue;
 my $ABORT = 0;
 
+my %scanTypes = (
+	'1rescan' => {
+		cmd   => ['rescan'],
+		name => 'SETUP_STANDARDRESCAN'
+	},
+	'2wipedb' => {
+		cmd   => ['wipecache'],
+		name => 'SETUP_WIPEDB'
+	},
+	'3playlist' => {
+		cmd   => ['rescan', 'playlists'],
+		name => 'SETUP_PLAYLISTRESCAN'
+	}
+);
+
 =head2 launchScan( \%args )
 
 Launch the external (forked) scanning process.
@@ -89,7 +105,7 @@ Launch the external (forked) scanning process.
 
 sub launchScan {
 	my ($class, $args) = @_;
-	
+
 	# Don't launch the scanner unless there is something to scan
 	if (!$class->countImporters()) {
 		return 1;
@@ -108,7 +124,7 @@ sub launchScan {
 	my $path = Slim::Utils::OSDetect::getOS->decodeExternalHelperPath(
 		Slim::Utils::Prefs->dir
 	);
-	
+
 	$args->{ "prefsdir=$path" } = 1;
 
 	if ( my $logconfig = Slim::Utils::Log->defaultConfigFile ) {
@@ -119,11 +135,8 @@ sub launchScan {
 	if (defined $::logdir && -d $::logdir) {
 		$args->{"logdir=$::logdir"} = 1;
 	}
-	
-	$args->{'noimage'} = 1 if !(main::IMAGE && main::MEDIASUPPORT);
-	$args->{'novideo'} = 1 if !(main::VIDEO && main::MEDIASUPPORT);
 
-	# Set scanner priority.  Use the current server priority unless 
+	# Set scanner priority.  Use the current server priority unless
 	# scannerPriority has been specified.
 
 	my $scannerPriority = $prefs->get('scannerPriority');
@@ -135,7 +148,7 @@ sub launchScan {
 	if (defined $scannerPriority && $scannerPriority ne "") {
 		$args->{"priority=$scannerPriority"} = 1;
 	}
-	
+
 	# bug 17639 - pass singledir value if defined
 	my $singledir = delete $args->{singledir} || '';
 
@@ -145,39 +158,62 @@ sub launchScan {
 
 	# Bug: 3530 - use the same version of perl we were started with.
 	if ($Config{'perlpath'} && -x $Config{'perlpath'} && $command !~ /\.exe$/) {
-
 		unshift @scanArgs, $command;
 		$command  = $Config{'perlpath'};
 	}
-	
+	# pick up our custom Perl build if in use
+	elsif (main::ISMAC && -x $^X && $^X !~ m|/usr/bin/perl|) {
+		unshift @scanArgs, $command;
+		$command = $^X;
+	}
+
 	# Pass debug flags to scanner
 	my $debugArgs = '';
 	my $scannerLogOptions = Slim::Utils::Log->getScannerLogOptions();
-	 
+
 	foreach (keys %$scannerLogOptions) {
 		$debugArgs .= $_ . '=' . $scannerLogOptions->{$_} . ',' if defined $scannerLogOptions->{$_};
 	}
-	
+
 	if ( $main::debug ) {
 		$debugArgs .= $main::debug;
 	}
-	
+
 	if ( $debugArgs ) {
 		$debugArgs =~ s/,$//;
 		push @scanArgs, '--debug', $debugArgs;
 	}
-	
+
 	if ( $singledir ) {
 		push @scanArgs, $singledir;
 	}
-	
-	$class->setIsScanning($args->{wipe} ? 'SETUP_WIPEDB' : 'SETUP_STANDARDRESCAN');
-	
+	elsif ( isOnlineLibrarySupportEnabled() && $args->{onlinelibrary} ) {
+		push @scanArgs, 'onlinelibrary';
+	}
+
+	my ($scanType) = map {
+		$scanTypes{$_}->{name}
+	} grep {
+		($args->{wipe} && /^\dwipe/)
+		|| ($args->{playlists} && /^\dplaylist/)
+		|| (isOnlineLibrarySupportEnabled() && $args->{onlinelibrary} && /^\donlinelibrary/)
+	} keys %scanTypes;
+
+	$class->setIsScanning($scanType || 'SETUP_STANDARDRESCAN');
+
+	main::INFOLOG && $log->is_info && $log->info("Running scanner using arguments: $command " . Data::Dump::dump(@scanArgs));
+
 	$class->scanningProcess(
 		Proc::Background->new($command, @scanArgs)
 	);
-	
+
 	return 1;
+}
+
+sub isOnlineLibrarySupportEnabled {
+	return main::SCANNER
+		? (preferences('plugin.state')->get('OnlineLibrary') || '') eq 'enabled'
+		: Slim::Utils::PluginManager->isEnabled('Slim::Plugin::OnlineLibrary::Plugin');
 }
 
 =head2 abortScan()
@@ -188,15 +224,15 @@ Stop the external (forked) scanning process.
 
 sub abortScan {
 	my $class = shift || __PACKAGE__;
-	
+
 	if ( $class->stillScanning ) {
 		# Tell scanner to shut down the next time
 		# we get a progress update
 		$ABORT = 1;
-		
+
 		$class->setIsScanning(0) if !$class->externalScannerRunning;
 		$class->clearScanQueue;
-		
+
 		Slim::Control::Request::notifyFromArray( undef, [ 'rescan', 'done' ] );
 	}
 }
@@ -207,9 +243,9 @@ sub setAborted { shift; $ABORT = shift; }
 
 sub externalScannerRunning {
 	my $class = shift;
-	
+
 	return 1 if main::SCANNER;
-	
+
 	return (blessed($class->scanningProcess) && $class->scanningProcess->alive) ? 1 : 0;
 }
 
@@ -233,7 +269,7 @@ sub lastScanTime {
 	$sth->execute($name);
 	my ($last) = $sth->fetchrow_array;
 	$sth->finish;
-	
+
 	return $last || 0;
 }
 
@@ -247,10 +283,10 @@ sub setLastScanTime {
 	my $class = shift;
 	my $name  = shift || 'lastRescanTime';
 	my $value = shift || time;
-	
+
 	# May not have a DB to store this in
 	return if !Slim::Schema::hasLibrary();
-	
+
 	my $last = Slim::Schema->rs('MetaInformation')->find_or_create( {
 		'name' => $name
 	} );
@@ -271,7 +307,7 @@ sub setLastScanTimeIsDST {
 
 	# May not have a DB to store this in
 	return if !Slim::Schema::hasLibrary();
-	
+
 	my $last = Slim::Schema->rs('MetaInformation')->find_or_create( {
 		'name' => 'lastRescanTimeIsDST'
 	} );
@@ -332,7 +368,7 @@ This is called by the scanner.pl helper program.
 
 sub runScan {
 	my $class  = shift;
-	
+
 	my $changes = 0;
 
 	# clear progress info in case scanner.pl is run standalone
@@ -354,6 +390,14 @@ sub runScan {
 			next;
 		}
 
+		# These importers all implement 'online library only' scanning.
+		if ($class->scanOnlineLibraryOnly && !$Importers{$importer}->{'onlineLibraryOnly'}) {
+
+			$log->warn("Skipping [$importer] - it doesn't implement online library only scanning!");
+
+			next;
+		}
+
 		# XXX tmp var is to avoid a strange "Can't coerce CODE to integer in addition (+)" error/bug
 		# even though there is no way this returns a coderef...
 		my $tmp = $class->runImporter($importer);
@@ -361,6 +405,7 @@ sub runScan {
 	}
 
 	$class->scanPlaylistsOnly(0);
+	$class->scanOnlineLibraryOnly(0);
 
 	return $changes;
 }
@@ -387,37 +432,37 @@ sub runScanPostProcessing {
 
 	# May not have a DB to store this in
 	return 1 if !Slim::Schema::hasLibrary();
-	
+
 	if (main::STATISTICS) {
 		# Look for and import persistent data migrated from MySQL
 		my ($dir) = Slim::Utils::OSDetect::dirsFor('prefs');
 		my $json = catfile( $dir, 'tracks_persistent.json' );
 		if ( -e $json ) {
 			$log->error('Migrating persistent track information from MySQL');
-			
+
 			if ( Slim::Schema::TrackPersistent->import_json($json) ) {
 				unlink $json;
 			}
 		}
 	}
-	
+
 	# Run any post-scan importers
-	for my $importer ( _sortedImporters() ) {		
+	for my $importer ( _sortedImporters() ) {
 		# Skip non-post scanners
 		if ( !$Importers{$importer}->{type} || $Importers{$importer}->{type} ne 'post' ) {
 			next;
 		}
-		
+
 		$class->runImporter($importer);
 	}
-	
+
 	# Run any artwork importers
-	for my $importer ( _sortedImporters() ) {		
+	for my $importer ( _sortedImporters() ) {
 		# Skip non-artwork scanners
 		if ( !$Importers{$importer}->{type} || $Importers{$importer}->{type} ne 'artwork' ) {
 			next;
 		}
-		
+
 		$class->runArtworkImporter($importer);
 	}
 
@@ -425,12 +470,13 @@ sub runScanPostProcessing {
 	#Slim::Music::Artwork->downloadArtwork();
 
 	# update standalone artwork if it's been changed without the music file being changed (don't run on a wipe & rescan)
+	$importsRunning{'updateStandaloneArtwork'} = Time::HiRes::time();
 	Slim::Music::Artwork->updateStandaloneArtwork() unless $class->stillScanning =~ /wipe/i;
-	
+
 	# Pre-cache resized artwork
 	$importsRunning{'precacheArtwork'} = Time::HiRes::time();
 	Slim::Music::Artwork->precacheAllArtwork;
-		
+
 	# Always run an optimization pass at the end of our scan.
 	$log->error("Starting Database optimization.");
 
@@ -445,6 +491,24 @@ sub runScanPostProcessing {
 	return 1;
 }
 
+
+sub addScanType {
+	my ($class, $key, $config) = @_;
+	my $max = max(map { /^(\d+)/; $1; } keys %scanTypes) + 1;
+	$scanTypes{$max . $key} = $config;
+}
+
+sub getScanTypes {
+	return \%scanTypes;
+}
+
+sub getScanCommand {
+	my ($class, $type) = @_;
+	my $scanType = $scanTypes{$type} || $scanTypes{'1rescan'};
+	return $scanType->{cmd};
+}
+
+
 =head2 deleteImporter( $importer )
 
 Removes a importer from the list of available importers.
@@ -455,7 +519,7 @@ sub deleteImporter {
 	my ($class, $importer) = @_;
 
 	delete $Importers{$importer};
-	
+
 	$class->_checkLibraryStatus();
 }
 
@@ -477,6 +541,10 @@ Code reference to reset the state of the importer.
 
 True if the importer supports scanning playlists only.
 
+=item * onlineLibraryOnly => 1 | 0
+
+True if the importer supports online library import only.
+
 =back
 
 =cut
@@ -487,7 +555,7 @@ sub addImporter {
 	$Importers{$importer} = $params;
 
 	main::INFOLOG && $log->info("Adding $importer Scan");
-	
+
 	$class->_checkLibraryStatus();
 }
 
@@ -500,7 +568,7 @@ running importers.
 
 sub runImporter {
 	my ($class, $importer) = @_;
-	
+
 	my $changes = 0;
 
 	if ($Importers{$importer}->{'use'}) {
@@ -532,7 +600,7 @@ sub runArtworkImporter {
 
 		# rescan each enabled Import, or scan the newly enabled Import
 		$log->error("Starting $importer artwork scan");
-		
+
 		$importer->startArtworkScan;
 
 		return 1;
@@ -552,7 +620,7 @@ sub countImporters {
 	my $count = 0;
 
 	for my $importer (keys %Importers) {
-		
+
 		if ($Importers{$importer}->{'use'}) {
 
 			main::INFOLOG && $log->info("Found importer: $importer");
@@ -638,14 +706,14 @@ Removes the given importer from the running importers list.
 sub endImporter {
 	my ($class, $importer) = @_;
 
-	if (exists $importsRunning{$importer}) { 
+	if (exists $importsRunning{$importer}) {
 
 		$log->error(sprintf("Completed %s Scan in %s seconds.",
-			$importer, int(Time::HiRes::time() - $importsRunning{$importer})
+			$importer, sprintf('%.3f', Time::HiRes::time() - $importsRunning{$importer})
 		));
 
 		delete $importsRunning{$importer};
-		
+
 		Slim::Schema->forceCommit;
 
 		return 1;
@@ -662,41 +730,41 @@ Returns scan type string token if the server is still scanning your library. Fal
 
 sub stillScanning {
 	my $class = __PACKAGE__;
-	
+
 	return 0 if !Slim::Schema::hasLibrary();
-	
+
 	# clean up progress etc. in case the external scanner crashed
 	if (blessed($class->scanningProcess) && !$class->scanningProcess->alive) {
 		$class->scanningProcess(undef);
 		$class->setIsScanning(0);
-		
+
 		Slim::Utils::Progress->cleanup('importer');
 		Slim::Control::Request::notifyFromArray( undef, [ 'rescan', 'done' ] );
-		
+
 		return 0;
 	}
-	
+
 	my $sth = Slim::Schema->dbh->prepare_cached(
 		"SELECT value FROM metainformation WHERE name = 'isScanning'"
 	);
 	$sth->execute;
 	my ($value) = $sth->fetchrow_array;
 	$sth->finish;
-	
+
 	return $value || 0;
 }
 
 sub _checkLibraryStatus {
 	my $class = shift;
-	
+
 	if ($class->countImporters()) {
 		Slim::Schema->init() if !Slim::Schema::hasLibrary();
 	} else {
 		Slim::Schema->disconnect() if Slim::Schema::hasLibrary();
 	}
-	
+
 	return if main::SCANNER;
-	
+
 	# Tell everyone who needs to know
 	Slim::Control::Request::notifyFromArray(undef, ['library', 'changed', Slim::Schema::hasLibrary() ? 1 : 0]);
 }
@@ -709,9 +777,9 @@ sub initScanQueue {
 		main::DEBUGLOG && $log->debug("don't initialize queue - we're the scanner or already initialized");
 		return;
 	}
-	
+
 	require Tie::IxHash;
-	
+
 	tie (%scanQueue, "Tie::IxHash");
 
 	main::DEBUGLOG && $log->debug("initialize scan queue");
@@ -721,12 +789,12 @@ sub initScanQueue {
 
 sub nextScanTask {
 	return if main::SCANNER || __PACKAGE__->stillScanning;
-	
+
 	my @keys = keys %scanQueue;
-	
+
 	my $k    = shift @keys;
 	my $next = delete $scanQueue{$k};
-	
+
 	main::DEBUGLOG && $log->debug('triggering next scan: ' . $k) if $k && $next;
 
 	$next->execute() if $next;
@@ -740,7 +808,7 @@ sub hasScanTask {
 
 sub queueScanTask {
 	my ($class, $request) = @_;
-	
+
 	if ( main::SCANNER || !$request || $request->isNotCommand([['wipecache', 'rescan']]) ) {
 		$log->error('do not add scan, we are the scanner or there is no valid request');
 		return;
@@ -766,7 +834,7 @@ sub queueScanTask {
 		}
 
 		my $k = "$type|$mode|$singledir";
-		
+
 		# no need to add duplicate scan
 		if ( $scanQueue{$k} ) {
 			main::DEBUGLOG && $log->debug("scan $k is already in queue - skip it");

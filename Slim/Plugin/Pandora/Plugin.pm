@@ -1,6 +1,5 @@
 package Slim::Plugin::Pandora::Plugin;
 
-# $Id$
 
 # Play Pandora via mysqueezebox.com
 
@@ -223,6 +222,7 @@ sub trackInfoMenu {
 	}
 }
 
+=pod
 sub artistInfoMenu {
 	my ( $client, $url, $artist, $remoteMeta ) = @_;
 	
@@ -246,6 +246,7 @@ sub artistInfoMenu {
 		};
 	}
 }
+=cut
 
 sub stationDeleted {
 	my $request = shift;

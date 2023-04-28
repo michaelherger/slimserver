@@ -1,8 +1,7 @@
 package Slim::Formats::Ogg;
 
-# $Id$
 
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, 
 # version 2.
@@ -39,6 +38,7 @@ my %tagMapping = (
 	'TRACKNUMBER'               => 'TRACKNUM',
 	'DISCNUMBER'                => 'DISC',
 	'URL'                       => 'URLTAG',
+	'BPM'                       => 'BPM',
 	'MUSICBRAINZ_SORTNAME'      => 'ARTISTSORT',
 	'MUSICBRAINZ_ALBUMARTIST'   => 'ALBUMARTIST',
 	'MUSICBRAINZ_ALBUMARTISTID' => 'MUSICBRAINZ_ALBUMARTIST_ID',
@@ -96,6 +96,9 @@ sub getTag {
 	if (defined $tags->{DATE} && !defined $tags->{YEAR}) {
 		($tags->{YEAR} = $tags->{DATE}) =~ s/.*(\d\d\d\d).*/$1/;
 	}
+
+	# Sometimes the BPM is not an integer so we try to convert.
+	$tags->{BPM} = int($tags->{BPM}) if defined $tags->{BPM};
 
 	# Add additional info
 	$tags->{SIZE}	  = $info->{file_size};

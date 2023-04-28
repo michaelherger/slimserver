@@ -1,6 +1,6 @@
 package Slim::Plugin::Rescan::Settings;
 
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -33,6 +33,9 @@ sub handler {
 	}
 
 	$params->{'prefs'}->{'pref_time'} = Slim::Utils::DateTime::secsToPrettyTime($prefs->get('time'));
+
+	my $scanTypes = Slim::Music::Import->getScanTypes();
+	$params->{'scanTypes'} = { map { $_ => $scanTypes->{$_}->{name} } grep /\d.+/, keys %$scanTypes };
 
 	return $class->SUPER::handler($client, $params);
 }

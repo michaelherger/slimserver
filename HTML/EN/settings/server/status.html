@@ -12,7 +12,7 @@
 			font-family: "Microsoft Sans Serif", Verdana, Tahoma, Arial, sans-serif;
 			font-size: 8pt;
 		}
-		<![endif]-->		
+		<![endif]-->
 	</style>
 [% ELSE %]
 [% pageHeaderScripts = BLOCK %]
@@ -50,11 +50,26 @@
 	[% END %]
 [% END %]
 
+[% IF needsTimeSync %]
+	[% WRAPPER setting title="INFORMATION_TIME_DIFF" %]
+		<div>[% "INFORMATION_TIME_DIFF_DESC" | string %]</div>
+	[% END %]
+[% END %]
 
 [% IF library %]
 	[% WRAPPER setting title="INFORMATION_MENU_LIBRARY" %]
 		[% FOREACH item IN library.items %]
 			<div>[% item.name %]</div>
+		[% END %]
+	[% END %]
+[% END %]
+
+[% IF onlinelibrary %]
+	[% FOREACH service IN onlinelibrary %]
+		[% WRAPPER setting title=service.name %]
+			[% FOREACH item IN service.items %]
+				<div>[% item.name %]</div>
+			[% END %]
 		[% END %]
 	[% END %]
 [% END %]
@@ -74,6 +89,7 @@
 [% IF players %]
 	[% WRAPPER setting title = "INFORMATION_MENU_PLAYER" %]
 		<div class="prefDesc">[% "SERVER_STATUS_DESC" | string %]</div>
+		[% IF radioNeedsFakeVersion %]<div class="prefDesc">[% "RADIO_NEEDS_PATCH" | string %]</div>[% END %]
 	[% END %]
 	[% FOREACH client = players.items %]
 		[% WRAPPER setting title = client.name %]

@@ -1,8 +1,7 @@
 package Slim::Web::Settings::Server::FileTypes;
 
-# $Id$
 
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -24,6 +23,10 @@ sub page {
 	return Slim::Web::HTTP::CSRF->protectURI('settings/server/filetypes.html');
 }
 
+sub prefs {
+	return ($prefs, qw(prioritizeNative));
+}
+
 sub handler {
 	my ($class, $client, $paramRef, $pageSetup) = @_;
 
@@ -31,10 +34,8 @@ sub handler {
 	if ($paramRef->{'saveSettings'}) {
 
 		$prefs->set('disabledextensionsaudio',    $paramRef->{'disabledextensionsaudio'});
-		$prefs->set('disabledextensionsvideo',    $paramRef->{'disabledextensionsvideo'});
-		$prefs->set('disabledextensionsimages',   $paramRef->{'disabledextensionsimages'});
 		$prefs->set('disabledextensionsplaylist', $paramRef->{'disabledextensionsplaylist'});
-		
+
 		my %disabledformats = map { $_ => 1 } @{ $prefs->get('disabledformats') };
 
 		my @disabled = ();
@@ -43,14 +44,14 @@ sub handler {
 
 		foreach my $profile (sort {$a cmp $b} (grep {$_ !~ /transcode/} (keys %{$formatslistref}))) {
 
-			# If the conversion pref is enabled confirm that 
+			# If the conversion pref is enabled confirm that
 			# it's allowed to be checked.
 			$paramRef->{$profile} ||= '';
 			if ($paramRef->{$profile} ne 'DISABLED' && $disabledformats{$profile}) {
 
 				if (!Slim::Player::TranscodingHelper::checkBin($profile,'IgnorePrefs')) {
 
-					$paramRef->{'warning'} .= 
+					$paramRef->{'warning'} .=
 						string('SETUP_FORMATSLIST_MISSING_BINARY') . " $@ " . string('FOR') ." $profile<br>";
 
 					push @disabled, $profile;
@@ -63,28 +64,29 @@ sub handler {
 		}
 
 		$prefs->set('disabledformats', \@disabled);
+		$paramRef->{'pref_prioritizeNative'} ||= 0;
 	}
 
 	my %disabledformats = map { $_ => 1 } @{ $prefs->get('disabledformats') };
 	my $formatslistref  = Slim::Player::TranscodingHelper::Conversions();
-	my @formats         = (); 
+	my @formats         = ();
 
 	for my $profile (sort { $a cmp $b } (grep { $_ !~ /transcode/ } (keys %{$formatslistref}))) {
 
-		# skip internal formats which should not be shown or disabled 
+		# skip internal formats which should not be shown or disabled
 		next if $profile =~ /^spdr|^test/;
 
 		my @profileitems = split('-', $profile);
 		my @binaries     = ('DISABLED');
-		
+
 		# TODO: expand this to handle multiple command lines, but use binary case for now
 		my $enabled = Slim::Player::TranscodingHelper::checkBin($profile) ? 1 : 0;
-		
+
 		# build setup string from commandTable
 		my $cmdline = $formatslistref->{$profile};
 		my $binstring;
 
-		$cmdline =~ 
+		$cmdline =~
 			s{^\[(.*?)\](.*?\|?\[(.*?)\].*?)?}
 			{
 				$binstring = $1 if $1 eq '-' || Slim::Utils::Misc::findbin($1);
@@ -97,7 +99,7 @@ sub handler {
 						$binstring = undef;
 					}
 				}
-				
+
 				$binstring ||= '';
 			}iegsx;
 
@@ -109,24 +111,23 @@ sub handler {
 			push @binaries, 'NATIVE';
 		}
 
+		# build capabilities
+		my $capabilities = join(', ', grep(/I|F|R/, keys %{Slim::Player::TranscodingHelper::Capabilities($profile)}));
+
 		push @formats, {
-			'profile'  => $profile,
-			'input'    => $profileitems[0],
-			'output'   => $profileitems[1],
-			'binaries' => \@binaries,
-			'enabled'  => $enabled,
+			'profile'      => $profile,
+			'input'        => $profileitems[0],
+			'output'       => $profileitems[1],
+			'binaries'     => \@binaries,
+			'enabled'      => $enabled,
+			'capabilities' => $capabilities,
 		};
 	}
-	
+
 	$paramRef->{'formats'} = \@formats;
 
 	$paramRef->{'disabledextensionsaudio'}  = $prefs->get('disabledextensionsaudio');
-	$paramRef->{'disabledextensionsvideo'}  = $prefs->get('disabledextensionsvideo');
-	$paramRef->{'disabledextensionsimages'} = $prefs->get('disabledextensionsimages');
 	$paramRef->{'disabledextensionsplaylist'} = $prefs->get('disabledextensionsplaylist');
-
-	$paramRef->{'noimage'} = 1 if !(main::IMAGE && main::MEDIASUPPORT);
-	$paramRef->{'novideo'} = 1 if !(main::VIDEO && main::MEDIASUPPORT);
 
 	return $class->SUPER::handler($client, $paramRef, $pageSetup);
 }

@@ -1,8 +1,7 @@
 package Slim::Schema::Storage;
 
-# $Id$
 
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -17,11 +16,11 @@ my $sqlHelperClass;
 
 BEGIN {
 	$sqlHelperClass = Slim::Utils::OSDetect->getOS()->sqlHelperClass();
-	
+
 	my $storageClass = $sqlHelperClass->storageClass();
 	eval "use $storageClass";
 	die $@ if $@;
-	
+
 	push @ISA, $storageClass;
 }
 
@@ -78,17 +77,17 @@ sub throw_exception {
 			}
 
 			unlink($lockFile);
-			
+
 			return;
 		}
 
 	} elsif ($msg =~ /SQLite.*(?:database disk image is malformed|is not a database)/i) {
-		
+
 		$msg =~ m{/((?:library|persist)\.db)}i;
-		
+
 		my $dbfile = $1 || 'library.db';
 
-		$dbfile = File::Spec->catfile( preferences('server')->get('librarycachedir'), $dbfile );
+		$dbfile = Slim::Utils::SQLiteHelper->dbFile($dbfile, $dbfile =~ /persist/);
 
 		unlink($dbfile);
 
@@ -118,7 +117,7 @@ sub throw_exception {
 		# no need to croak on a new restart from scratch, users think it's a bad thing
 		return;
 	}
-	
+
 	logBacktrace($msg);
 
 	# Need to propagate the real error so that DBIx::Class::Storage will

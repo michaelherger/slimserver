@@ -1,0 +1,80 @@
+[% PROCESS settings/header.html %]
+
+	[% WRAPPER setting title="PLUGIN_ONLINE_LIBRARY_MODULE_NAME" desc="" %]
+		[% IF libraryProviders.size %]
+			<table>
+				[% FOREACH libraryProvider = libraryProviders %]
+				<tr>
+					<td style="vertical-align: middle;">[% libraryProvider.1 %]</td>
+					<td>
+						<select name="pref_[% libraryProvider.0 %]">
+							<option [% IF libraryProvider.2 == 1 %]selected[% END %] value=1>[% "PLUGIN_ONLINE_LIBRARY_FULL_INTEGRATION" | string %]</option>
+							<option [% IF libraryProvider.2 == -1 %]selected[% END %] value=-1>[% "PLUGIN_ONLINE_LIBRARY_INTEGRATE_NO_POLL" | string %]</option>
+							<option [% IF libraryProvider.2 == 0 %]selected[% END %] value=0>[% "PLUGIN_ONLINE_LIBRARY_NO_INTEGRATION" | string %]</option>
+						</select>
+					</td>
+				</tr>
+				[% END %]
+			</table>
+			<p><br>
+				<input type="checkbox" name="pref_disablePlaylistImport" id="disablePlaylistImport" [% IF
+					prefs.pref_disablePlaylistImport %]checked="checked" [% END %] value="1" class="stdedit" />
+				<label for="disablePlaylistImport">[% "PLUGIN_ONLINE_LIBRARY_NO_PLAYLIST_IMPORT" | string %]</label>
+			</p>
+		[% ELSE %]
+			<p>[% "PLUGIN_ONLINE_LIBRARY_POLL_UPDATES_NOT_AVAILABLE" | string %]</p>
+		[% END %]
+	[% END %]
+
+	[% WRAPPER setting title="PLUGIN_ONLINE_LIBRARY_SERVICE_LOGO" desc="" %]
+		<p>
+			<input type="checkbox" name="pref_enableServiceEmblem" id="enableServiceEmblem" [% IF
+				prefs.pref_enableServiceEmblem %]checked="checked" [% END %] value="1" class="stdedit" />
+			<label for="enableServiceEmblem">[% "PLUGIN_ONLINE_LIBRARY_SERVICE_LOGO_DESC" | string %]</label>
+		</p>
+	[% END %]
+
+	[% WRAPPER setting title="VIRTUALLIBRARIES" desc="SETUP_LIBRARY_VIEWS_DESC" %]
+		<p>
+			<input type="checkbox" name="pref_enableLocalTracksOnly" id="enableLocalTracksOnly" [% IF
+				prefs.pref_enableLocalTracksOnly %]checked="checked" [% END %] value="1" class="stdedit" />
+			<label for="enableLocalTracksOnly">[% "PLUGIN_ONLINE_LIBRARY_LOCAL_MUSIC_ONLY" | string %]</label>
+		</p>
+		<p>
+			<input type="checkbox" name="pref_enablePreferLocalLibraryOnly" id="enablePreferLocalLibraryOnly" [% IF
+				prefs.pref_enablePreferLocalLibraryOnly %]checked="checked" [% END %] value="1" class="stdedit" />
+			<label for="enablePreferLocalLibraryOnly">[% "PLUGIN_ONLINE_LIBRARY_DEDUPE_PREFER_LOCAL_DESC" | string %]</label>
+		</p>
+	[% END %]
+
+	[% WRAPPER setting title="PLUGIN_ONLINE_LIBRARY_GENRE_REPLACEMENT" desc="PLUGIN_ONLINE_LIBRARY_GENRE_REPLACEMENT_DESC" %]
+		<table>
+			[% FOREACH matcher = matcher_items; matcher_no = loop.count %]
+				[% IF !headerRendered %]
+				<tr>
+					<th>[% "PLUGIN_ONLINE_LIBRARY_TAG" | string %]</th>
+					<th>[% "PLUGIN_ONLINE_LIBRARY_MATCHING" | string %]</th>
+					<th>[% "GENRE" | string %][% "COLON" | string %]</th>
+					<th style="text-align: center;">[% IF matcher.id != '_new_' %][% "DELETE" | string %][% "COLON" | string %][% END %]</th>
+				</tr>
+				[% headerRendered = 1; END %]
+				<tr>
+					<td>
+						<select class="stdedit" name="field[% matcher_no %]" style="margin-top:0">
+							<option [% IF matcher.field == "title"; "selected"; END %] value="title">[% "TITLE" | string %]</option>
+							<option [% IF matcher.field == "album"; "selected"; END %] value="album">[% "ALBUM" | string %]</option>
+							<option [% IF matcher.field == "contributor"; "selected"; END %] value="contributor">[% "ARTIST" | string %]</option>
+						</select>
+					</td>
+					<td><input type="text" name="text[% matcher_no %]" value="[% matcher.text | html %]" class="stdedit" /></td>
+					<td><input type="text" name="genre[% matcher_no %]" value="[% matcher.genre | html %]" class="stdedit" /></td>
+					<td style="text-align:center;">[% IF matcher.text && matcher.field %]<input type="checkbox" name="delete[% matcher_no %]" class="stdedit" />[% END %]</td>
+				</tr>
+			[% END %]
+		</table>
+
+		<div>[% "GENRES" | string %][% "COLON" | string %] [% genre_list.join(', ') %]</div>
+		<div><br/><a href="[% webroot %]plugins/OnlineLibrary/editMappings.html">[% "PLUGIN_ONLINE_LIBRARY_GENRE_REPLACEMENT_ADVANCED" | string %]</a></div>
+	[% END %]
+
+[% PROCESS settings/footer.html %]

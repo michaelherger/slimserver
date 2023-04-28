@@ -1,6 +1,6 @@
 package Slim::Plugin::ExtendedBrowseModes::Plugin;
 
-# Logitech Media Server Copyright 2001-2014 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -30,37 +30,31 @@ $prefs->init({
 		weight  => 12,
 		enabled => 1,
 	},{
-		name    => 'Classical Music by Conductor',
+		name    => string('PLUGIN_EXTENDED_BROWSEMODES_BROWSE_BY_CLASSICAL_MUSIC_BY_CONDUCTOR'),
 		params  => { role_id => 'CONDUCTOR', genre_id => 'Classical' },
 		feed    => 'artists',
 		id      => 'myMusicArtistsConductors',
 		weight  => 13,
 		enabled => 0,
 	},{
-		name    => 'Jazz Composers',
+		name    => string('PLUGIN_EXTENDED_BROWSEMODES_BROWSE_BY_JAZZ_COMPOSERS'),
 		params  => { role_id => 'COMPOSER', genre_id => 'Jazz' },
 		feed    => 'artists',
 		id      => 'myMusicArtistsJazzComposers',
 		weight  => 13,
-		enabled => 0,
-	},{
-		name    => 'Audiobooks',
-		params  => { genre_id => 'Audiobooks, Spoken, Speech' },
-		feed    => 'albums',
-		id      => 'myMusicAlbumsAudiobooks',
-		weight  => 14,
 		enabled => 0,
 	}],
 	enableLosslessPreferred => 0,
 });
 
 $prefs->setChange( \&initMenus, 'additionalMenuItems' );
-Slim::Control::Request::subscribe( \&initMenus, [['library'], ['changed']] );
-Slim::Control::Request::subscribe( \&initMenus, [['rescan'], ['done']] );
+Slim::Control::Request::subscribe( sub { initMenus(@_) }, [['library'], ['changed']] );
+Slim::Control::Request::subscribe( sub { initMenus(@_) }, [['rescan'], ['done']] );
 
 $prefs->setChange( sub {
-	__PACKAGE__->initLibraries($_[1] || 0);
-}, 'enableLosslessPreferred' );
+	__PACKAGE__->initLibraries($_[0], $_[1] || 0);
+	__PACKAGE__->initLibraries('enableNoAudioBooks', $_[1] || 0) if $_[0] eq 'enableAudioBooks';
+}, 'enableLosslessPreferred', 'enableAudioBooks' );
 
 sub initPlugin {
 	my ( $class ) = @_;
@@ -73,8 +67,8 @@ sub initPlugin {
 	}
 
 	$class->initMenus();
-	$class->initLibraries();
-	
+	Slim::Plugin::ExtendedBrowseModes::Libraries->initLibraries();
+
 	$class->SUPER::initPlugin(
 		feed   => \&handleFeed,
 		tag    => 'selectVirtualLibrary',
@@ -89,20 +83,20 @@ sub handleFeed {
 
 	my @items;
 	my $libraries = Slim::Music::VirtualLibraries->getLibraries();
-	
+
 	my $currentLibrary = Slim::Music::VirtualLibraries->getLibraryIdForClient($client);
-	
+
 	my $bullet = "\x{2022} ";
 
 	while (my ($k, $v) = each %$libraries) {
 		my $count = Slim::Utils::Misc::delimitThousands(Slim::Music::VirtualLibraries->getTrackCount($k));
-	
+
 		my $libraryPrefix = '';
 		if ($currentLibrary eq $k) {
 			$libraryPrefix = $bullet;
 			$currentLibrary = '';
 		}
-		
+
 		my $name = Slim::Music::VirtualLibraries->getNameForId($k, $client);
 
 		push @items, {
@@ -126,7 +120,7 @@ sub handleFeed {
 			}]
 		};
 	}
-	
+
 	@items = sort { $a->{sortName} cmp $b->{sortName} } @items;
 
 	# hard-coded item to reset the library view
@@ -145,17 +139,20 @@ sub handleFeed {
 }
 
 sub initLibraries {
-	my ($class, $newValue) = @_;
-	
+	my ($class, $pref, $newValue) = @_;
+
+	my $library = $pref;
+	$library =~ s/^enable//;
+
 	if ( defined $newValue && !$newValue ) {
-		Slim::Music::VirtualLibraries->unregisterLibrary('losslessPreferred');
+		Slim::Music::VirtualLibraries->unregisterLibrary(lcfirst($library));
 	}
-	
-	if ( $prefs->get('enableLosslessPreferred') ) {
+
+	if ( $prefs->get($pref) ) {
 		Slim::Plugin::ExtendedBrowseModes::Libraries->initLibraries();
-		
+
 		# if we were called on a onChange event, re-build the library
-		Slim::Music::VirtualLibraries->rebuild('losslessPreferred') if $newValue;
+		Slim::Music::VirtualLibraries->rebuild($library) if $newValue;
 	}
 }
 
@@ -170,10 +167,8 @@ sub setLibrary {
 		});
 		return;
 	}
-	
 
 	$serverPrefs->client($client)->set('libraryId', $args->{library_id});
-
 	$serverPrefs->client($client)->remove('libraryId') unless $args->{library_id};
 
 	$cb->({
@@ -204,9 +199,9 @@ sub unregisterLibrary {
 
 sub condition {
 	my ($class, $client) = @_;
-	
+
 	return unless Slim::Music::VirtualLibraries->hasLibraries();
-	
+
 	return !$client || !$serverPrefs->client($_[1])->get('disabled_selectVirtualLibrary');
 }
 
@@ -249,7 +244,7 @@ sub initMenus {
 		static       => 1,
 		nocache      => 1,
 	});
-	
+
 	if (main::STATISTICS) {
 		push @additionalStaticMenuItems, {
 			name         => 'PLUGIN_EXTENDED_BROWSEMODES_TOP_TRACKS',
@@ -287,7 +282,7 @@ sub initMenus {
 
 sub registerBrowseMode {
 	my ($class, $item) = @_;
-	
+
 	# create string token if it doesn't exist already
 	my $nameToken = $class->registerCustomString($item->{name});
 
@@ -299,30 +294,28 @@ sub registerBrowseMode {
 			'disabled_' . $item->{id} => $item->{enabled} ? 0 : 1
 		});
 	}
-	
+
 	my $icon = $item->{icon};
 
 	# replace feed placeholders
-	my ($feed, $mode);
+	my $feed;
 	if ( ref $item->{feed} eq 'CODE' ) {
 		$feed = $item->{feed};
 	}
 	elsif ( $item->{feed} =~ /\balbums$/ ) {
 		$feed = \&Slim::Menu::BrowseLibrary::_albums;
 		$icon = 'html/images/albums.png';
-		$mode = $item->{params}->{mode} || $item->{id};
 	}
 	else {
 		$feed = \&Slim::Menu::BrowseLibrary::_artists;
 		$icon = 'html/images/artists.png';
-		$mode = $item->{params}->{mode} || $item->{id};
 	}
-	
+
 	my %params = map {
-		my $v = Slim::Plugin::ExtendedBrowseModes::Plugin->valueToId($item->{params}->{$_}, $_);
+		my $v = Slim::Plugin::ExtendedBrowseModes::Libraries->valueToId($item->{params}->{$_}, $_);
 		{ $_ => $v };
 	} keys %{ $item->{params} || {} };
-	
+
 	Slim::Menu::BrowseLibrary->registerNode({
 		type         => 'link',
 		name         => $nameToken,
@@ -340,86 +333,39 @@ sub registerBrowseMode {
 
 sub registerCustomString {
 	my ($class, $string) = @_;
-	
+
 	if ( !Slim::Utils::Strings::stringExists($string) ) {
-		my $token = Slim::Utils::Text::ignoreCase($string, 1);
-		
+		my $token = uc(Slim::Utils::Text::ignoreCase($string, 1));
+
 		$token =~ s/\s/_/g;
 		$token = 'PLUGIN_EXTENDED_BROWSEMODES_' . $token;
-		 
+
 		Slim::Utils::Strings::storeExtraStrings([{
 			strings => { EN => $string},
 			token   => $token,
-		}]);
+		}]) if !Slim::Utils::Strings::stringExists($token);
 
 		return $token;
 	}
-	
+
 	return $string;
-}
-
-# transform genre_id/artist_id into real IDs if a text is used (eg. "Various Artists")
-sub valueToId {
-	my ($class, $value, $key) = @_;
-	
-	if ($key eq 'role_id') {
-		return join(',', grep {
-			$_ !~ /\D/
-		} map {
-			s/^\s+|\s+$//g; 
-			uc($_);
-			Slim::Schema::Contributor->typeToRole($_);
-		} split(/,/, $value) );
-	}
-	
-	return (defined $value ? $value : 0) unless $value && $key =~ /^(genre|artist)_id/;
-	
-	my $category = $1;
-	
-	my $schema;
-	if ($category eq 'genre') {
-		$schema = 'Genre';
-	}
-	elsif ($category eq 'artist') {
-		$schema = 'Contributor';
-	}
-	
-	# replace names with IDs
-	if ( $schema && Slim::Schema::hasLibrary() ) {
-		$value = join(',', grep {
-			$_ !~ /\D/
-		} map {
-			s/^\s+|\s+$//g; 
-
-			$_ = Slim::Utils::Unicode::utf8decode_locale($_);
-			$_ = Slim::Utils::Text::ignoreCase($_, 1);
-			
-			if ( !Slim::Schema->rs($schema)->find($_) && (my $item = Slim::Schema->rs($schema)->search({ 'namesearch' => $_ })->first) ) {
-				$_ = $item->id;
-			}
-			
-			$_;
-		} split(/,/, $value) );
-	}
-
-	return $value || -1;
 }
 
 sub _browseFS {
 	my ($client, $callback, $args, $pt) = @_;
 	my @searchTags = $pt->{'searchTags'} ? @{$pt->{'searchTags'}} : ();
-	
+
 	Slim::Menu::BrowseLibrary::_generic($client, $callback, $args, 'readdirectory', ['folder:/', 'filter:foldersonly'],
 		sub {
 			my $results = shift;
 			my $items = $results->{'fsitems_loop'};
-			
+
 			foreach (@$items) {
 				if ($_->{'isfolder'}) {
 					my $url = Slim::Utils::Misc::fileURLFromPath($_->{path});
 					$url =~ s/^file/tmp/;
 					$url .= '/' unless $url =~ m|/$|;
-					
+
 					$_->{'url'}         = \&Slim::Menu::BrowseLibrary::_bmf;
 					$_->{'passthrough'} = [ { searchTags => [ "url:$url" ] } ];
 					$_->{'itemActions'} = {
@@ -444,13 +390,13 @@ sub _randomAlbums {
 	Slim::Menu::BrowseLibrary::_albums( $client, sub {
 		my ($result) = @_;
 
-		$result->{items} = [ 
-			map { 
-				$_->{simpleAlbumLink} = 1; 
+		$result->{items} = [
+			map {
+				$_->{simpleAlbumLink} = 1;
 				$_;
-			} @{$result->{items}} 
+			} @{$result->{items}}
 		] if $result->{items};
-		
+
 		$callback->(@_);
 	}, $args, $pt );
 }
@@ -459,22 +405,22 @@ sub _randomAlbums {
 my $countCache;
 sub _hitlist { if (main::STATISTICS) {
 	my ($client, $callback, $args, $pt) = @_;
-	
+
 	if (!$countCache) {
 		require Tie::Cache::LRU::Expires;
 		tie %$countCache, 'Tie::Cache::LRU::Expires', EXPIRES => 15, ENTRIES => 5;
 	}
 
-	# Don't get all tracks if there's a large number. Get the lowest playcount of the 
-	# top $maxPlaylistLength tracks. That's the minimum playcount we want to display. 
+	# Don't get all tracks if there's a large number. Get the lowest playcount of the
+	# top $maxPlaylistLength tracks. That's the minimum playcount we want to display.
 	# This can be more than $maxPlaylistLength when there's more than one with that number of plays.
 	my $minPlayCount = 1;
 	my $totals = Slim::Schema->totals($client);
 
 	if ( $totals->{track} > (my $maxPlaylistLength = $serverPrefs->get('maxPlaylistLength')) ) {
-		
+
 		my $orderBy = 'tracks_persistent.playcount DESC';
-		
+
 		if ($pt->{sort} =~ /sql=([^,]+)/) {
 			$orderBy = $1;
 			$minPlayCount = 0 if $orderBy =~ /ASC/;
@@ -487,33 +433,33 @@ sub _hitlist { if (main::STATISTICS) {
 		}
 		else {
 			my $sql = qq{
-				SELECT tracks_persistent.playcount 
-				FROM tracks_persistent 
-				JOIN tracks ON tracks.urlmd5 = tracks_persistent.urlmd5 
+				SELECT tracks_persistent.playcount
+				FROM tracks_persistent
+				JOIN tracks ON tracks.urlmd5 = tracks_persistent.urlmd5
 			};
-			
+
 			my @p = ($maxPlaylistLength, 1);
 
 			if ( my $libraryId = $pt->{library_id} ) {
 				$sql .= qq{
 					JOIN library_track ON library_track.track = tracks.id
-					WHERE library_track.library = ? 
+					WHERE library_track.library = ?
 				};
 				unshift @p, $libraryId;
 			}
-			
+
 			$sql .= qq{
 				ORDER BY $orderBy
 				LIMIT ?,?
 			};
-			
+
 			my ($playCount) = Slim::Schema->dbh->selectrow_array( $sql, undef, @p );
-			
+
 			if ($playCount) {
 				$minPlayCount = $playCount;
 			};
 		}
-		
+
 		$countCache->{$cacheKey} = $minPlayCount;
 	}
 
@@ -522,11 +468,11 @@ sub _hitlist { if (main::STATISTICS) {
 
 	Slim::Menu::BrowseLibrary::_tracks( $client, sub {
 		my ($result) = @_;
-		
+
 		my $isWeb = $args->{isControl} && !($client && $client->controlledBy);
 
-		$result->{items} = [ 
-			map { 
+		$result->{items} = [
+			map {
 				my $playCount = sprintf(' (%s)', $_->{playcount} || 0);
 
 				if ($isWeb) {
@@ -536,9 +482,9 @@ sub _hitlist { if (main::STATISTICS) {
 				$_->{name} .= $playCount;
 				$_->{title} .= $playCount;
 				$_;
-			} @{$result->{items}} 
+			} @{$result->{items}}
 		] if $result->{items};
-		
+
 		$callback->(@_);
 	}, $args, $pt );
 } }

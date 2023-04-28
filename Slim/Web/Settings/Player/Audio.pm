@@ -1,8 +1,6 @@
 package Slim::Web::Settings::Player::Audio;
 
-# $Id: Basic.pm 10633 2006-11-09 04:26:27Z kdf $
-
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -31,12 +29,12 @@ sub needsClient {
 sub prefs {
 	my ($class, $client) = @_;
 
-	my @prefs = qw(powerOnResume lameQuality maxBitrate);
+	my @prefs = qw(powerOnResume lameQuality maxBitrate fadeInDuration);
 
 	if ($client->hasPowerControl()) {
 		push @prefs,'powerOffDac';
 	}
-	
+
 	if ($client->hasDisableDac()) {
 		push @prefs,'disableDac';
 	}
@@ -44,7 +42,7 @@ sub prefs {
 	if ($client->maxTransitionDuration()) {
 		push @prefs,qw(transitionType transitionDuration transitionSmart transitionSampleRestriction);
 	}
-	
+
 	if ($client->hasDigitalOut()) {
 		push @prefs,qw(digitalVolumeControl mp3SilencePrelude);
 	}
@@ -52,7 +50,7 @@ sub prefs {
 	if ($client->hasPreAmp()) {
 		push @prefs,'preampVolumeControl';
 	}
-	
+
 	if ($client->hasAesbeu()) {
 		push @prefs,'digitalOutputEncoding';
 	}
@@ -72,23 +70,23 @@ sub prefs {
 	if ($client->hasPolarityInversion()) {
 		push @prefs,'polarityInversion';
 	}
-	
+
 	if ($client->hasDigitalIn()) {
 		push @prefs,'wordClockOutput';
 	}
-	
+
 	if ($client->hasRolloff()) {
 		push @prefs, 'rolloffSlow';
 	}
-	
+
 	if ($client->canDoReplayGain(0)) {
 		push @prefs, 'replayGainMode', 'remoteReplayGain';
 	}
-	
+
 	if ($client->hasHeadSubOut()) {
 		push @prefs, 'analogOutMode';
 	}
-	
+
 	if ($client->maxBass() - $client->minBass() > 0) {
 		push @prefs, 'bass';
 	}
@@ -96,21 +94,25 @@ sub prefs {
 	if ($client->maxTreble() - $client->minTreble() > 0) {
 		push @prefs, 'treble';
 	}
-	
+
 	if ($client->maxXL() - $client->minXL()) {
 		push @prefs, 'stereoxl';
 	}
-	
+
 	if ($client->can('setLineIn') && Slim::Utils::PluginManager->isEnabled('Slim::Plugin::LineIn::Plugin')) {
 		push @prefs, 'lineInLevel', 'lineInAlwaysOn';
 	}
-	
+
 	if ( $client->isa('Slim::Player::Squeezebox2') ) {
 		push @prefs, 'mp3StreamingMethod';
 	}
-	
+
 	if ($client->hasOutputChannels()) {
 		push @prefs, 'outputChannels';
+	}
+
+	if ($client->hasBalance()) {
+		push @prefs, 'balance';
 	}
 
 	return ($prefs->client($client), @prefs);
@@ -122,12 +124,17 @@ sub beforeRender {
 
 	# Load any option lists for dynamic options.
 	$paramRef->{'lamefound'}  = Slim::Utils::Misc::findbin('lame');
-	
+
 	my @formats = $client->formats();
 
 	if ($formats[0] ne 'mp3') {
 		$paramRef->{'allowNoLimit'} = 1;
 	}
+
+	$paramRef->{'maxTreble'} = $client->maxTreble;
+	$paramRef->{'minTreble'} = $client->minTreble;
+	$paramRef->{'maxBass'}   = $client->maxBass;
+	$paramRef->{'minBass'}   = $client->minBass;
 
 	$paramRef->{'prefs'}->{pref_maxBitrate} = Slim::Utils::Prefs::maxRate($client, 1);
 }

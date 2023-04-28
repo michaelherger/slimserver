@@ -1,8 +1,7 @@
 package Slim::Web::Settings::Server::Basic;
 
-# $Id$
 
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -14,6 +13,7 @@ use Slim::Utils::Log;
 use Slim::Utils::Prefs;
 
 my $prefs = preferences('server');
+my $log = logger('scan.scanner');
 
 sub name {
 	return Slim::Web::HTTP::CSRF->protectName('BASIC_SERVER_SETTINGS');
@@ -29,7 +29,7 @@ sub prefs {
 
 sub handler {
 	my ($class, $client, $paramRef) = @_;
-	
+
 	# tell the server not to trigger a rescan immediately, but let it queue up requests
 	# this is neede to prevent multiple scans to be triggered by change handlers for paths etc.
 	Slim::Music::Import->doQueueScanTasks(1);
@@ -37,38 +37,29 @@ sub handler {
 
 	if ($paramRef->{'pref_rescan'}) {
 
-		my $rescanType = ['rescan'];
-
-		if ($paramRef->{'pref_rescantype'} eq '2wipedb') {
-
-			$rescanType = ['wipecache'];
-
-		} elsif ($paramRef->{'pref_rescantype'} eq '3playlist') {
-
-			$rescanType = [qw(rescan playlists)];
-		}
+		my $rescanType = Slim::Music::Import->getScanCommand($paramRef->{'pref_rescantype'});
 
 		for my $pref (qw(playlistdir)) {
 
 			my (undef, $ok) = $prefs->set($pref, $paramRef->{"pref_$pref"});
 
 			if ($ok) {
-				$paramRef->{'validated'}->{$pref} = 1; 
+				$paramRef->{'validated'}->{$pref} = 1;
 			}
-			else { 
+			else {
 				$paramRef->{'warning'} .= sprintf(Slim::Utils::Strings::string('SETTINGS_INVALIDVALUE'), $paramRef->{"pref_$pref"}, $pref) . '<br/>';
 				$paramRef->{'validated'}->{$pref} = 0;
 			}
 		}
 
-		if ( main::INFOLOG && logger('scan.scanner')->is_info ) {
-			logger('scan.scanner')->info(sprintf("Initiating scan of type: %s",join (" ",@{$rescanType})));
+		if ( main::INFOLOG && $log->is_info ) {
+			$log->info(sprintf("Initiating scan of type: %s", join(' ', @$rescanType)));
 		}
 
 		Slim::Control::Request::executeRequest(undef, $rescanType);
 		$runScan = 1;
 	}
-	
+
 	if ( $paramRef->{'saveSettings'} ) {
 		my $curLang = $prefs->get('language');
 		my $lang    = $paramRef->{'pref_language'};
@@ -78,51 +69,58 @@ sub handler {
 			if ($lang eq 'HE' && $prefs->get('skin') eq 'Default') {
 				$prefs->set('skin', 'Classic');
 				$paramRef->{'warning'} .= '<span id="popupWarning">' . Slim::Utils::Strings::string("SETUP_SKIN_OK") . '</span>';
-			}	
+			}
 
 			# Bug 5740, flush the playlist cache
 			for my $client (Slim::Player::Client::clients()) {
 				$client->currentPlaylistChangeTime(Time::HiRes::time());
 			}
 		}
-		
+
 		# handle paths
 		my @paths;
 		my %oldPaths = map { $_ => 1 } @{ $prefs->get('mediadirs') || [] };
 
-		my $ignoreFolders = {
-			audio => [],
-			video => [],
-			image => [],
-		};
+		my $ignoreFolders = [];
 
 		my $singleDirScan;
 		for (my $i = 0; defined $paramRef->{"pref_mediadirs$i"}; $i++) {
 			if (my $path = $paramRef->{"pref_mediadirs$i"}) {
+				main::INFOLOG && $log->is_info && $log->info('Path information for single dir scan: ' . Data::Dump::dump({
+					oldPath => $oldPaths{$path},
+					path => $path
+				}));
+
 				delete $oldPaths{$path};
 				push @paths, $path;
 
 				if ($paramRef->{"pref_rescan_mediadir$i"}) {
 					$singleDirScan = Slim::Utils::Misc::fileURLFromPath($path);
 				}
-				
-				push @{ $ignoreFolders->{audio} }, $path if !$paramRef->{"pref_ignoreInAudioScan$i"};
-				push @{ $ignoreFolders->{video} }, $path if !$paramRef->{"pref_ignoreInVideoScan$i"};
-				push @{ $ignoreFolders->{image} }, $path if !$paramRef->{"pref_ignoreInImageScan$i"};
+
+				push @{ $ignoreFolders }, $path if !$paramRef->{"pref_ignoreInAudioScan$i"};
 			}
 		}
-		
-		$prefs->set('ignoreInAudioScan', $ignoreFolders->{audio});
-		$prefs->set('ignoreInVideoScan', $ignoreFolders->{video});
-		$prefs->set('ignoreInImageScan', $ignoreFolders->{image});
+
+		$prefs->set('ignoreInAudioScan', $ignoreFolders);
 
 		my $oldCount = scalar @{ $prefs->get('mediadirs') || [] };
-		
+
+		if ( main::INFOLOG && $log->is_info ) {
+			$log->info('Path information for single dir scan: ' . Data::Dump::dump({
+				oldPaths => \%oldPaths,
+				paths => \@paths,
+				singleDirScan => $singleDirScan
+			}));
+		}
+
 		if ( keys %oldPaths || !$oldCount || scalar @paths != $oldCount ) {
+			main::INFOLOG && $log->is_info && $log->info("Triggering scan...");
 			$prefs->set('mediadirs', \@paths);
 		}
 		# only run single folder scan if the paths haven't changed (which would trigger a rescan anyway)
 		elsif ( $singleDirScan ) {
+			main::INFOLOG && $log->is_info && $log->info("Triggering singleDirScan ($singleDirScan)");
 			Slim::Control::Request::executeRequest( undef, [ 'rescan', 'full', $singleDirScan ] );
 			$runScan = 1;
 		}
@@ -130,20 +128,16 @@ sub handler {
 
 	$paramRef->{'newVersion'}  = $::newVersion;
 	$paramRef->{'languageoptions'} = Slim::Utils::Strings::languageOptions();
-	
+
 	my $ignoreFolders = {
-		audio => { map { $_, 1 } @{ Slim::Utils::Misc::getDirsPref('ignoreInAudioScan') } },
-		video => { map { $_, 1 } @{ Slim::Utils::Misc::getDirsPref('ignoreInVideoScan') } },
-		image => { map { $_, 1 } @{ Slim::Utils::Misc::getDirsPref('ignoreInImageScan') } },
+		map { $_, 1 } @{ $prefs->get('ignoreInAudioScan') || [''] },
 	};
-	
+
 	$paramRef->{mediadirs} = [];
-	foreach ( @{ Slim::Utils::Misc::getMediaDirs() } ) {
+	foreach ( @{  $prefs->get('mediadirs') || [''] } ) {
 		push @{ $paramRef->{mediadirs} }, {
 			path  => $_,
-			audio => $ignoreFolders->{audio}->{$_},
-			video => $ignoreFolders->{video}->{$_},
-			image => $ignoreFolders->{image}->{$_},
+			audio => $ignoreFolders->{$_},
 		}
 	}
 
@@ -152,8 +146,8 @@ sub handler {
 		path  => '',
 	};
 
-	$paramRef->{'noimage'} = 1 if !(main::IMAGE && main::MEDIASUPPORT);
-	$paramRef->{'novideo'} = 1 if !(main::VIDEO && main::MEDIASUPPORT);
+	my $scanTypes = Slim::Music::Import->getScanTypes();
+	$paramRef->{'scanTypes'} = { map { $_ => $scanTypes->{$_}->{name} } grep /\d.+/, keys %$scanTypes };
 
 	Slim::Music::Import->doQueueScanTasks(0);
 	Slim::Music::Import->nextScanTask() if $runScan || !$prefs->get('dontTriggerScanOnPrefChange');

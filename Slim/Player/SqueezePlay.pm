@@ -1,6 +1,6 @@
 package Slim::Player::SqueezePlay;
 
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -42,6 +42,7 @@ BEGIN {
 		spDirectHandlers
 		proxyAddress
 		_canHTTPS
+		balance
 	));
 }
 
@@ -66,6 +67,7 @@ sub new {
 		hasPolarityInversion    => 0,
 		spDirectHandlers        => undef,
 		proxyAddress            => undef,
+		balance                 => 0,
 	);
 
 	return $client;
@@ -89,6 +91,7 @@ my %CapabilitiesMap = (
 	Spdirect                => 'spDirectHandlers',
 	Proxy                   => 'proxyAddress',
 	CanHTTPS                => '_canHTTPS',
+	Balance                 => 'balance',
 
 	# deprecated
 	model                   => '_model',
@@ -114,6 +117,11 @@ sub revisionNumber {
 	return $num;
 }
 
+sub hasBalance { 
+	my $client = shift;
+	return $client->balance || $client->model =~ /controller|fab4|baby/;
+}
+
 sub needsUpgrade {}
 
 sub init {
@@ -127,7 +135,6 @@ sub init {
 	# Do this at end so that any resync that happens has the capabilities already set
 	$client->SUPER::init(@_);
 }
-
 
 sub reconnect {
 	my ($client, $paddr, $revision, $tcpsock, $reconnect, $bytes_received, $syncgroupid, $capabilities) = @_;
@@ -239,7 +246,7 @@ sub pcm_sample_rates {
 sub fade_volume {
 	my ($client, $fade, $callback, $callbackargs) = @_;
 
-	if (abs($fade) > 1 ) {
+	if (abs($fade) > 1 || $client->model !~ /baby|fab4/) {
 		# for long fades do standard behavior so that sleep/alarm work
 		$client->SUPER::fade_volume($fade, $callback, $callbackargs);
 	} else {

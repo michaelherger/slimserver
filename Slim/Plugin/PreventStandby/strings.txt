@@ -1,7 +1,7 @@
 # String file for PreventStandby plugin
 
 PLUGIN_PREVENTSTANDBY
-	CS	Zabránit přechodu systému do pohotovostního režimu
+	CS	Zabránění pohotovostního režimu systému
 	DA	Forhindrer at systemet går på standby
 	DE	Standbymodus verhindern
 	EN	Prevent System Standby
@@ -9,14 +9,14 @@ PLUGIN_PREVENTSTANDBY
 	FI	Estä järjestelmän siirtyminen valmiustilaan
 	FR	Empêcher la mise en veille du système
 	IT	Impedisci standby del sistema
-	NL	Voorkomen dat systeem naar stand-by gaat
+	NL	Stand-by Systeem Voorkomen
 	NO	Hindre hvilemodus
 	PL	Zapobiegaj przejściu systemu do trybu wstrzymania
 	RU	не переходить в режим ожидания
 	SV	Förhindra viloläge
 
 PLUGIN_PREVENTSTANDBY_DESC
-	CS	Tento plugin monitoruje vaše přehrávače Squeezebox a zabrání systému v přechodu do úsporného pohotovostního režimu při přehrávání hudby, v průběhu prohledávání Logitech Media Server, při aktualizaci přehrávačů atd. Zabrání také systému v přechodu do pohotovostního režimu po dvou minutách od dálkového spuštění počítače přes LAN.
+	CS	Tento zásuvný modul monitoruje vaše přehrávače Squeezebox a zabrání systému v přechodu do úsporného pohotovostního režimu při přehrávání hudby, v průběhu prohledávání Logitech Media Serveru, při aktualizaci přehrávačů atd. Zabrání také systému v přechodu do pohotovostního režimu po dvou minutách od dálkového spuštění počítače přes LAN.
 	DA	Dette udvidelsesmodul bruges til at overvåge Squeezebox-afspillere og forhindre at systemet går på standby mens der spilles musik, søges efter musikfiler i Logitech Media Server, afspillerne opdateres osv. Det forhindrer også at systemet går på standby blot to minutter efter at det er vækket via lokalnetværket.
 	DE	Dieses Plugin überwacht die Squeezebox-Player und verhindert, dass das System in den Standbymodus geschaltet wird während Logitech Media Server die Musiksammlung durchsucht, Player aktualisiert werden usw. Außerdem wird verhindert, dass das System zwei Minuten nach 'Wake on LAN' vorzeitig in den Standbymodus schaltet.
 	EN	This plugin monitors your SqueezeBox players and prevents the system from going into power saving standby mode while music is playing, Logitech Media Server is scanning, players are updating, etc. It will also prevent the system from prematurely going into standby two minutes after wake-on-lan.
@@ -24,7 +24,7 @@ PLUGIN_PREVENTSTANDBY_DESC
 	FI	Tämä laajennus valvoo SqueezeBox-soittimia ja estää järjestelmää siirtymästä virtaa säästävään valmiustilaan, kun musiikkia soitetaan, kun Logitech Media Server suorittaa tarkistusta, kun soittimia päivitetään jne. Laajennus estää myös järjestelmää siirtymästä ennenaikaisesti valmiustilaan kaksi minuuttia lähiverkon herätyksen jälkeen.
 	FR	Ce plugin surveille les platines SqueezeBox et empêche le système de passer en mode veille (d'économie d'énergie) lorsqu'un morceau est en cours de lecture, le Logitech Media Server est en cours d'analyse, les platines sont mises à jour, ainsi que deux minutes après l'activation de la fonction de réveil par LAN.
 	IT	Questo plugin tiene sotto controllo i lettori SqueezeBox e impedisce che nel sistema venga attivata la modalità standby durante la riproduzione della musica, l'analisi di Squeezebox, l'aggiornamento dei lettori e così via. Impedisce inoltre che il sistema entri prematuramente in modalità standby due minuti dopo l'attivazione LAN.
-	NL	Deze plug-in houd je Squeezebox-systemen in de gaten en voorkomt dat het systeem naar energiebesparende stand-bymodus gaat terwijl er bijvoorbeeld muziek speelt, Logitech Media Server een scan uitvoert of systemen worden bijgewerkt. De plug-in voorkomt ook dat het systeem vroegtijdig naar stand-bymodus gaat twee minuten na wake-on-lan.
+	NL	Deze plug-in houdt jouw Squeezebox muziekspelers in de gaten en voorkomt dat het systeem naar energiebesparende stand-by modus gaat terwijl er bijvoorbeeld muziek speelt, Logitech Media Server een scan uitvoert of systemen worden bijgewerkt. De plug-in voorkomt ook dat het systeem vroegtijdig naar stand-by modus gaat twee minuten na wake-on-lan.
 	NO	Denne plugin-modulen overvåker SqueezeBox-spillerne og forhindrer systemet fra å gå i hvilemodus mens det spilles musikk, mens Logitech Media Server søker, mens spillere oppdateres osv. Den forhindrer også at systemet går i for tidlig hvilemodus to minutter etter at det har blitt startet opp via et LAN.
 	PL	Ten dodatek monitoruje odtwarzacze SqueezeBox i zapobiega przejściu systemu do trybu wstrzymania w celu oszczędzania energii, kiedy odtwarzana jest muzyka, program Logitech Media Server wykonuje przeszukiwanie, trwa aktualizacja odtwarzaczy itp. Dodatek uniemożliwi także przedwczesne przejście do trybu wstrzymania po upływie dwóch minut od zadziałania funkcji wake-on-lan.
 	RU	Этот подключаемый модуль выполняет мониторинг плееров SqueezeBox и предотвращает переход в энергосберегающий режим ожидания во время воспроизведения музыки, сканирования Logitech Media Server, обновления плееров и др. Он также не позволяет преждевременно переходить в режим ожидания через две минуты после пробуждения по сети.
@@ -37,7 +37,7 @@ PLUGIN_PREVENTSTANDBY_IDLETIME
 	EN	Allow standby after how many idle minutes?
 	ES	¿Permitir modo de espera después de cuántos minutos?
 	FI	Kuinka monen minuutin joutoajan jälkeen siirrytään valmiustilaan?
-	FR	Période d'inactivité avant la mise en veille (en minutes)?
+	FR	Période d'inactivité avant la mise en veille (en minutes) ?
 	IT	Attivare la modalità standby dopo quanti minuti di inattività?
 	NL	Stand-by toestaan na hoeveel minuten inactiviteit?
 	NO	Hvor mange inaktive minutter før hvilemodus?
@@ -46,7 +46,7 @@ PLUGIN_PREVENTSTANDBY_IDLETIME
 	SV	Efter hur många minuter ska viloläge tillåtas?
 
 PLUGIN_PREVENTSTANDBY_IDLETIME_DESC
-	CS	Zadejte počet minut (po zastavení přehrávání nebo po obnovení systému), po kterém tento plugin znovu povolí přechod systému do pohotovostního systému. K úplnému zákazu automatického přechodu tohoto systému do pohotovostního systému zadejte 0 (nulu).
+	CS	Zadejte počet minut (po zastavení přehrávání nebo po obnovení systému), po kterém tento zásuvný modul znovu povolí přechod systému do pohotovostního systému. K úplnému zákazu automatického přechodu tohoto systému do pohotovostního systému zadejte 0 (nulu).
 	DA	Angiv det antal minutter (fra afspilningen stopper eller systemet vækkes) der skal forløbe før systemet igen kan gå på standby. Hvis du vælger 0, kan systemet ikke automatisk gå på standby.
 	DE	Geben Sie an, nach wie vielen Minuten (nachdem die Wiedergabe beendet oder das System reaktiviert wurde) das Plugin zulässt, dass das System in den Standbymodus wechselt. Wenn Sie 0 (Null) eingeben, wird der automatische Wechsel in den Standbymodus vollständig unterbunden.
 	EN	Enter the number of minutes (after playing stops or after the system resumes) at the end of which the plugin will again allow the system to go into standby. Enter 0 (zero) to completely prohibit automatic standby on this system.
@@ -67,9 +67,9 @@ PLUGIN_PREVENTSTANDBY_PLAYERSON
 	EN	Prohibit standby if players are on?
 	ES	¿Prohibir modo de espera si los reproductores están encendidos?
 	FI	Estetäänkö valmiustilaan siirtyminen, jos soittimet ovat päällä?
-	FR	Interdire la mise en veille si des platines sont allumées?
+	FR	Interdire la mise en veille si des platines sont allumées ?
 	IT	Non attivare la modalità standby se i lettori sono accesi?
-	NL	Stand-by beletten als systemen aanstaan?
+	NL	Stand-by voorkomen als muziekspelers aan staan?
 	NO	Forhindre hvilemodus hvis spillerne er slått på?
 	PL	Uniemożliwić tryb wstrzymania, kiedy odtwarzacze są włączone?
 	RU	Запретить переход в режим ожидания во время работы плееров?
@@ -84,7 +84,7 @@ PLUGIN_PREVENTSTANDBY_PLAYERSON_DESC
 	FI	Ottamalla tämän asetuksen käyttöön estät järjestelmää siirtymästä valmiustilaan soitinten ollessa päällä, eli silloin, kun kelloa ei näy.
 	FR	Activez ce réglage pour interdire la mise en veille du système lorsque des platines sont allumées (l'horloge n'est pas affichée).
 	IT	Attivare questa impostazione per impedire l'attivazione della modalità standby quando i lettori sono accesi, vale a dire quando non visualizzano l'orologio.
-	NL	Schakel deze instelling in om te voorkomen dat het systeem naar stand-by gaat terwijl er muzieksystemen actief zijn, d.w.z. niet de klok weergeven.
+	NL	Schakel deze instelling in om te voorkomen dat het systeem naar stand-by gaat terwijl er muziekspelers actief zijn, d.w.z. niet de klok weergeven.
 	NO	Når denne innstillingen er aktivert, forhindrer den systemet fra å gå hvilemodus mens spillerne er slått på (altså når de ikke viser klokken).
 	PL	Włącz to ustawienie, aby uniemożliwić tryb wstrzymania systemu, kiedy odtwarzacze są włączone (tzn. nie wyświetlają zegara).
 	RU	Включите этот параметр, чтобы запретить переход в режим ожидания во время работы плееров (не отображать часы).

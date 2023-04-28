@@ -1,6 +1,6 @@
 package Slim::Utils::OS::OSX;
 
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -31,23 +31,17 @@ sub initDetails {
 
 			if (/System Version: (.+)/) {
 
-				$class->{osDetails}->{'osName'} = $1;
+				$class->{osDetails}->{'osName'} ||= $1;
 				$class->{osDetails}->{'osName'} =~ s/ \(\w+?\)$//;
 
 			} elsif (/Intel/i) {
 
-				# Determine if we are running as 32-bit or 64-bit
-				my $bits = length( pack 'L!', 1 ) == 8 ? 64 : 32;
+				$class->{osDetails}->{'osArch'} ||= 'x86_64';
 
-				$class->{osDetails}->{'osArch'} = 'x86';
+			} elsif (/Chip.*(Apple .*)/) {
 
-				if ( $bits == 64 ) {
-					$class->{osDetails}->{'osArch'} = 'x86_64';
-				}
+				$class->{osDetails}->{'osArch'} ||= 'arm64';
 
-			} elsif (/PowerPC/i) {
-
-				$class->{osDetails}->{'osArch'} = 'ppc';
 			}
 
 			last if $class->{osDetails}->{'osName'} && $class->{osDetails}->{'osArch'};
@@ -57,17 +51,14 @@ sub initDetails {
 	}
 
 	if ( !$class->{osDetails}->{osArch} ) {
-		if ($Config{ccflags} =~ /-arch x86_64/) {
-			$class->{osDetails}->{osArch} = 'x86_64';
-		}
-		elsif ($Config{ccflags} =~ /-arch i386/) {
-			$class->{osDetails}->{osArch} = 'x86';
-		}
-		elsif ($Config{ccflags} =~ /-arch ppc/) {
-			$class->{osDetails}->{osArch} = 'ppc';
+		my $uname = `uname -a`;
+
+		if ($uname =~ /ARM64.*x86_64/i) {
+			$class->{osDetails}->{osArch} = 'x86_64 (Rosetta)';
 		}
 	}
 
+	$class->{osDetails}->{'osArch'} ||= 'Unknown';
 	$class->{osDetails}->{'os'}  = 'Darwin';
 	$class->{osDetails}->{'uid'} = getpwuid($>);
 
@@ -154,14 +145,6 @@ sub dirsFor {
 
 	} elsif ($dir =~ /^(?:Graphics|HTML|IR|Plugins|MySQL)$/) {
 
-		# For some reason the dir is lowercase on OS X.
-		# FRED: it may have been eons ago but today it is HTML; most of
-		# the time anyway OS X is not case sensitive so it does not really
-		# matter...
-		#if ($dir eq 'HTML') {
-		#	$dir = lc($dir);
-		#}
-
 		push @dirs, "$ENV{'HOME'}/Library/Application Support/Squeezebox/$dir";
 		push @dirs, "/Library/Application Support/Squeezebox/$dir";
 		push @dirs, catdir($Bin, $dir);
@@ -190,23 +173,9 @@ sub dirsFor {
 
 		push @dirs, $::prefsdir || catdir($ENV{'HOME'}, '/Library/Application Support/Squeezebox');
 
-	} elsif ($dir =~ /^(?:music|videos|pictures)$/) {
+	} elsif ($dir eq 'music') {
 
-		my $mediaDir;
-
-		if ($dir eq 'music') {
-			# DHG wants LMS to default to the full Music folder, not only iTunes
-#			$mediaDir = catdir($ENV{'HOME'}, 'Music', 'iTunes');
-#			if (!-d $mediaDir) {
-				$mediaDir = catdir($ENV{'HOME'}, 'Music');
-#			}
-		}
-		elsif ($dir eq 'videos') {
-			$mediaDir = catdir($ENV{'HOME'}, 'Movies');
-		}
-		elsif ($dir eq 'pictures') {
-			$mediaDir = catdir($ENV{'HOME'}, 'Pictures');
-		}
+		my $mediaDir = catdir($ENV{'HOME'}, 'Music');
 
 		# bug 1361 expand music folder if it's an alias, or SC won't start
 		if ( my $alias = $class->pathFromMacAlias($mediaDir) ) {
@@ -217,7 +186,7 @@ sub dirsFor {
 
 	} elsif ($dir eq 'playlists') {
 
-		push @dirs, catdir($class->dirsFor('music'), 'Playlists');
+		push @dirs, catdir(scalar $class->dirsFor('music'), 'Playlists');
 
 	# We might get called from some helper script (update checker)
 	} elsif ($dir eq 'libpath' && $Bin =~ m|Bin/darwin|) {
@@ -260,6 +229,30 @@ sub localeDetails {
 
 	return ($lc_ctype, $lc_time);
 }
+
+
+# macOS doesn't sort correctly using LC_COLLATE - use a temporary database table to do the job...
+sub sortFilename {
+	my $class = shift;
+
+	my $dbh = Slim::Schema->dbh();
+
+	$dbh->do('DROP TABLE IF EXISTS sort_filenames');
+	$dbh->do('CREATE TEMPORARY TABLE sort_filenames (name TEXT)');
+
+	my $sth = $dbh->prepare_cached("INSERT INTO sort_filenames (name) VALUES (?)");
+	foreach (@_) {
+		$sth->execute($_);
+	};
+
+	my $collate = $class->sqlHelperClass()->collate();
+
+	my $ret = $dbh->selectall_arrayref("SELECT name FROM sort_filenames ORDER BY name $collate");
+	$dbh->do('DROP TABLE IF EXISTS sort_filenames');
+
+	return map { $_->[0] } @$ret;
+}
+
 
 sub getSystemLanguage {
 	my $class = shift;

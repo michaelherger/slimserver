@@ -1,6 +1,5 @@
 package Slim::Networking::SqueezeNetwork::Players;
 
-# $Id$
 
 # Keep track of players that are connected to SN
 
@@ -94,6 +93,9 @@ sub fetch_players { if (main::NOMYSB) {
 	my $http = Slim::Networking::SqueezeNetwork->new(
 		\&_players_done,
 		\&_players_error,
+		{
+			Timeout => 60,
+		},
 	);
 
 	$http->get( $http->url( '/api/v1/players' ) );
@@ -139,7 +141,7 @@ sub _players_done {
 	if ( $res->{search_providers} ) {
 		main::DEBUGLOG && $log->is_debug && $log->debug( 'Adding search providers: ' . Data::Dump::dump( $res->{search_providers} ) );
 
-		Slim::Menu::GlobalSearch->registerSearchProviders( $res->{search_providers} );		
+		Slim::Menu::GlobalSearch->registerSearchProviders( $res->{search_providers} );
 	}
 
 
@@ -172,7 +174,6 @@ sub _registerApps {
 		}
 	}
 
-	# This will create new pref entries for players this server has never seen
 	my %playersSeen;
 	for my $player ( @{ $res->{players} }, @{ $res->{inactive_players} } ) {
 		if ( exists $player->{apps} ) {
@@ -182,6 +183,9 @@ sub _registerApps {
 			for my $app ( keys %{ $player->{apps} } ) {
 				$allApps->{$app} = $player->{apps}->{$app};
 			}
+
+			# Don't create new pref entries for players this server has never seen
+			next unless Slim::Utils::Prefs::Client->hasPrefs($prefs, $player->{mac});
 
 			my $cprefs = Slim::Utils::Prefs::Client->new( $prefs, $player->{mac}, 'no-migrate' );
 
@@ -305,6 +309,8 @@ sub _registerApps {
 sub _appHandler {
 	my ($player, $cprefs, $client) = @_;
 
+	return unless $cprefs->get('playername');
+
 	# Compare existing apps to new list
 	my $currentApps = complex_to_query( $cprefs->get('apps') || {} );
 	my $newApps     = complex_to_query( $player->{apps} );
@@ -360,8 +366,6 @@ sub _players_error {
 	my $http  = shift;
 	my $error = $http->error;
 
-	$prefs->remove('sn_session');
-
 	# We don't want a stale list of players, so clear it out on error
 	$CONNECTED_PLAYERS = [];
 	$INACTIVE_PLAYERS  = [];
@@ -400,7 +404,7 @@ sub is_known_player { if (main::NOMYSB) {
 
 	my $mac = ref($client) ? $client->macaddress() : $client;
 
-	return scalar( grep { $mac eq $_->{mac} } @{$CONNECTED_PLAYERS}, @{$INACTIVE_PLAYERS} );	
+	return scalar( grep { $mac eq $_->{mac} } @{$CONNECTED_PLAYERS}, @{$INACTIVE_PLAYERS} );
 } }
 
 sub disconnect_player {

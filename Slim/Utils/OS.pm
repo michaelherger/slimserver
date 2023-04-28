@@ -1,8 +1,6 @@
 package Slim::Utils::OS;
 
-# $Id: Base.pm 21790 2008-07-15 20:18:07Z andy $
-
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -118,9 +116,6 @@ sub initSearchPath {
 	}
 	elsif ( $class->{osDetails}->{'binArch'} eq 'armhf-linux' ) {
 		push @paths, catdir($baseDir, 'arm-linux');
-	}
-	elsif ( $class->{osDetails}->{'binArch'} =~ /darwin/i && $class->{osDetails}->{osArch} =~ /x86_64/ ) {
-		unshift @paths, catdir($baseDir, $class->{osDetails}->{'binArch'} . '-x86_64'), catdir($baseDir, $^O . '-x86_64');
 	}
 
 	Slim::Utils::Misc::addFindBinPaths(@paths);
@@ -288,7 +283,7 @@ sub getProxy {
 
 	# remove any leading "http://"
 	if($proxy) {
-		$proxy =~ s/http:\/\///i;
+		$proxy =~ s/https?:\/\///i;
 		$proxy = $proxy . ":" .$proxy_port if($proxy_port);
 	}
 
@@ -355,6 +350,42 @@ sub localeDetails {
 	return ($lc_ctype, $lc_time);
 }
 
+
+=head2 sortFilename()
+
+Sort filenames as close to the underlying operating system's sorting order.
+
+File sorting should look like ls -l, Windows Explorer, or Finder -
+really, we shouldn't be doing any of this, but we'll ignore
+punctuation, and fold the case. DON'T strip articles.
+
+=cut
+
+sub sortFilename {
+	my $class = shift;
+
+	use locale;
+	require POSIX;
+
+	my @nocase = map { $class->noCaseFilename($_) } @_;
+
+	# Bug 14906: need to use native character-encoding collation sequence
+	my $oldCollate = POSIX::setlocale(POSIX::LC_COLLATE());
+	POSIX::setlocale(POSIX::LC_COLLATE(), POSIX::setlocale(POSIX::LC_CTYPE()));
+
+	# return the input array sliced by the sorted array
+	my @ret = @_[sort {$nocase[$a] cmp $nocase[$b]} 0..$#_];
+
+	POSIX::setlocale(POSIX::LC_COLLATE(), $oldCollate);
+
+	return @ret;
+}
+
+sub noCaseFilename {
+	return lc(Slim::Music::Info::fileName($_[1]));
+}
+
+
 =head2 getSystemLanguage()
 
 Return the system's language or 'EN' as default value
@@ -365,7 +396,7 @@ sub getSystemLanguage {
 	require POSIX;
 
 	my $class = shift;
-	$class->_parseLanguage(POSIX::setlocale(POSIX::LC_CTYPE())); 
+	$class->_parseLanguage(POSIX::setlocale(POSIX::LC_CTYPE()));
 }
 
 sub _parseLanguage {
@@ -388,9 +419,9 @@ Get a list of values from the osDetails list
 
 sub get {
 	my $class = shift;
-	
-	if ( wantarray ) {	
-		return map { $class->{osDetails}->{$_} } 
+
+	if ( wantarray ) {
+		return map { $class->{osDetails}->{$_} }
 		       grep { $class->{osDetails}->{$_} } @_;
 	}
 	else {
@@ -451,7 +482,6 @@ sub canAutoUpdate { 0 };
 sub installerExtension { '' };
 sub installerOS { '' };
 
-# XXX - disable AutoRescan for all but SqueezeOS for now
 sub canAutoRescan { 0 }
 
 # can we use more memory to improve DB performance?

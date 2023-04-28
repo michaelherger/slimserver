@@ -1,13 +1,15 @@
 package Slim::Networking::SqueezeNetwork;
 
-# $Id: SqueezeNetwork.pm 11768 2007-04-16 18:14:55Z andy $
+# Logitech Media Server Copyright 2003-2020 Logitech.
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License,
+# version 2.
 
 # Async interface to mysqueezebox.com API
 
 use strict;
-use base qw(Slim::Networking::SimpleAsyncHTTP);
+use base qw(Slim::Networking::SimpleAsyncHTTP Slim::Networking::SqueezeNetwork::Base);
 
-use Digest::SHA1 qw(sha1_base64);
 use JSON::XS::VersionOneAndTwo;
 use MIME::Base64 qw(encode_base64);
 use List::Util qw(max);
@@ -15,45 +17,20 @@ use URI::Escape qw(uri_escape);
 
 if ( !main::SCANNER ) {
 	require Slim::Networking::SqueezeNetwork::Players;
+	require Slim::Networking::SqueezeNetwork::Time;
 }
 
 use Slim::Utils::Log;
-use Slim::Utils::Misc;
 use Slim::Utils::Prefs;
 use Slim::Utils::Strings qw(string cstring);
 use Slim::Utils::Timers;
-
-if ( main::NOMYSB ) {
-	logBacktrace("Support for mysqueezebox.com has been disabled. Please update your code: don't call me if main::NOMYSB.");
-}
-
-use constant SNTIME_POLL_INTERVAL => 3600;
 
 my $log   = logger('network.squeezenetwork');
 
 my $prefs = preferences('server');
 
-# This is a hashref of mysqueezebox.com server types
-#   and names.
-
-my $_Servers = {
-	sn      => 'www.mysqueezebox.com',
-	update  => 'update.mysqueezebox.com',
-};
-
 my $loginErrors = 0;
 my $nextLoginAttempt = 0;
-
-sub get_server {
-	my ($class, $stype) = @_;
-
-	if ( $stype eq 'sn' && $ENV{MYSB_TEST} ) {
-		return $ENV{MYSB_TEST};
-	}
-
-	return $_Servers->{$stype}
-		|| die "No hostname known for server type '$stype'";
-}
 
 # Initialize by logging into SN server time and storing our time difference
 sub init {
@@ -61,32 +38,25 @@ sub init {
 
 	main::INFOLOG && $log->info('SqueezeNetwork Init');
 
-	# Convert old non-hashed password
-	if ( my $password = $prefs->get('sn_password') ) {
-		$password = sha1_base64( $password );
-		$prefs->set( sn_password_sha => $password );
-		$prefs->remove('sn_password');
-
-		main::DEBUGLOG && $log->debug('Converted SN password to hashed version');
-	}
+	# remove legacy settings
+	$prefs->remove('sn_password_sha');
+	$prefs->remove('sn_password');
 
 	Slim::Utils::Timers::setTimer(
 		undef,
 		time(),
 		sub {
-			if (
-				( $prefs->get('sn_email') && $prefs->get('sn_password_sha') )
-				||
-				Slim::Utils::OSDetect::isSqueezeOS()
-			) {
-				# Login to SN
+			if ( my $sid = $prefs->get('sn_session') ) {
+				# Login to SN using session token
 				$class->login(
+					sid => $sid,
 					cb  => \&_init_done,
 					ecb => \&_init_error,
 				);
 			} else {
-				# Not logging in to SN, add local apps to web interface
-				_init_add_non_sn_apps(),
+				main::INFOLOG && $log->is_info && $log->info("No SqueezeNetwork session token available - not logging in.");
+				# add local apps to web interface
+				_init_add_non_sn_apps();
 			}
 		},
 	);
@@ -107,8 +77,6 @@ sub _init_done {
 	main::INFOLOG && $log->info("Got SqueezeNetwork server time: $snTime, diff: $diff");
 
 	$prefs->set( sn_timediff => $diff );
-
-	_syncSNTime_done($http, $snTime);
 
 	# Clear error counter
 	$prefs->remove( 'snInitErrors' );
@@ -157,16 +125,10 @@ sub _init_done {
 
 	# Init polling for list of SN-connected players
 	Slim::Networking::SqueezeNetwork::Players->init();
-
-	# Init stats - don't even load the module unless stats are enabled
-	# let's not bother about re-initialising if pref is changed - there's no user-noticeable effect anyway
-#	if (!$prefs->get('sn_disable_stats')) {
-#		require Slim::Networking::SqueezeNetwork::Stats;
-#		Slim::Networking::SqueezeNetwork::Stats->init( $json );
-#	}
+	Slim::Networking::SqueezeNetwork::Time->init();
 
 	# add link to mysb.com favorites to our local favorites list
-	if ( $json->{favorites_url} ) {
+	if ( $json->{favorites_url} && $prefs->get('sn_sync') ) {
 
 		my $favs = Slim::Utils::Favorites->new();
 
@@ -182,12 +144,12 @@ sub _init_error {
 	my $http  = shift;
 	my $error = $http->error;
 
-	$log->error( sprintf("Unable to login to mysqueezebox.com, sync is disabled: $error (%s)", $http->url) );
+	$log->error( "Unable to login to mysqueezebox.com, sync is disabled: $error" );
 
 	if ( my $proxy = $prefs->get('webproxy') ) {
 		$log->error( sprintf("Please check your proxy configuration (%s)", $proxy) );
-	} 
-	
+	}
+
 	$prefs->remove('sn_timediff');
 
 	# back off if we keep getting errors
@@ -198,12 +160,12 @@ sub _init_error {
 	my $retry = 300 * ( $count + 1 );
 	$nextLoginAttempt = time() + $retry;
 
-	$log->error( sprintf("mysqueezebox.com sync init failed: $error, will retry in $retry (%s)", $http->url) );
+	$log->error( sprintf("will retry in $retry (%s)", $http->url) );
 
 	Slim::Utils::Timers::setTimer(
 		undef,
 		$nextLoginAttempt + 10,
-		sub { 
+		sub {
 			__PACKAGE__->init();
 		}
 	);
@@ -228,9 +190,6 @@ sub shutdown {
 
 	$prefs->remove('sn_timediff');
 
-	# Remove SN session
-	$prefs->remove('sn_session');
-
 	# Shutdown pref syncing
 	if ( UNIVERSAL::can('Slim::Networking::SqueezeNetwork::PrefSync', 'shutdown') ) {
 		Slim::Networking::SqueezeNetwork::PrefSync->shutdown();
@@ -238,29 +197,10 @@ sub shutdown {
 
 	# Shutdown player list fetch
 	Slim::Networking::SqueezeNetwork::Players->shutdown();
-
-	# Shutdown stats
-#	if ( UNIVERSAL::can('Slim::Networking::SqueezeNetwork::Stats', 'shutdown') ) {
-#		Slim::Networking::SqueezeNetwork::Stats->shutdown();
-#	}
 }
 
-# Return a correct URL for mysqueezebox.com
-sub url {
-	my ( $class, $path, $external ) = @_;
-
-	if (main::NOMYSB) {
-		logBacktrace("Support for mysqueezebox.com has been disabled. Please update your code: don't call me if main::NOMYSB.");
-	}
-
-	my $base = (Slim::Networking::Async::HTTP->hasSSL() ? 'https://' : 'http://') . $class->get_server('sn');
-
-	$path ||= '';
-
-	$base = '' if $path =~ /^http/;
-
-	return $base . $path;
-}
+# both classes from which we inherit implement a sub url() - therefore we have to implement this little wrapper here
+sub url { shift->_url(@_); }
 
 # Is a URL on SN?
 sub isSNURL {
@@ -295,43 +235,33 @@ sub login {
 	# avoid parallel login attempts
 	$nextLoginAttempt = max($time + 30, $nextLoginAttempt);
 
-	if ( Slim::Utils::OSDetect::isSqueezeOS() ) {
-		# login using MAC/UUID on TinySBS
-		my $osDetails = Slim::Utils::OSDetect::details();
+	my $username = $params{username} || $prefs->get('sn_email');
+	my $password = $params{password};
+	my $sid      = $params{sid} || $prefs->get('sn_session');
 
-		main::INFOLOG && $log->is_info && $log->info("Logging in to " . $_Servers->{sn} . " as " . $osDetails->{mac});
+	# Return if we don't have any SN login information
+	if ( !$sid && !($username && $password) ) {
+		my $error = cstring($client, 'SQUEEZENETWORK_NO_LOGIN');
 
-		$login_params = {
-			v => 'sc' . $::VERSION,
-			m => $osDetails->{mac},
-			t => $time,
-			a => sha1_base64( $osDetails->{uuid} . $time ),
-		};
+		main::INFOLOG && $log->info( $error );
+		return $params{ecb}->( undef, $error );
 	}
-	else {		
-		my $username = $params{username};
-		my $password = $params{password};
 
-		if ( !$username || !$password ) {
-			$username = $prefs->get('sn_email');
-			$password = $prefs->get('sn_password_sha');
-		}
+	main::INFOLOG && $log->is_info && $log->info("Logging in to " . $class->get_server('sn') . ($sid ? ' using existing session' : " as $username"));
 
-		# Return if we don't have any SN login information
-		if ( !$username || !$password ) {
-			my $error = cstring($client, 'SQUEEZENETWORK_NO_LOGIN');
-
-			main::INFOLOG && $log->info( $error );
-			return $params{ecb}->( undef, $error );
-		}
-
-		main::INFOLOG && $log->is_info && $log->info("Logging in to " . $class->get_server('sn') . " as $username");
-
+	# "interactive" mode is password validation - don't hash the password
+	if ($params{interactive}) {
 		$login_params = {
 			v => 'sc' . $::VERSION,
 			u => $username,
-			t => $time,
-			a => sha1_base64( $password . $time ),
+			p => $password,
+		};
+	}
+	elsif ($sid) {
+		$login_params = {
+			v => 'sc' . $::VERSION,
+			u => $username,
+			s => $sid,
 		};
 	}
 
@@ -340,63 +270,29 @@ sub login {
 		\&_error,
 		{
 			params  => \%params,
-			Timeout => 30,
+			Timeout => 60,
 		},
 	);
 
 	my $url = $self->_construct_url(
 		'login',
-		$login_params,
+		{
+			u => $username,
+			# flag indicating whether we're using a session or a password
+			t => $sid ? 's' : 'p',
+		},
 	);
 
-	$self->get( $url );
+	$self->post( $url, to_json($login_params) );
 }
 
+sub logout {
+	$prefs->remove('sn_email');
 
-sub syncSNTime {
-	# we only want this to run on SqueezeOS/SB Touch
-	return unless Slim::Utils::OSDetect::isSqueezeOS();
-
-	my $http = __PACKAGE__->new(
-		\&_syncSNTime_done,
-		\&_syncSNTime_done,
-	);
-
-	$http->get( $http->url( '/api/v1/time' ) );
+	# change before deleting to trigger change handler
+	$prefs->set('sn_session', '');
+	$prefs->remove('sn_session');
 }
-
-sub _syncSNTime_done {
-	my ($http, $snTime) = @_;
-
-	# we only want this to run on SqueezeOS/SB Touch
-	return unless Slim::Utils::OSDetect::isSqueezeOS();
-
-	if (!$snTime && $http && $http->content) {
-		$snTime = $http->content;
-	}
-
-	if ( $snTime && $snTime =~ /^\d+$/ && $snTime > 1262887372 ) {
-		main::INFOLOG && $log->info("Got SqueezeNetwork server time - set local time to $snTime");
-
-		# update offset to SN time
-		$prefs->set( sn_timediff => $snTime - time() );
-		
-		# set local time to mysqueezebox.com's epochtime 
-		Slim::Control::Request::executeRequest(undef, ['date', "set:$snTime"]);	
-	}
-	else {
-		$log->error("Invalid or no mysqueezebox.com server timestamp - ignoring");
-	}
-
-	Slim::Utils::Timers::killTimers( undef, \&syncSNTime );
-	Slim::Utils::Timers::setTimer(
-		undef,
-		time() + SNTIME_POLL_INTERVAL,
-		\&syncSNTime,
-	);
-
-}
-
 
 sub getHeaders {
 	my ( $self, $client ) = @_;
@@ -445,39 +341,6 @@ sub getHeaders {
 	return @headers;
 }
 
-sub getAuthHeaders {
-	my ( $self ) = @_;
-
-	if ( Slim::Utils::OSDetect::isSqueezeOS() ) {
-
-		# login using MAC/UUID on TinySBS
-		my $osDetails = Slim::Utils::OSDetect::details();
-		my $time = time();
-
-		return [
-			sn_auth_u => $osDetails->{mac} . '|' . $time . '|' . sha1_base64( $osDetails->{uuid} . $time ),
-		];
-	}
-
-	my $email = $prefs->get('sn_email') || '';
-	my $pass  = $prefs->get('sn_password_sha') || '';
-
-	return [
-		sn_auth => $email . ':' . sha1_base64( $email . $pass )
-	];
-}
-
-sub getCookie {
-	my ( $self, $client ) = @_;
-
-	# Add session cookie if we have it
-	if ( my $sid = $prefs->get('sn_session') ) {
-		return 'sdi_squeezenetwork_session=' . uri_escape($sid);
-	}
-
-	return;
-}
-
 # Override to add session cookie header
 sub _createHTTPRequest {
 	my ( $self, $type, $url, @args ) = @_;
@@ -507,33 +370,13 @@ sub _createHTTPRequest {
 			},
 			ecb    => sub {
 				my ( $http, $error ) = @_;
-				$self->error( $error ); 
+				$self->error( $error );
 				$self->ecb->( $self, $error );
 			},
 		);
 
 		return;
 	}
-
-=pod
-	# when dealing with an https url, wrap the error handler in some code to fall back to http on failure
-	if ($url =~ /^https:/) {
-		my $ecb = $self->ecb;
-
-		$self->ecb(sub {
-			my ($self, $error) = @_;
-
-			# XXX - fallback should probably only be used if we failed du to some https issue
-			# Connect timed out: Connection refused - https not available on server
-			$log->error("Failed to fetch $url: $error");
-			$url =~ s/^https:/http:/;
-			$log->warn("https lookup failed - trying plain text http instead: $url");
-			
-			$self->ecb($ecb);
-			$self->SUPER::_createHTTPRequest( $type, $url, @args);
-		});
-	}
-=cut
 
 	$self->SUPER::_createHTTPRequest( $type, $url, @args );
 }
@@ -549,10 +392,14 @@ sub _login_done {
 	}
 
 	if ( $json->{error} ) {
+		if ($params->{sid}) {
+			$prefs->remove('sn_session');
+		}
+
 		return $self->_error( $json->{error} );
 	}
 
-	if ( my $sid = $json->{sid}	) {
+	if ( my $sid = $json->{jwt} || $json->{sid} ) {
 		$prefs->set( sn_session => $sid );
 	}
 
@@ -571,13 +418,11 @@ sub _error {
 	$loginErrors++;
 	$nextLoginAttempt = 60 * $loginErrors;
 
-	my $proxy = $prefs->get('webproxy'); 
+	my $proxy = $prefs->get('webproxy');
 
-	$log->error( "Unable to login to SN: $error" 
+	$log->error( "Unable to login to SN: $error"
 		. ($proxy ? sprintf(" - please check your proxy configuration (%s)", $proxy) : '')
-	); 
-	
-	$prefs->remove('sn_session');
+	);
 
 	$self->error( $error );
 
@@ -589,7 +434,7 @@ sub _construct_url {
 
 	my $url = $self->url( '/api/v1/' . $method );
 
-	if ( my @keys = keys %{$params} ) {
+	if ( my @keys = sort keys %{$params} ) {
 		my @params;
 		foreach my $key ( @keys ) {
 			push @params, uri_escape($key) . '=' . uri_escape( $params->{$key} );

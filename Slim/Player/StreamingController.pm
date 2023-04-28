@@ -1,8 +1,7 @@
 package Slim::Player::StreamingController;
 
-# $Id$
 
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -333,6 +332,14 @@ sub _Buffering {_setPlayingState($_[0], BUFFERING);}
 sub _Playing {
 	my ($self) = @_;
 	
+	# need to fade-in here and not in _Stream due to potential buffering delay
+	if ($self->{'fadeActive'}) {
+		foreach my $player (@{$self->{'players'}}) {
+			$player->fade_volume($prefs->client($self->master)->get('fadeInDuration'));
+		}
+	}	
+	$self->{'fadeActive'} = undef;
+	
 	# bug 10681 - don't actually change the state if we are rebuffering
 	# as there can be a race condition between output buffer underrun and
 	# track-start events especially, but not exclusively when synced.
@@ -428,7 +435,7 @@ sub _CheckPaused {	# only called when PAUSED
 		if ($song->canSeek() && defined $self->{'resumeTime'}) {
 
 			# Bug 10645: stop only the streaming if there is a chance to restart
-			main::INFOLOG && $log->info("Stopping remote stream upon full buffer when paused");
+			main::INFOLOG && $log->info("Stopping remote stream upon full buffer when paused (resume time: $self->{'resumeTime'})");
 				
 			_pauseStreaming($self, $song);
 			
@@ -436,7 +443,7 @@ sub _CheckPaused {	# only called when PAUSED
 			
 			# Bug 7620: stop remote radio streams if they have been paused long enough for the buffer to fill.
 			# Assume unknown duration means radio and so we shuould stop now
-			main::INFOLOG && $log->info("Stopping remote stream upon full buffer when paused");
+			main::INFOLOG && $log->info("Stopping remote stream upon full buffer when paused (no resume)");
 			
 			_Stop(@_);
 		}
@@ -919,7 +926,6 @@ sub _RetryOrNext {		# -> Idle; IF [shouldretry && canretry] THEN continue
 	
 	_getNextTrack($self, $params, 1);
 }
-	
 
 sub _Continue {
 	my ($self, $event, $params) = @_;
@@ -935,13 +941,15 @@ sub _Continue {
 	if ($seekdata && $seekdata->{'streamComplete'}) {
 		main::INFOLOG && $log->is_info && $log->info("stream already complete at offset $bytesReceived");
 		_Streamout($self);
-	} elsif (!$bytesReceived || $seekdata) {
+	} elsif ($seekdata && $bytesReceived) {
 		main::INFOLOG && $log->is_info && $log->info("Restarting stream at offset $bytesReceived");
 		_Stream($self, $event, {song => $song, seekdata => $seekdata, reconnect => 1});
 		if ($song == playingSong($self)) {
 			$song->setStatus(Slim::Player::Song::STATUS_PLAYING);
 		}
 	} else {
+		# This handles resuming after reboot with the caveat that if connection has been lost (no reboot) 
+		# while playing and before reception of next song's 1st byte, we'll resume the current song
 		main::INFOLOG && $log->is_info && $log->info("Restarting playback at time offset: ". $self->playingSongElapsed());
 		_JumpToTime($self, $event, {newtime => $self->playingSongElapsed(), restartIfNoSeek => 1});
 	}
@@ -1239,7 +1247,6 @@ sub _Stream {				# play -> Buffering, Streaming
 	my $fadeIn = $self->{'fadeIn'} || 0;
 	$paused ||= ($fadeIn > 0);
 	
-	my $setVolume = $self->{'playingState'} == STOPPED;
 	# Bug 18165: master's volume might not be the right one to use
 	my $masterVol;
 	foreach my $player (@{$self->{'players'}}) {
@@ -1250,18 +1257,23 @@ sub _Stream {				# play -> Buffering, Streaming
 	
 	my $startedPlayers = 0;
 	my $reportsTrackStart = 0;
-	
+		
 	# bug 10438
 	$self->resetFrameData();
 	
+	# fade-in has precedence over crossfade only player is stopped
+	$self->{'fadeActive'} = $fadeIn < 1 && $self->{'playingState'} == STOPPED && $prefs->client($self->master)->get('fadeInDuration');
+	
 	foreach my $player (@{$self->{'players'}}) {
-		if ($setVolume) {
+		if ($self->{'playingState'} == STOPPED) {
 			# Bug 10310: Make sure volume is synced if necessary
 			my $vol = ($prefs->client($player)->get('syncVolume'))
 				? $masterVol
 				: abs($prefs->client($player)->get("volume") || 0);
 			$player->volume($vol);
-		}
+			# can't fade_volume here as we might not be playing yet so ramp-up would be lost
+			$player->volume(0,1) if $self->{'fadeActive'};
+		}	
 		
 		my $myFadeIn = $fadeIn;
 		if ($fadeIn > $player->maxTransitionDuration()) {
@@ -1562,6 +1574,7 @@ sub _JumpOrResume {			# resume -> Streaming, Playing
 
 	if (defined $self->{'resumeTime'}) {
 		$self->{'fadeIn'} = FADEVOLUME;
+		
 		_JumpToTime($self, $event, {newtime => $self->{'resumeTime'}, restartIfNoSeek => 1});
 
 		$self->{'resumeTime'} = undef;
@@ -1577,7 +1590,9 @@ sub _Resume {				# resume -> Playing
 	my $song        = playingSong($self);
 	my $pausedAt    = ($self->{'resumeTime'} || 0) - ($song ? ($song->startOffset() || 0) : 0);
 	my $startAtBase = Time::HiRes::time() + ($prefs->get('syncStartDelay') || 200) / 1000;
-
+	
+	$self->{fadeIn} ||= $prefs->client($self->master)->get('fadeInDuration');
+																							
 	_setPlayingState($self, PLAYING);
 	foreach my $player (@{$self->{'players'}})	{
 		# set volume to 0 to make sure fade works properly
@@ -2124,7 +2139,7 @@ sub pause      {
 	# Some protocol handlers don't allow pausing of active streams.
 	# We check if that's the case before continuing.
 	my $song = playingSong($self) || {};
-	my $handler = $song->handler();
+	my $handler = $song->currentTrackHandler();
 
 	if ($handler && $handler->can("canDoAction") &&
 		!$handler->canDoAction(master($self), $song->currentTrack()->url, 'pause'))

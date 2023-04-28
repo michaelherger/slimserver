@@ -14,6 +14,17 @@ sub new {
 	my $args  = shift;
 	my $url   = $args->{'url'} || '';
 
+	if ($url =~ /^http:/) {
+		# only use Slim::Player::Protocols::HTTP methods and we can't just use
+		# directly Slim::Player::Protocols::HTTP::new or method resolution will
+		# ignore *real* base class and any overloaded one will be missed
+		local @ISA = grep { $_ ne 'IO::Socket::SSL' } @ISA;
+		return $class->SUPER::new($args);
+	}
+
+	# upon redirect, we might be upgraded to HTTPS from the previously downgraded object
+	unshift @ISA, 'IO::Socket::SSL' unless grep { $_ eq 'IO::Socket::SSL' } @ISA;
+	
 	my ($server, $port, $path) = Slim::Utils::Misc::crackURL($url);
 
 	if (!$server || !$port) {
@@ -31,80 +42,80 @@ sub new {
 		PeerAddr => $server,
 		PeerPort => $port,
 		SSL_startHandshake => 1,
-		SSL_verify_mode => Net::SSLeay::VERIFY_NONE()		# SSL_VERIFY_NONE isn't recognized on some platforms?!?, and 0x00 isn't always "right"
+		( $prefs->get('insecureHTTPS')
+		  ? (SSL_verify_mode => Net::SSLeay::VERIFY_NONE())           # SSL_VERIFY_NONE isn't recognized on some platforms?!?, and 0x00 isn't always "right"
+		  : () ),
 	) or do {
-
 		$log->error("Couldn't create socket binding to $main::localStreamAddr with timeout: $timeout - $!");
 		return undef;
 	};
 
-	if (defined($sock)) {
-		${*$sock}{'client'}  = $args->{'client'};
-		${*$sock}{'url'}     = $args->{'url'};
-		${*$sock}{'song'}    = $args->{'song'};
+	${*$sock}{'client'}  = $args->{'client'};
+	${*$sock}{'url'}     = $args->{'url'};
+	${*$sock}{'song'}    = $args->{'song'};
 
-		# store a IO::Select object in ourself.
-		# used for non blocking I/O
-		${*$sock}{'_sel'}    = IO::Select->new($sock);
-	}
-				
-	return $sock->request($args);
+	# store a IO::Select object in ourself.
+	# used for non blocking I/O
+	${*$sock}{'_sel'}    = IO::Select->new($sock);
+
+	return $sock->open($args);
 }
 
-# Check whether the current player can stream HTTPS or not 
-sub canDirectStream {
+sub close {
 	my $self = shift;
-	my ($client) = @_;
-	
-	if ( $client->canHTTPS ) {
-		return $self->SUPER::canDirectStream(@_);
+	$self->SUPER::close;
+	# if we are really HTTPS, we also need to call HTTP's close() to let it do cleanup
+	# and it will know that it should not call own parent's close()
+	$self->Slim::Player::Protocols::HTTP::close if $self->isa('IO::Socket::SSL');
+}
+
+# Check whether the current player can stream HTTPS or Url is HTTP
+sub canDirectStream {
+	my $class = shift;
+	my ($client, $url) = @_;
+
+	if ( $client->canHTTPS || $url =~ /^http:/) {
+		return $class->SUPER::canDirectStream(@_);
 	}
 
 	return 0;
 }
 
-# as we are inheriting from IO::Socket::SSL first, we have to re-implement Slim::Player::Protocols::HTTP->sysread here
-sub sysread {
-	my $self = $_[0];
-	my $chunkSize = $_[2];
+# Check whether the current player can stream HTTPS or Url is HTTP
+sub canDirectStreamSong {
+	my $class = shift;
+	my ($client, $song) = @_;
 
-	my $metaInterval = ${*$self}{'metaInterval'};
-	my $metaPointer  = ${*$self}{'metaPointer'};
-
-	if ($chunkSize && $metaInterval && ($metaPointer + $chunkSize) > $metaInterval && ($metaInterval - $metaPointer) > 0) {
-
-		$chunkSize = $metaInterval - $metaPointer;
-
-		# This is very verbose...
-		#$log->debug("Reduced chunksize to $chunkSize for metadata");
+	if ( $client->canHTTPS || $song->streamUrl =~ /^http:/) {
+		return $class->SUPER::canDirectStreamSong(@_);
 	}
 
-	my $readLength = $self->SUPER::sysread($_[1], $chunkSize);
+	return 0;
+}
 
-	if ($metaInterval && $readLength) {
+sub slimprotoFlags {
+	my ($self, $client, $url, $isDirect) = @_;
+	# $url might still be HTTP (see new), so need to check that and direct
+	return ($isDirect && $url =~ /^https:/) ? 0x20 : 0x00;
+}
 
-		$metaPointer += $readLength;
-		${*$self}{'metaPointer'} = $metaPointer;
-
-		# handle instream metadata for shoutcast/icecast
-		if ($metaPointer == $metaInterval) {
-
-			$self->readMetaData();
-
-			${*$self}{'metaPointer'} = 0;
-
-		} elsif ($metaPointer > $metaInterval) {
-
-			main::DEBUGLOG && $log->debug("The shoutcast metadata overshot the interval.");
-		}	
-	}
+# we need that call structure to make sure that SUPER calls the
+# object's parent, not the package's parent
+# see http://modernperlbooks.com/mt/2009/09/when-super-isnt.html
+sub _sysread {
+	my $readLength = $_[0]->SUPER::sysread($_[1], $_[2], $_[3]);
 
 	if (main::ISWINDOWS && !$readLength) {
-		$! = EWOULDBLOCK;
+		$! = EINTR;
 	}
 
 	return $readLength;
 }
-	
+
+# we need to subclass sysread as HTTPS first inherits from IO::Socket::SSL
+sub sysread {
+	return Slim::Player::Protocols::HTTP::sysread(@_);
+}
+
 
 1;

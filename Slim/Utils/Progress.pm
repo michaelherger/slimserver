@@ -1,8 +1,7 @@
 package Slim::Utils::Progress;
 
-# $Id$
 #
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, version 2.
 
@@ -93,7 +92,9 @@ sub new {
 	my $self = $class->SUPER::new();
 	
 	$self->type( $args->{type} || 'NOTYPE' );
-	$self->name( $args->{name} || 'NONAME' );
+	# Scanner progress names may include 'raw' path elements (bytes), needs decoding.
+	my $name = $args->{name} ? Slim::Utils::Unicode::utf8decode_locale($args->{name}) : 'NONAME';
+	$self->name( $name );
 	$self->total( $args->{total} || 0 );
 	$self->start( $now );
 	$self->eta( -1 );
@@ -219,6 +220,7 @@ sub update {
 	if ( $self->dball || $now > $self->dbup + UPDATE_DB_INTERVAL ) {
 		$self->dbup($now);
 	
+		# Scanner progress updates may include 'raw' path elements (bytes) in 'info', needs decoding.
 		$self->_update_db( {
 			done => $done,
 			info => $info ? Slim::Utils::Unicode::utf8decode_locale($info) : '',

@@ -56,7 +56,7 @@ PLUGIN_RHAPSODY_DIRECT_RPDS_FAULT
 	EN	Internal Napster Error: %s
 	ES	Error interno de Napster: %s
 	FI	Sisäinen Napster virhe: %s
-	FR	Erreur interne Napster: %s
+	FR	Erreur interne Napster : %s
 	IT	Errore interno di Napster: %s
 	NL	Interne Napster-foutmelding: %s
 	NO	Intern Napster-feil: %s
@@ -73,14 +73,14 @@ PLUGIN_RHAPSODY_DIRECT_RPDS_INVALID
 	FI	Virheellinen Napster vastaus soittimelta.
 	FR	Réponse Napster non valide de la part de la platine.
 	IT	Risposta Napster non valida dal lettore.
-	NL	Ongeldige Napster-respons van muzieksysteem.
+	NL	Ongeldige Napster-respons van muziekspeler.
 	NO	Ugyldig Napster-respons fra spilleren.
 	PL	Nieprawidłowa odpowiedź dla usługi Napster z odtwarzacza.
 	RU	Недействительный ответ Napster от плеера.
 	SV	Ogiltigt Napster-svar från spelaren.
 
 PLUGIN_RHAPSODY_DIRECT_RPDS_TIMEOUT
-	CS	Není možná komunikace s Napster.
+	CS	Nelze komunikovat s Napster.
 	DA	Det var ikke muligt at kommunikere med Napster.
 	DE	Verbindung mit Napster nicht möglich.
 	EN	Unable to communicate with Napster.
@@ -103,7 +103,7 @@ PLUGIN_RHAPSODY_DIRECT_RPDS_SSL_ERROR
 	FI	Soitin ei voinut kommunikoida Napster kanssa.
 	FR	La platine n'a pas pu communiquer avec Napster.
 	IT	Il lettore non è stato in grado di comunicare con Napster.
-	NL	Muzieksysteem kan niet met Napster communiceren.
+	NL	Muziekspeler kan niet met Napster communiceren.
 	NO	Spilleren kunne ikke kommunisere med Napster.
 	PL	Odtwarzacz nie mógł połączyć się z usługą Napster.
 	RU	Плееру не удалось обменяться данными с Napster.
@@ -118,7 +118,7 @@ PLUGIN_RHAPSODY_DIRECT_PLAYER_REQUIRED
 	FI	Tämä soitin ei tue Napsteria. Vaaditaan Squeezebox2 tai uudempi.
 	FR	Cette platine ne prend pas en charge Napster. Vous devez disposer de Squeezebox2 ou d'une version ultérieure.
 	IT	Questo lettore non supporta Napster. È necessario utilizzare Squeezebox2 o versione successiva.
-	NL	Dit muzieksysteem biedt geen ondersteuning voor Napster. Een Squeezebox2 of hoger is vereist.
+	NL	Deze muziekspeler biedt geen ondersteuning voor Napster. Een Squeezebox2 of hoger is vereist.
 	NO	Denne spilleren støtter ikke Napster. En Squeezebox2 eller høyere er påkrevd.
 	PL	Ten odtwarzacz nie obsługuje usługi Napster. Wymagane jest urządzenie Squeezebox2 lub nowsze.
 	RU	Этот плеер не поддерживает Napster. Требуется Squeezebox2 или более высокой версии.
@@ -140,7 +140,7 @@ PLUGIN_RHAPSODY_DIRECT_US_ONLY
 	SV	Napster är för närvarande endast tillgängligt i USA.
 
 PLUGIN_RHAPSODY_DIRECT_STREAM_FAILED
-	CS	Selhání zvukového proudu, přechod na další stopu.
+	CS	Selhání zvukového proudu, přechod na další skladbu.
 	DA	Fejl i lydstream, springer til næste spor.
 	DE	Audio-Stream-Fehler, nächster Titel wird aufgerufen.
 	EN	Audio stream failed, skipping to next track.
@@ -170,7 +170,7 @@ PLUGIN_RHAPSODY_DIRECT_LOGGING_IN
 	SV	Loggar in på Napster...
 
 PLUGIN_RHAPSODY_DIRECT_GETTING_TRACK_INFO
-	CS	Získávání informací o stopě...
+	CS	Získávání informací o skladbě...
 	DA	Henter oplysninger om nummer...
 	DE	Titelinfos werden geladen...
 	EN	Getting track info...
@@ -185,7 +185,7 @@ PLUGIN_RHAPSODY_DIRECT_GETTING_TRACK_INFO
 	SV	Hämtar spårinformation...
 
 PLUGIN_RHAPSODY_DIRECT_NO_TRACK
-	CS	Není možné načíst stopu pro kanál.
+	CS	Nelze načíst skladbu pro kanál.
 	DA	Nummeret kunne ikke hentes fra kanalen.
 	DE	Titel für Sender konnte nicht geladen werden.
 	EN	Unable to retrieve track for channel.
@@ -200,7 +200,7 @@ PLUGIN_RHAPSODY_DIRECT_NO_TRACK
 	SV	Det går inte att hämta spåret till kanalen.
 
 PLUGIN_RHAPSODY_DIRECT_NO_NEXT_TRACK
-	CS	Není možné načíst další stopu, zkuste znovu stiskem PLAY.
+	CS	Nelze načíst další skladbu, stiskněte tlačítko PLAY a zkuste to znovu.
 	DA	Det næste nummer kunne ikke hentes. Tryk på Afspil for at forsøge igen.
 	DE	Nächster Titel konnte nicht geladen werden, drücken Sie zum Wiederholen PLAY.
 	EN	Unable to retrieve next track, press PLAY to try again.
@@ -215,7 +215,7 @@ PLUGIN_RHAPSODY_DIRECT_NO_NEXT_TRACK
 	SV	Det gick inte att hämta nästa spår. Tryck på Spela om du vill försöka igen.
 
 PLUGIN_RHAPSODY_DIRECT_ERROR_ACCOUNT
-	CS	Není možné získat detaily o účtu ze mysqueezebox.com.
+	CS	Nelze získat detaily o účtu z mysqueezebox.com.
 	DA	Det var ikke muligt at hente kontodetaljer fra mysqueezebox.com.
 	DE	Konnte über das mysqueezebox.com keine Kontoinformationen finden.
 	EN	Unable to retrieve account details from mysqueezebox.com.
@@ -245,7 +245,7 @@ PLUGIN_RHAPSODY_DIRECT_INVALID_SESSION
 	SV	Felaktig uppspelningssession. Endast tre strömmar kan spelas upp samtidigt.
 
 PLUGIN_RHAPSODY_DIRECT_TOO_MANY_SYNCED
-	CS	Napster nemůže přehrávat s tolika synchronizovanými přehrávači. Odsynchronizujte laskavě jeden nebo více přehrávačů.
+	CS	Napster nemůže přehrávat s tolika synchronizovanými přehrávači. Zrušte prosím synchronizaci jednoho nebo více přehrávačů.
 	DA	Napster kan ikke spille når der er så mange synkroniserede afspillere. Du skal ophæve synkroniseringen med en eller flere afspillere.
 	DE	Napster funktioniert nicht, wenn so viele Player synchronisiert sind. Heben Sie die Synchronisierung eines oder mehrerer Player auf.
 	EN	Napster cannot play with this many players synced.  Please unsync one or more players.
@@ -253,7 +253,7 @@ PLUGIN_RHAPSODY_DIRECT_TOO_MANY_SYNCED
 	FI	Napster ei toimi, jos näin monta soitinta on synkronoitu.  Poista yhden tai useamman soittimen synkronointi.
 	FR	Napster ne peut fonctionner avec autant de platines synchronisées. Veuillez désynchroniser au moins une platine.
 	IT	Impossibile utilizzare Napster con un numero così elevato di lettori sincronizzati. Annullare la sincronizzazione di uno o più lettori.
-	NL	Napster kan niet spelen wanneer er zoveel muzieksystemen gesynchroniseerd zijn. Hef de synchronisatie van een of meer systemen op.
+	NL	Napster kan niet spelen wanneer er zoveel muziekspelers gesynchroniseerd zijn. Hef de synchronisatie van een of meer systemen op.
 	NO	Napster kan ikke brukes med så mange synkroniserte spillere. Du må fjerne én eller flere spillere fra synkroniseringen.
 	PL	Odtwarzanie przez usługę Napster przy takiej liczbie zsynchronizowanych odtwarzaczy jest niemożliwe. Wyłącz synchronizację co najmniej jednego odtwarzacza.
 	RU	Napster не может воспроизводить, когда синхронизируется так много плееров. Отмените синхронизацию для одного или нескольких плееров.
@@ -290,7 +290,7 @@ PLUGIN_RHAPSODY_DIRECT_ON_RHAPSODY_EU
 	SV	På Napster
 
 PLUGIN_RHAPSODY_DIRECT_DNS_ERROR
-	CS	Není možné najít adresu pro Napster.
+	CS	Nelze najít adresu pro Napster.
 	DA	Adressen til Napster blev ikke fundet.
 	DE	Adresse für Napster nicht gefunden.
 	EN	Unable to find address for Napster.
@@ -305,7 +305,7 @@ PLUGIN_RHAPSODY_DIRECT_DNS_ERROR
 	SV	Det gick inte att hitta någon Napster-adress.
 
 PLUGIN_RHAPSODY_DIRECT_FIRMWARE_UPGRADE_REQUIRED
-	CS	K použití Napster stiskněte a podržte JAS k aktualizaci vašeho firmware.
+	CS	Chcete-li používat Napster, stiskněte a podržte tlačítko BRIGHTNESS a aktualizujte firmware.
 	DA	Hvis du vil bruge Napster, skal du holde BRIGHTNESS nede for at opdatere firmwaren.
 	DE	Wenn Sie Napster nutzen möchten, halten Sie BRIGHTNESS gedrückt, um die Firmware zu aktualisieren.
 	EN	To use Napster, press and hold BRIGHTNESS to update your firmware.

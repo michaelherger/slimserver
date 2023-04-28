@@ -1,10 +1,9 @@
 package Slim::Utils::Log;
 
-# $Id$
 
-# Logitech Media Server Copyright 2001-2011 Dan Sully, Logitech.
+# Logitech Media Server Copyright 2001-2020 Dan Sully, Logitech.
 # This program is free software; you can redistribute it and/or
-# modify it under the terms of the GNU General Public License, 
+# modify it under the terms of the GNU General Public License,
 # version 2.
 
 =head1 NAME
@@ -44,6 +43,7 @@ use Log::Log4perl::Appender::Screen;
 use Log::Log4perl::Appender::File;
 use Path::Class;
 use Scalar::Util qw(blessed);
+use Storable;
 
 use Slim::Utils::OSDetect;
 
@@ -61,6 +61,45 @@ my %debugLine     = ();
 my $persist       = 0;
 
 my @validLevels   = qw(OFF FATAL ERROR WARN INFO DEBUG);
+
+my $logGroups = {
+	SERVER => {
+		categories => {
+			'server'                 => 'DEBUG',
+			'server.plugins'         => 'DEBUG',
+		},
+		label => 'DEBUG_SERVER_CHOOSE',
+	},
+	RADIO => {
+		categories => {
+			'formats.audio'          => 'DEBUG',
+			'network.asyncdns'       => 'DEBUG',
+			'network.squeezenetwork' => 'DEBUG',
+		},
+		label => 'DEBUG_RADIO',
+	},
+	TRANSCODING => {
+		categories => {
+			'player.source'          => 'DEBUG',
+			'player.streaming'       => 'DEBUG',
+		},
+		label => 'DEBUG_TRANSCODING',
+	},
+	SCANNER => {
+		categories => {
+			'scan'                   => 'DEBUG',
+			'scan.auto'              => 'DEBUG',
+			'scan.scanner'           => 'DEBUG',
+			'scan.import'            => 'DEBUG',
+			'artwork'                => 'DEBUG',
+			'database.info'          => 'DEBUG',
+			'database.virtuallibraries' => 'DEBUG',
+			'formats.audio'          => 'DEBUG',
+			'formats.playlists'      => 'DEBUG',
+		},
+		label => 'DEBUG_SCANNER_CHOOSE',
+	},
+};
 
 =head2 isInitialized( )
 
@@ -93,7 +132,7 @@ sub init {
 
 	# call poor man's log rotation
 	if (!main::SCANNER) {
-		
+
 		Slim::Utils::OSDetect::getOS->logRotate($logDir);
 	}
 
@@ -124,13 +163,13 @@ sub init {
 		# Add our default root logger
 		my @levels = ('ERROR', $logtype);
 
-		if (!$::daemon || !$::quiet) {
+		if (!$::daemon && !$::quiet) {
 			push @levels, 'screen';
 		}
 
 		$config{'log4perl.rootLogger'} = join(', ', @levels);
 	}
-	
+
 	# Make sure recreate option is set if user has an existing log.conf
 	if ( !main::ISWINDOWS && !$ENV{NYTPROF} ) {
 		$config{'log4perl.appender.server.recreate'}              = 1;
@@ -140,11 +179,11 @@ sub init {
 		$config{'log4perl.appender.server.recreate'}              = 0;
 		$config{'log4perl.appender.server.recreate_check_signal'} = '';
 	}
-	
+
 	# Change to syslog if requested
 	if ( $args->{logfile} && $args->{logfile} eq 'syslog' ) {
 		delete $config{$_} for grep { /^log4perl.appender/ } keys %config;
-		
+
 		%config = (%config, $class->_syslogAppenders);
 	}
 
@@ -357,6 +396,18 @@ sub addLogCategory {
 			$descriptions{$category} = $desc;
 		}
 
+		if (my $addToLogGroups = $args->{'logGroups'}) {
+			if (!ref $addToLogGroups) {
+				$addToLogGroups = [$addToLogGroups];
+			}
+
+			foreach (@$addToLogGroups) {
+				if ($logGroups->{$_}) {
+					$logGroups->{$_}->{'categories'}->{$args->{category}} = 'DEBUG';
+				}
+			}
+		}
+
 		return logger($args->{'category'});
 	}
 
@@ -415,7 +466,7 @@ sub setLogLevelForCategory {
 
 =head2 isValidCategory ( category )
 
-Returns true if the passed category is valid. 
+Returns true if the passed category is valid.
 
 Returns false otherwise.
 
@@ -787,67 +838,31 @@ sub _readConfig {
 }
 
 sub logGroups {
-	return {
-		SERVER => {
-			categories => {
-				'server'                 => 'DEBUG',
-				'server.plugins'         => 'DEBUG',
-			},
-			label => 'DEBUG_SERVER_CHOOSE',
-		},
-		RADIO => {
-			categories => {
-				'formats.audio'          => 'DEBUG',
-				'network.asyncdns'       => 'DEBUG',
-				'network.squeezenetwork' => 'DEBUG',
-			},
-			label => 'DEBUG_RADIO',
-		},
-		TRANSCODING => {
-			categories => {
-				'player.source'          => 'DEBUG',
-				'player.streaming'       => 'DEBUG',
-			},
-			label => 'DEBUG_TRANSCODING',
-		},
-		SCANNER => {
-			categories => {
-				'scan'                   => 'DEBUG',
-				'scan.auto'              => 'DEBUG',
-				'scan.scanner'           => 'DEBUG',
-				'scan.import'            => 'DEBUG',
-				'artwork'                => 'DEBUG',
-				'database.info'          => 'DEBUG',
-				'plugin.itunes'          => 'DEBUG',
-				'plugin.musicip'         => 'DEBUG',
-			},
-			label => 'DEBUG_SCANNER_CHOOSE',
-		},
-	};
+	return Storable::dclone($logGroups);
 }
 
 # logging options we want to pass to the scanner
 sub getScannerLogOptions {
 	my $class = shift;
-	
+
 	my $options = $class->logGroups()->{SCANNER}->{categories};
 	my $defaults = $class->logLevels();
-	
+
 	foreach my $key (keys %$options) {
 
 		$options->{$key} = $runningConfig{"log4perl.logger.$key"} || $defaults->{$key};
-		
+
 	}
-	
+
 	return $options;
 }
 
 sub setLogGroup {
 	my ($class, $group, $persist) = @_;
-	
+
 	my $levels     = $class->logLevels($group);
 	my $categories = $class->allCategories();
-		
+
 	for my $category (keys %{$categories}) {
 		$class->setLogLevelForCategory(
 			$category, $levels->{$category} || 'ERROR'
@@ -860,7 +875,7 @@ sub setLogGroup {
 
 sub logLevels {
 	my $group = $_[1];
-	
+
 	my $categories = {
 		'server'                     => 'ERROR',
 		'server.memory'              => 'OFF',
@@ -868,6 +883,7 @@ sub logLevels {
 		'server.scheduler'           => 'ERROR',
 		'server.select'              => 'ERROR',
 		'server.timers'              => 'ERROR',
+		'server.update'              => 'ERROR',
 
 		'artwork'                    => 'ERROR',
 		'artwork.imageproxy'         => 'ERROR',
@@ -901,7 +917,7 @@ sub logLevels {
 		'control.command'            => 'ERROR',
 		'control.queries'            => 'ERROR',
 		'control.stdio'              => 'ERROR',
-		
+
 		'menu.trackinfo'             => 'ERROR',
 
 		'player.alarmclock'          => 'ERROR',
@@ -919,6 +935,7 @@ sub logLevels {
 		'player.sync'                => 'ERROR',
 		'player.text'                => 'ERROR',
 		'player.ui'                  => 'ERROR',
+		'player.ui.screensaver'      => 'ERROR',
 
 		'scan'                       => 'ERROR',
 		'scan.auto'                  => 'DEBUG', # XXX forced on because there will be problems
@@ -929,12 +946,10 @@ sub logLevels {
 
 		'perfmon'                    => 'WARN, screen-raw, perfmon', # perfmon assumes this is set to WARN
 	};
-	
+
 	$categories->{'network.squeezenetwork'} = 'ERROR' unless main::NOMYSB;
 
 	return $categories unless $group;
-	
-	my $logGroups = logGroups();
 
 	foreach (keys %{ $logGroups->{$group}->{categories} }) {
 		$categories->{$_} = $logGroups->{$group}->{categories}->{$_};
@@ -1013,7 +1028,7 @@ sub _defaultAppenders {
 
 sub _syslogAppenders {
 	my $class = shift;
-	
+
 	eval { require Log::Dispatch::Syslog };
 	if ( $@ ) {
 		die "Unable to enable syslog support: $@\n";

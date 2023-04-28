@@ -1,11 +1,9 @@
 package Slim::Formats::XML;
 
-# $Id$
-
-# Copyright 2006-2009 Logitech
+# Logitech Media Server Copyright 2006-2020 Logitech.
 
 # This program is free software; you can redistribute it and/or
-# modify it under the terms of the GNU General Public License, 
+# modify it under the terms of the GNU General Public License,
 # version 2.
 
 # This class handles retrieval and parsing of remote XML feeds (OPML and RSS)
@@ -15,7 +13,7 @@ use File::Slurp;
 use HTML::Entities;
 use JSON::XS::VersionOneAndTwo;
 use Scalar::Util qw(weaken);
-use URI::Escape qw(uri_escape uri_escape_utf8);
+use URI::Escape qw(uri_escape_utf8);
 use XML::Simple;
 
 use Slim::Music::Info;
@@ -27,6 +25,8 @@ use Slim::Utils::Log;
 use Slim::Utils::Prefs;
 use Slim::Utils::Strings qw(string);
 
+use constant IS_TUNEIN_RE => qr/(?:radiotime|tunein)\.com/i;
+
 # How long to cache parsed XML data
 our $XML_CACHE_TIME = 300;
 
@@ -35,19 +35,19 @@ my $prefs = preferences('server');
 
 sub _cacheKey {
 	my ( $url, $client ) = @_;
-	
+
 	my $cachekey = $url;
-	
+
 	if ($client) {
 		$cachekey .= '-' . ($client->languageOverride || '');
 	}
-	
+
 	return $cachekey . '_parsedXML';
 }
 
 sub getCachedFeed {
 	my ( $class, $url, $client ) = @_;
-	
+
 	my $cache = Slim::Utils::Cache->new();
 	return $cache->get( _cacheKey($url, $client) );
 }
@@ -55,9 +55,9 @@ sub getCachedFeed {
 sub getFeedAsync {
 	my $class = shift;
 	my ( $cb, $ecb, $params ) = @_;
-	
+
 	my $url = $params->{'url'};
-	
+
 	# Try to load a cached copy of the parsed XML
 	my $cache = Slim::Utils::Cache->new();
 	my $feed  = $cache->get( _cacheKey($url, $params->{client}) );
@@ -68,7 +68,7 @@ sub getFeedAsync {
 
 		return $cb->( $feed, $params );
 	}
-	
+
 	if (Slim::Music::Info::isFileURL($url)) {
 
 		my $path    = Slim::Utils::Misc::pathFromFileURL($url);
@@ -93,6 +93,10 @@ sub getFeedAsync {
 		$handler->explodePlaylist($params->{client}, $url, sub {
 			my ($tracks) = @_;
 
+			# explode playlist might return a full opml list
+			return $cb->($tracks, $params) if ref $tracks eq 'HASH';
+
+			# if not, this is just an array of url
 			return $cb->({
 				'type'  => 'opml',
 				'title' => '',
@@ -110,14 +114,14 @@ sub getFeedAsync {
 				],
 			}, $params);
 		});
-		
+
 		return;
 	}
 
 	if ($feed) {
 		return $cb->( $feed, $params );
 	}
-	
+
 	my $http = Slim::Networking::SimpleAsyncHTTP->new(
 		\&gotViaHTTP, \&gotErrorViaHTTP, {
 
@@ -130,7 +134,7 @@ sub getFeedAsync {
 	});
 
 	main::INFOLOG && $log->is_info && $log->info("Async request: $url");
-	
+
 	# Bug 3165
 	# Override user-agent and Icy-Metadata headers so we appear to be a web browser
 	my $ua = Slim::Utils::Misc::userAgentString();
@@ -141,27 +145,27 @@ sub getFeedAsync {
 		'Icy-Metadata' => '',
 	);
 
-	if ( $url =~ /(?:radiotime|tunein\.com)/ ) {
+	if ( $url =~ IS_TUNEIN_RE ) {
 		# Add the TuneIn username
-		if ( $url !~ /username/ && $url =~ /(?:presets|title)/ 
-			&& Slim::Utils::PluginManager->isEnabled('Slim::Plugin::InternetRadio::Plugin') 
+		if ( $url !~ /username/ && $url =~ /(?:presets|title)/
+			&& Slim::Utils::PluginManager->isEnabled('Slim::Plugin::InternetRadio::Plugin')
 			&& ( my $username = Slim::Plugin::InternetRadio::TuneIn->getUsername($params->{client}) )
 		) {
 			$url .= '&username=' . uri_escape_utf8($username);
 		}
 	}
-	
+
 	# If the URL is on SqueezeNetwork, add session headers or login first
 	if ( !main::NOMYSB && Slim::Networking::SqueezeNetwork->isSNURL($url) && !$params->{no_sn} ) {
-		
+
 		# Sometimes from the web we won't have a client, so pick a random one
 		$params->{client} ||= Slim::Player::Client::clientRandom();
-		
+
 		my %snHeaders = Slim::Networking::SqueezeNetwork->getHeaders( $params->{client} );
 		while ( my ($k, $v) = each %snHeaders ) {
 			$headers{$k} = $v;
 		}
-		
+
 		# Don't require SN session for public URLs
 		if ( $url !~ m|/public/| ) {
 			main::INFOLOG && $log->is_info && $log->info("URL requires SqueezeNetwork session");
@@ -171,13 +175,13 @@ sub getFeedAsync {
 				$ecb->( string('SQUEEZENETWORK_NO_PLAYER_CONNECTED'), $params );
 				return;
 			}
-		
+
 			if ( my $snCookie = Slim::Networking::SqueezeNetwork->getCookie( $params->{client} ) ) {
 				$headers{Cookie} = $snCookie;
 			}
 			else {
 				main::INFOLOG && $log->is_info && $log->info("Logging in to SqueezeNetwork to obtain session ID");
-		
+
 				# Login and get a session ID
 				Slim::Networking::SqueezeNetwork->login(
 					client => $params->{client},
@@ -187,7 +191,7 @@ sub getFeedAsync {
 
 							main::INFOLOG && $log->is_info && $log->info('Got SqueezeNetwork session ID');
 						}
-				
+
 						$http->get( $url, %headers );
 					},
 					ecb   => sub {
@@ -195,7 +199,7 @@ sub getFeedAsync {
 						$ecb->( $error, $params );
 					},
 				);
-		
+
 				return;
 			}
 		}
@@ -208,7 +212,7 @@ sub gotViaHTTP {
 	my $http = shift;
 	my $params = $http->params();
 	my $feed;
-	
+
 	my $ct = $http->headers()->content_type;
 
 	if ( main::DEBUGLOG && $log->is_debug ) {
@@ -275,7 +279,7 @@ sub gotViaHTTP {
 		$ecb->( '{PARSE_ERROR}', $params->{'params'} );
 		return;
 	}
-	
+
 	# Cache the parsed XML or raw response
 	if ( Slim::Utils::Misc::shouldCacheURL( $http->url ) ) {
 
@@ -348,14 +352,14 @@ sub parseXMLIntoFeed {
 	my $type    = shift || 'text/xml';
 
 	my $xml;
-	
+
 	if ( $type =~ /json/ ) {
 		$xml = from_json($$content);
 	}
 	else {
 		$xml = xmlToHash($content);
 	}
-	
+
 	# convert XML into data structure
 	if ($xml && $xml->{'body'}) {
 
@@ -363,11 +367,11 @@ sub parseXMLIntoFeed {
 
 		# its OPML outline
 		return parseOPML($xml);
-		
+
 	} elsif ($xml && $xml->{'entry'}) {
 
 		main::DEBUGLOG && $log->is_debug && $log->debug("Parsing body as Atom");
-		
+
 		# It's Atom
 		return parseAtom($xml);
 
@@ -396,22 +400,53 @@ sub parseRSS {
 		'managingEditor' => unescapeAndTrim($xml->{'channel'}->{'managingEditor'}),
 		'xmlns:slim'     => unescapeAndTrim($xml->{'xmlsns:slim'}),
 	);
-	
-	# look for an image
-	if ( ref $xml->{'channel'}->{'image'} ) {
-		
+
+	# Look for an image
+
+	# Note: we take special care to ensure that "$feed{'image'}" is only ever
+	# populated with a *scalar* value. Anything else will break Jive browsing
+	# (SlimBrowserApplet) when it attempts to fetch artwork.
+	# E.g. If a broken podcast provides an empty 'url' tag, 'XMLin' would interpret it
+	# as an empty hash ref. So we explicitly guard against such occurrences.
+
+	# Prefer an 'itunes:image' if it exists, because some publishers seem to mess up
+	# the standard RSS image.
+	if ( ref $xml->{'itunes:image'} eq 'HASH' ) {
+		my $href = $xml->{'itunes:image'}->{'href'};
+		$feed{'image'} = $href unless ref $href;
+	}
+	elsif ( ref $xml->{'channel'}->{'itunes:image'} eq 'HASH' ) {
+		my $href = $xml->{'channel'}->{'itunes:image'}->{'href'};
+		$feed{'image'} = $href unless ref $href;
+	}
+	elsif ( ref $xml->{'channel'}->{'image'} ) {
+
 		my $image = $xml->{'channel'}->{'image'};
-		my $url   = $image->{'url'};
-		
+		my $url = "";
+		if (ref $image eq 'HASH') {
+			# conventional RSS feeds simply provide one image element
+			$url = $image->{'url'};
+		}
+		elsif (ref $image eq 'ARRAY') {
+			# some RSS feeds provide several variant image elements
+			# we pick the first one
+			$url = $image->[0]->{'url'};
+		}
+
 		# some Podcasts have the image URL in the link tag
 		if ( !$url && $image->{'link'} && $image->{'link'} =~ /(jpg|gif|png)$/i ) {
 			$url = $image->{'link'};
 		}
-		
-		$feed{'image'} = $url;
+
+		$feed{'image'} = trim($url) unless ref $url; # scalar value only !
 	}
-	elsif ( $xml->{'itunes:image'} ) {
-		$feed{'image'} = $xml->{'itunes:image'}->{'href'};
+
+	if (my $language = $xml->{'channel'}->{'language'}) {
+		$feed{language} = unescapeAndTrim($language);
+	}
+
+	if (my $author = $xml->{'channel'}->{'author'} || $xml->{'channel'}->{'itunes:author'}) {
+		$feed{author} = unescapeAndTrim($author);
 	}
 
 	# some feeds (slashdot) have items at same level as channel
@@ -444,12 +479,19 @@ sub parseRSS {
 			$item{'duration'} = unescapeAndTrim($itemXML->{'itunes:duration'});
 			$item{'explicit'} = unescapeAndTrim($itemXML->{'itunes:explicit'});
 
+			# Use episode specific image if there is one.
+			if (ref $itemXML->{'itunes:image'} eq 'HASH') {
+				my $href = $itemXML->{'itunes:image'}->{'href'};
+				# We only want a non null scalar
+				$item{'image'} = $href if $href && ! ref $href;
+			}
+
 			# don't duplicate data
-			if ( $itemXML->{'itunes:subtitle'} && $itemXML->{'title'} && 
+			if ( $itemXML->{'itunes:subtitle'} && $itemXML->{'title'} &&
 				$itemXML->{'itunes:subtitle'} ne $itemXML->{'title'} ) {
 				$item{'subtitle'} = unescapeAndTrim($itemXML->{'itunes:subtitle'});
 			}
-			
+
 			if ( $itemXML->{'itunes:summary'} && $itemXML->{'description'} &&
 				$itemXML->{'itunes:summary'} ne $itemXML->{'description'} ) {
 				$item{'summary'} = unescapeAndTrim($itemXML->{'itunes:summary'});
@@ -474,21 +516,21 @@ sub parseRSS {
 
 		push @{$feed{'items'}}, \%item;
 	}
-	
+
 	return \%feed;
 }
 
 # Parse Atom feeds into the same format as RSS
 sub parseAtom {
 	my $xml = shift;
-	
+
 	# Handle text constructs
 	for my $field ( qw(title subtitle tagline) ) {
 		if ( ref $xml->{$field} eq 'HASH' ) {
 			$xml->{$field} = $xml->{$field}->{content};
 		}
 	}
-	
+
 	# Support Person construct
 	if ( ref $xml->{author} eq 'HASH' ) {
 		my $name = $xml->{author}->{name};
@@ -497,7 +539,7 @@ sub parseAtom {
 		}
 		$xml->{author} = $name;
 	}
-	
+
 	my %feed = (
 		'type'           => 'rss',
 		'items'          => [],
@@ -507,25 +549,26 @@ sub parseAtom {
 		'managingEditor' => unescapeAndTrim($xml->{'author'}),
 		'xmlns:slim'     => unescapeAndTrim($xml->{'xmlsns:slim'}),
 	);
-	
+
 	# look for an image
-	if ( $xml->{'logo'} ) {
-		$feed{'image'} = $xml->{'logo'};
+	# but ensure it's a *scalar* value, anything else will break Jive browsing
+	if ( $xml->{'logo'} && ! ref $xml->{'logo'} ) {
+		$feed{'image'} = trim($xml->{'logo'});
 	}
-	
+
 	my $count = 1;
-	
+
 	my $items = $xml->{'entry'} || [];
 
 	for my $itemXML ( @{$items} ) {
-		
+
 		# Handle text constructs
 		for my $field ( qw(summary title) ) {
 			if ( ref $itemXML->{$field} eq 'HASH' ) {
 				$itemXML->{$field} = $itemXML->{$field}->{content};
 			}
 		}
-		
+
 		my %item = (
 			'description' => unescapeAndTrim($itemXML->{'summary'}),
 			'title'       => unescapeAndTrim($itemXML->{'title'}),
@@ -535,7 +578,7 @@ sub parseAtom {
 			# image is included in each item due to the way XMLBrowser works
 			'image'       => $feed{'image'},
 		);
-		
+
 		# some Atom streams come with multiple link items, one of them pointing to the stream (enclosure)
 		# create a valid enclosure element our XMLBrowser implementations understand
 		if ( !$item{link} && $itemXML->{link} && ref $itemXML->{link} && ref $itemXML->{link} eq 'ARRAY' ) {
@@ -565,7 +608,7 @@ sub parseAtom {
 # represent OPML in a simple data structure compatable with INPUT.Choice mode.
 sub parseOPML {
 	my $xml = shift;
-	
+
 	my $head = $xml->{head};
 
 	my $opml = {
@@ -573,36 +616,36 @@ sub parseOPML {
 		'title' => unescapeAndTrim($head->{'title'}),
 		'items' => _parseOPMLOutline($xml->{'body'}->{'outline'}),
 	};
-	
+
 	# Optional command to run (used by Pandora)
 	if ( $xml->{'command'} ) {
 		$opml->{'command'} = $xml->{'command'};
-		
+
 		# Optional flag to abort OPML processing after command is run
 		$opml->{abort} = $xml->{abort} if $xml->{abort};
 	}
-	
+
 	# Optional item to indicate if the list is sorted
 	if ( $xml->{sorted} ) {
 		$opml->{sorted} = $xml->{sorted};
 	}
-	
+
 	# respect cache time as returned by the data source
 	if ( defined $head->{cachetime} ) {
 		$opml->{cachetime} = $head->{cachetime} + 0;
 	}
-	
+
 	# Optional windowId to support nextWindow
 	if ( $head->{windowId} ) {
 		$opml->{windowId} = $head->{windowId};
 	}
-	
+
 	# Bug 15343, a menu may define forceRefresh in the head to always
 	# be refreshed when accessing this menu item
 	if ( $head->{forceRefresh} ) {
 		$opml->{forceRefresh} = 1;
 	}
-	
+
 	$xml = undef;
 
 	# Don't leak
@@ -621,11 +664,13 @@ sub _parseOPMLOutline {
 
 		my $url = $itemXML->{'url'} || $itemXML->{'URL'} || $itemXML->{'xmlUrl'};
 
+		next if $url && $url =~ IS_TUNEIN_RE && $itemXML && ref $itemXML && $itemXML->{key} && $itemXML->{key} eq 'unavailable';
+
 		# Some programs, such as OmniOutliner put garbage in the URL.
 		if ($url) {
 			$url =~ s/^.*?<(\w+:\/\/.+?)>.*$/$1/;
 		}
-		
+
 		# Pull in all attributes we find
 		my %attrs;
 		for my $attr ( keys %{$itemXML} ) {
@@ -664,12 +709,12 @@ sub xmlToHash {
 		$@ = "Invalid XML feed\n";
 
 	} else {
-		
+
 		# make 2 passes at parsing:
 		# 1. Parse content as-is
 		# 2. Try decoding invalid characters
 		for my $pass ( 1..2 ) {
-		
+
 			if ( $pass == 2 ) {
 				# Some feeds have invalid (usually Windows encoding) in a UTF-8 XML file.
 				my @lines = ();
@@ -694,7 +739,7 @@ sub xmlToHash {
 				# keyattr => [] prevents id attrs from overriding
 				$xml = XMLin( ref $content ? $content : \$content, 'forcearray' => [qw(item outline entry)], 'keyattr' => []);
 			};
-			
+
 			if ($@) {
 				$log->warn("Pass $pass failed to parse: $@");
 			}
@@ -736,7 +781,7 @@ sub unescape {
 
 	# Decode all entities in-place
 	decode_entities($data);
-	
+
 	# Unescape URI (some Odeo OPML needs this)
 	$data =~ s/%([0-9A-Fa-f]{2})/chr(hex($1))/eg;
 

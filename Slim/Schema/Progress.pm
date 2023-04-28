@@ -1,6 +1,5 @@
 package Slim::Schema::Progress;
 
-# $Id$
 
 use strict;
 use base 'Slim::Schema::DBI';
@@ -14,7 +13,7 @@ use base 'Slim::Schema::DBI';
 	$class->set_primary_key('id');
 
 	if ($] > 5.007) {
-		$class->utf8_columns(qw/info/);
+		$class->utf8_columns(qw/name info/);
 	}
 }
 

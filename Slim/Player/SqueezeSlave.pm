@@ -1,8 +1,7 @@
 package Slim::Player::SqueezeSlave;
 
-# $Id$
 
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -197,7 +196,6 @@ sub songElapsedSeconds {
 	
 	if ($client->isPlaying(1)) {
 		my $timeDiff = Time::HiRes::time() - $client->jiffiesToTimestamp($jiffies);
-		#logBacktrace($client->id, ": songElapsed=$songElapsed, jiffies=$jiffies, timeDiff=$timeDiff");
 		$songElapsed += $timeDiff if ($timeDiff > 0);
 	}
 	

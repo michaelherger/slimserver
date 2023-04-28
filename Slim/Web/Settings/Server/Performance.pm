@@ -1,8 +1,7 @@
 package Slim::Web::Settings::Server::Performance;
 
-# $Id$
 
-# Logitech Media Server Copyright 2001-2011 Logitech.
+# Logitech Media Server Copyright 2001-2020 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -23,7 +22,7 @@ sub page {
 }
 
 sub prefs {
-	my @prefs = ( $prefs, qw(dbhighmem disableStatistics serverPriority scannerPriority 
+	my @prefs = ( $prefs, qw(dbhighmem disableStatistics serverPriority scannerPriority useBalancedShuffle
  				precacheArtwork maxPlaylistLength useLocalImageproxy dontTriggerScanOnPrefChange) );
  	push @prefs, qw(autorescan autorescan_stat_interval) if Slim::Utils::OSDetect::getOS->canAutoRescan;
  	return @prefs;

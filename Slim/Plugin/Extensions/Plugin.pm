@@ -102,9 +102,9 @@ my $log = Slim::Utils::Log->addLogCategory({
 
 my $prefs = preferences('plugin.extensions');
 
-$prefs->init({ repos => [], plugin => {}, auto => 0 });
+$prefs->init({ repos => [], plugin => {}, auto => 0, useUnsupported => 0 });
 
-$prefs->migrate(2, 
+$prefs->migrate(2,
 				sub {
 					# find any plugins already installed via previous version of extension downloader and save as selected
 					# this should avoid trying to remove existing plugins when this version is first loaded
@@ -127,13 +127,19 @@ $prefs->migrate(3,
 
 my %repos = (
 	# default repos mapped to weight which defines the order they are sorted in
-	'https://repos.squeezecommunity.org/extensions.xml' => 1,
+	'https://github.com/LMS-Community/lms-plugin-repository/raw/master/extensions.xml' => 1,
 );
+
+my $UNSUPPORTED_REPO = 'https://github.com/LMS-Community/lms-plugin-repository/raw/master/unsupported.xml';
+
+$prefs->setChange(\&initUnsupportedRepo, 'useUnsupported');
 
 sub initPlugin {
 	my $class = shift;
 
 	$class->SUPER::initPlugin;
+
+	initUnsupportedRepo();
 
 	for my $repo (keys %repos) {
 		Slim::Control::Jive::registerExtensionProvider($repo, \&getExtensions);
@@ -208,6 +214,14 @@ sub repos {
 	return \%repos;
 }
 
+sub initUnsupportedRepo {
+	if ($prefs->get('useUnsupported')) {
+		$repos{$UNSUPPORTED_REPO} = 1;
+	}
+	else {
+		delete $repos{$UNSUPPORTED_REPO};
+	}
+}
 
 # This query compares the list of provided apps to the policy setting for apps which should be installed
 # If an app is in the wrong state it sends back an action with details of what to change
@@ -227,8 +241,8 @@ sub appsQuery {
 	for my $repo (keys %repos) {
 
 		getExtensions({
-			'name'   => $repo, 
-			'type'   => $args->{'type'}, 
+			'name'   => $repo,
+			'type'   => $args->{'type'},
 			'target' => $args->{'targetPlat'} || Slim::Utils::OSDetect::OS(),
 			'version'=> $args->{'targetVers'} || $::VERSION,
 			'lang'   => $args->{'lang'} || $Slim::Utils::Strings::currentLang,
@@ -362,10 +376,10 @@ sub findUpdates {
 
 		if (!defined $current->{ $app } || Slim::Utils::Versions->compareVersions($apps->{ $app }->{'version'}, $current->{ $app }) > 0){
 
-			main::INFOLOG && $log->info("$app action install version " . $apps->{ $app }->{'version'} . 
+			main::INFOLOG && $log->info("$app action install version " . $apps->{ $app }->{'version'} .
 										($current->{ $app } ? (" from " . $current->{ $app }) : ''));
 
-			$actions->{ $app } = { action => 'install', url => $apps->{ $app }->{'url'}, sha => $apps->{ $app }->{'sha'} };
+			$actions->{ $app } = { action => 'install', url => $apps->{ $app }->{'url'}, sha => lc($apps->{ $app }->{'sha'}) };
 
 			$actions->{ $app }->{'info'} = $apps->{ $app } if $info;
 		}
@@ -420,19 +434,19 @@ sub _parseResponse {
 
 	my $xml  = {};
 
-	eval { 
+	eval {
 		$xml = XMLin($http->content,
 			SuppressEmpty => undef,
-			KeyAttr     => { 
-				title   => 'lang', 
-				desc    => 'lang', 
+			KeyAttr     => {
+				title   => 'lang',
+				desc    => 'lang',
 				changes => 'lang'
 			},
 			ContentKey  => '-content',
 			GroupTags   => {
-				applets => 'applet', 
-				sounds  => 'sound', 
-				wallpapers => 'wallpaper', 
+				applets => 'applet',
+				sounds  => 'sound',
+				wallpapers => 'wallpaper',
 				plugins => 'plugin',
 				patches => 'patch',
 			},
@@ -511,7 +525,7 @@ sub _parseXML {
 				'version' => $entry->{'version'},
 			};
 
-			$new->{'sha'} = $entry->{'sha'} if $entry->{'sha'};
+			$new->{'sha'} = lc($entry->{'sha'}) if $entry->{'sha'};
 
 			$debug && $log->debug("entry $new->{name} vers: $new->{version} url: $new->{url}");
 
@@ -532,6 +546,9 @@ sub _parseXML {
 				if ($entry->{'changes'} && ref $entry->{'changes'} eq 'HASH') {
 					$new->{'changes'} = $entry->{'changes'}->{ $lang } || $entry->{'changes'}->{ 'EN' };
 				}
+				elsif (!ref $entry->{changes}) {
+					$new->{changes} = $entry->{changes};
+				}
 				$new->{changes} = '' if ref $new->{changes};
 
 				$new->{'link'}    = $entry->{'link'}    if $entry->{'link'};
@@ -551,7 +568,7 @@ sub _parseXML {
 
 	if ($details) {
 
-		if ( $xml->{details} && $xml->{details}->{title} 
+		if ( $xml->{details} && $xml->{details}->{title}
 				 && ($xml->{details}->{title}->{$lang} || $xml->{details}->{title}->{EN}) ) {
 
 			$repoTitle = $xml->{details}->{title}->{$lang} || $xml->{details}->{title}->{EN};
