@@ -1,0 +1,62 @@
+name: Build LMS
+on:
+  push:
+  workflow_dispatch:
+
+env:
+  BUILD_TYPE: nightly
+
+jobs:
+  linux:
+    name: Build LMS for Linux
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        flavour:
+          - [debian, "--x86_64"]
+          - [debian, "--arm"]
+          - [debian, "--i386"]
+          - [debian, ""]
+          - [rpm, ""]
+          - [tarball, "--arm"]
+          - [tarball, "--noCPAN"]
+          - [tarball, ""]
+
+    steps:
+      - name: Check out LMS code
+        uses: actions/checkout@v3
+        with:
+          path: server
+
+      - name: Prepare build environment
+        id: preparation
+        run: |
+          sudo apt update
+          sudo apt install apt-transport-https debhelper devscripts
+
+          MAJOR=$(grep "\$VERSION" server/slimserver.pl | head -n1 | cut -d"'" -f2 | cut -d. -f1)
+          MINOR=$(grep "\$VERSION" server/slimserver.pl | head -n1 | cut -d"'" -f2 | cut -d. -f2)
+
+          echo "LMS_VERSION=public/$MAJOR.$MINOR" >> $GITHUB_OUTPUT
+
+      - name: Check out LMS platform code
+        uses: actions/checkout@v3
+        with:
+          repository: Logitech/slimserver-platforms
+          path: platforms
+          ref: ${{ steps.preparation.outputs.LMS_VERSION }}
+
+      - name: Build ${{ matrix.flavour[0] }} ${{ matrix.flavour[1] }} package
+        run: |
+          BUILD_PATH=$GITHUB_WORKSPACE/work
+          DEST_PATH=$GITHUB_WORKSPACE/publish
+
+          mkdir -p $BUILD_PATH
+          mkdir -p $DEST_PATH
+
+          platforms/buildme.pl --build ${{ matrix.flavour[0] }} ${{ matrix.flavour[1] }} --buildDir $BUILD_PATH --sourceDir $GITHUB_WORKSPACE --destDir $DEST_PATH --releaseType ${{ env.BUILD_TYPE }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          path: publish
