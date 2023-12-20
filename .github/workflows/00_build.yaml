@@ -8,6 +8,7 @@ env:
 
 jobs:
   linux:
+    if: false
     name: Build LMS for Linux
     runs-on: ubuntu-22.04
     strategy:
@@ -60,3 +61,23 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           path: publish
+
+  windows:
+    name: Build LMS for Windows
+    runs-on: windows-2022
+    steps:
+      - uses: GuillaumeFalourd/setup-rsync@v1.2
+
+      - name: test
+        shell: cmd
+        run: set
+
+      - name: Check out LMS code
+        uses: actions/checkout@v3
+        with:
+          path: server
+
+      - uses: ./server/.github/actions/build
+        with:
+          build-params: win64
+          build-type: ${{ env.BUILD_TYPE }}
