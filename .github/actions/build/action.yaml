@@ -29,14 +29,11 @@ runs:
         path: platforms
         ref: ${{ steps.preparation.outputs.LMS_VERSION }}
 
-    - name: Build ${{ inputs.build-params }} package
+    - name: Build ${{ inputs.build-params }} package on ${{ runner.os }}
       shell: bash
       run: |
-        SRC_PATH=$GITHUB_WORKSPACE
-
-        if [ "$RUNNER_OS" == "Windows" ]; then
-          SRC_PATH=$(cygpath $SRC_PATH)
-        fi
+        # SRC_PATH=$GITHUB_WORKSPACE
+        SRC_PATH=$PWD
 
         BUILD_PATH=$SRC_PATH/work
         DEST_PATH=$SRC_PATH/publish

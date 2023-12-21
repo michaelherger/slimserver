@@ -2,6 +2,8 @@ name: Build LMS
 on:
   push:
   workflow_dispatch:
+  # schedule: only if more recent than
+  # https://github.com/nvim-neorocks/luarocks-tag-release#version-optional
 
 env:
   BUILD_TYPE: nightly
@@ -66,18 +68,47 @@ jobs:
     name: Build LMS for Windows
     runs-on: windows-2022
     steps:
-      - uses: GuillaumeFalourd/setup-rsync@v1.2
-
-      - name: test
-        shell: cmd
-        run: set
-
+      # we must check out here, as  otherwise the build action is not available
       - name: Check out LMS code
         uses: actions/checkout@v3
         with:
           path: server
 
-      - uses: ./server/.github/actions/build
+      - name: Install rsync
+        shell: bash
+        run: |
+          curl -L https://github.com/facebook/zstd/releases/download/v1.5.5/zstd-v1.5.5-win64.zip --output xxx
+          unzip xxx
+          cp zstd-v1.5.5-win64/zstd.exe  'c:\Program Files\Git\usr\bin\'
+          rm -rf zstd* xxx
+
+          curl -L https://repo.msys2.org/msys/x86_64/rsync-3.2.7-2-x86_64.pkg.tar.zst --output xxx
+          tar -I zstd -xvf xxx
+          cp usr/bin/rsync.exe 'c:\Program Files\Git\usr\bin\'
+          rm -rf xxx usr
+
+          curl -L https://repo.msys2.org/msys/x86_64/libzstd-1.5.5-1-x86_64.pkg.tar.zst --output xxx
+          tar -I zstd -xvf xxx
+          cp usr/bin/msys-zstd-1.dll 'c:\Program Files\Git\usr\bin\'
+          rm -rf xxx usr
+
+          curl -L https://repo.msys2.org/msys/x86_64/libxxhash-0.8.1-1-x86_64.pkg.tar.zst --output xxx
+          tar -I zstd -xvf xxx
+          cp usr/bin/msys-xxhash-0.dll 'c:\Program Files\Git\usr\bin\'
+          rm -rf xxx usr
+
+          curl -L https://repo.msys2.org/msys/x86_64/liblz4-1.9.4-1-x86_64.pkg.tar.zst --output xxx
+          tar -I zstd -xvf xxx
+          cp usr/bin/msys-lz4-1.dll 'c:\Program Files\Git\usr\bin\'
+          rm -rf xxx usr
+
+          curl -L https://repo.msys2.org/msys/x86_64/libopenssl-3.1.1-1-x86_64.pkg.tar.zst --output xxx
+          tar -I zstd -xvf xxx
+          cp usr/bin/msys-crypto-3.dll 'c:\Program Files\Git\usr\bin\'
+          rm -rf xxx usr .BUILDINFO .MTREE .PKGINFO
+
+      - name: Launch build process...
+        uses: ./server/.github/actions/build
         with:
           build-params: win64
           build-type: ${{ env.BUILD_TYPE }}
