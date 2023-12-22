@@ -1,10 +1,6 @@
 name: Build LMS
 on:
-  # TODO - remove before merging to master! We don't want to build on every commit
-  push:
   workflow_dispatch:
-  # schedule: only if more recent than
-  # https://github.com/nvim-neorocks/luarocks-tag-release#version-optional
 
 env:
   BUILD_TYPE: nightly

@@ -44,7 +44,7 @@ runs:
 
     # TODO - upload to S3
     - name: Upload artifacts
-      if: true
+      if: false
       uses: actions/upload-artifact@v3
       with:
         path: publish
