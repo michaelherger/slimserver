@@ -40,6 +40,32 @@ jobs:
           build-params: ${{ matrix.flavour[0] }} ${{ matrix.flavour[1] }}
           build-type: ${{ env.BUILD_TYPE }}
 
+  docker:
+    name: Build LMS for Docker
+    runs-on: ubuntu-22.04
+
+    steps:
+      # we must check out here, as  otherwise the build action is not available
+      - name: Check out LMS code
+        uses: actions/checkout@v3
+        with:
+          path: server
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Launch build process
+        uses: ./server/.github/actions/build
+        with:
+          build-params: docker
+          build-type: ${{ env.BUILD_TYPE }}
+
   windows:
     name: Build LMS for Windows
     runs-on: windows-2022

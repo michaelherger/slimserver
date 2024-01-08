@@ -20,14 +20,30 @@ runs:
         MAJOR=$(grep "\$VERSION" server/slimserver.pl | head -n1 | cut -d"'" -f2 | cut -d. -f1)
         MINOR=$(grep "\$VERSION" server/slimserver.pl | head -n1 | cut -d"'" -f2 | cut -d. -f2)
 
-        echo "LMS_VERSION=public/$MAJOR.$MINOR" >> $GITHUB_OUTPUT
+        echo "LMS_VERSION=$MAJOR.$MINOR" >> $GITHUB_OUTPUT
+        echo "GIT_BRANCH=public/$MAJOR.$MINOR" >> $GITHUB_OUTPUT
 
     - name: Check out LMS platform code
       uses: actions/checkout@v3
       with:
         repository: Logitech/slimserver-platforms
         path: platforms
-        ref: ${{ steps.getversion.outputs.LMS_VERSION }}
+        ref: ${{ steps.getversion.outputs.GIT_BRANCH }}
+
+    - name: Set up Docker environment
+      if: ${{ startsWith(inputs.build-params, 'docker') }}
+      id: dockersetup
+      shell: bash
+      run: |
+        if [ "${{ steps.getversion.outputs.LMS_VERSION }}" = "8.4" ]; then
+          echo "LMS_TAG=--tag=dev" >> $GITHUB_OUTPUT
+        else
+          echo "LMS_TAG=--tag=stable" >> $GITHUB_OUTPUT
+        fi
+
+        echo TEMPORARY DOCKER DEV ONLY!!!!
+        sed -ie "s/lmscommunity/mherger/" platforms/buildme.pl
+        egrep "tag.*logitechmediaserver" platforms/buildme.pl
 
     - name: Build ${{ inputs.build-params }} package on ${{ runner.os }}
       shell: bash
@@ -40,7 +56,7 @@ runs:
         mkdir -p $BUILD_PATH
         mkdir -p $DEST_PATH
 
-        platforms/buildme.pl --build ${{ inputs.build-params }} --buildDir $BUILD_PATH --sourceDir $SRC_PATH --destDir $DEST_PATH --releaseType ${{ inputs.build-type }}
+        platforms/buildme.pl --build ${{ inputs.build-params }} ${{ steps.dockersetup.outputs.LMS_TAG }} --buildDir $BUILD_PATH --sourceDir $SRC_PATH --destDir $DEST_PATH --releaseType ${{ inputs.build-type }}
 
     # TODO - upload to S3
     - name: Upload artifacts
