@@ -35,7 +35,7 @@ runs:
       id: dockersetup
       shell: bash
       run: |
-        if [ "${{ steps.getversion.outputs.LMS_VERSION }}" = "8.4" ]; then
+        if [ "${{ steps.getversion.outputs.LMS_VERSION }}" = "8.5" ]; then
           echo "LMS_TAG=--tag=dev" >> $GITHUB_OUTPUT
         else
           echo "LMS_TAG=--tag=stable" >> $GITHUB_OUTPUT

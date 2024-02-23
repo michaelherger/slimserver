@@ -6,8 +6,33 @@ env:
   BUILD_TYPE: nightly
 
 jobs:
+  mac:
+    name: Build LMS for Mac
+    if: false
+    runs-on: self-hosted
+    steps:
+      - name: some test
+        run: |
+          echo Here I am!
+          pwd
+          mkdir -p /tmp/actions-runner-files/
+          touch /tmp/actions-runner-files/test-file
+
+      # we must check out here, as  otherwise the build action is not available
+      - name: Check out LMS code
+        uses: actions/checkout@v4
+        with:
+          path: server
+
+      - name: Launch build process
+        uses: ./server/.github/actions/build
+        with:
+          build-params: tarball "--noCPAN"
+          build-type: ${{ env.BUILD_TYPE }}
+
   linux:
     name: Build LMS for Linux
+    if: false
     runs-on: ubuntu-22.04
     strategy:
       matrix:
@@ -24,7 +49,7 @@ jobs:
     steps:
       # we must check out here, as  otherwise the build action is not available
       - name: Check out LMS code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           path: server
 
@@ -42,12 +67,13 @@ jobs:
 
   docker:
     name: Build LMS for Docker
+    if: false
     runs-on: ubuntu-22.04
 
     steps:
       # we must check out here, as  otherwise the build action is not available
       - name: Check out LMS code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           path: server
 
@@ -68,11 +94,12 @@ jobs:
 
   windows:
     name: Build LMS for Windows
+    if: false
     runs-on: windows-2022
     steps:
       # we must check out here, as  otherwise the build action is not available
       - name: Check out LMS code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           path: server
 
