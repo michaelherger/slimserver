@@ -1,11 +1,45 @@
 name: Build LMS
+
+# Test using act: act -W .github/workflows/00_build.yaml --pull=false
+
 on:
   workflow_dispatch:
-
-env:
-  BUILD_TYPE: nightly
+    inputs:
+      branch:
+        type: string
+        description: 'The branch from which to build from'
+        required: true
+        default: 'public/8.5'
+      build_type:
+        type: choice
+        description: 'Is this a nightly or a release build?'
+        required: true
+        default: 'nightly'
+        options:
+          - nightly
+          - release
 
 jobs:
+  input-test:
+    name: Testing dynamic input
+    runs-on: ubuntu-22.04
+    steps:
+      - run: |
+          echo ${{ inputs.branch }}
+          echo ${{ inputs.release_type }}
+          pwd
+      - name: Check out LMS code
+        uses: actions/checkout@v4
+        with:
+          # repository: Logitech/slimserver
+          path: server
+          ref: ${{ inputs.branch }}
+      - run: |
+          pwd
+          ls -al
+          cd server
+          git log -n5
+
   mac:
     name: Build LMS for Mac
     if: false
@@ -23,28 +57,29 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: server
+          ref: ${{ inputs.branch }}
 
       - name: Launch build process
         uses: ./server/.github/actions/build
         with:
           build-params: tarball "--noCPAN"
-          build-type: ${{ env.BUILD_TYPE }}
+          build-type: ${{ inputs.build_type }}
 
   linux:
     name: Build LMS for Linux
-    if: false
+    # if: false
     runs-on: ubuntu-22.04
     strategy:
       matrix:
         flavour:
-          - [debian, "--x86_64"]
-          - [debian, "--arm"]
-          - [debian, "--i386"]
-          - [debian, ""]
-          - [rpm, ""]
-          - [tarball, "--arm"]
+          # - [debian, "--x86_64"]
+          # - [debian, "--arm"]
+          # - [debian, "--i386"]
+          # - [debian, ""]
+          # - [rpm, ""]
+          # - [tarball, "--arm"]
+          # - [tarball, ""]
           - [tarball, "--noCPAN"]
-          - [tarball, ""]
 
     steps:
       # we must check out here, as  otherwise the build action is not available
@@ -52,6 +87,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: server
+          ref: ${{ inputs.branch }}
 
       - name: Prepare build environment
         if: ${{ matrix.flavour[0] != 'tarball' }}
@@ -63,7 +99,7 @@ jobs:
         uses: ./server/.github/actions/build
         with:
           build-params: ${{ matrix.flavour[0] }} ${{ matrix.flavour[1] }}
-          build-type: ${{ env.BUILD_TYPE }}
+          build-type: ${{ inputs.build_type }}
 
   docker:
     name: Build LMS for Docker
@@ -76,6 +112,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: server
+          ref: ${{ inputs.branch }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -90,7 +127,7 @@ jobs:
         uses: ./server/.github/actions/build
         with:
           build-params: docker
-          build-type: ${{ env.BUILD_TYPE }}
+          build-type: ${{ inputs.build_type }}
 
   windows:
     name: Build LMS for Windows
@@ -102,6 +139,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: server
+          ref: ${{ inputs.branch }}
 
       - name: Install rsync
         shell: bash
@@ -140,4 +178,4 @@ jobs:
         uses: ./server/.github/actions/build
         with:
           build-params: win64
-          build-type: ${{ env.BUILD_TYPE }}
+          build-type: ${{ inputs.build_type }}

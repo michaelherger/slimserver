@@ -24,7 +24,7 @@ runs:
         echo "GIT_BRANCH=public/$MAJOR.$MINOR" >> $GITHUB_OUTPUT
 
     - name: Check out LMS platform code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         repository: Logitech/slimserver-platforms
         path: platforms
