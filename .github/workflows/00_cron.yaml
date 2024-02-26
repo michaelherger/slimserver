@@ -54,15 +54,25 @@ jobs:
 
               if (commitStatus.status !== 200) {
                 console.log(JSON.stringify(commitStatus, null, 2));
-                next();
+                continue;
               }
 
               // see whether there's really been a commit since that timestamp - above "since" would be inclusive
               const needsBuild = commitStatus.data.find(commit => new Date(commit.commit.committer.date).getTime() > latestBuildTimestamp);
 
-              // TODO - trigger build if needed
               if (needsBuild) {
                 console.log(`${candidates[i].v}: needs a build (${new Date(needsBuild.commit.committer.date).getTime()} > ${latestBuildTimestamp})`);
+
+                const workflowStatus = await github.rest.actions.createWorkflowDispatch({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  workflow_id: '00_build.yaml',
+                  ref: 'public/' + candidates[i].v,
+                });
+
+                if (workflowStatus.status < 200 || workflowStatus.status > 204) {
+                  console.log(workflowStatus);
+                }
               }
               else {
                 console.log(`${candidates[i].v}: is up to date (${candidates[i].r})`);
