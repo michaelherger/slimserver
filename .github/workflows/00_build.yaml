@@ -9,7 +9,7 @@ on:
         type: string
         description: 'The branch from which to build from'
         required: true
-        default: 'public/8.5'
+        default: 'gh-build'
       build_type:
         type: choice
         description: 'Is this a nightly or a release build?'
@@ -20,37 +20,19 @@ on:
           - release
 
 jobs:
-  input-test:
-    name: Testing dynamic input
-    runs-on: ubuntu-22.04
-    steps:
-      - run: |
-          echo ${{ inputs.branch }}
-          echo ${{ inputs.release_type }}
-          pwd
-      - name: Check out LMS code
-        uses: actions/checkout@v4
-        with:
-          # repository: Logitech/slimserver
-          path: server
-          ref: ${{ inputs.branch }}
-      - run: |
-          pwd
-          ls -al
-          cd server
-          git log -n5
-
   mac:
     name: Build LMS for Mac
-    if: false
+    # if: false
     runs-on: self-hosted
+    timeout-minutes: 2    # increase once we're actually building...
+    env:
+      BASEDIR: gh-build
     steps:
-      - name: some test
+      - name: Clean up build host
         run: |
-          echo Here I am!
           pwd
-          mkdir -p /tmp/actions-runner-files/
-          touch /tmp/actions-runner-files/test-file
+          # ssh ${{ secrets.MAC_CONNECT_STRING }} "mkdir -p rm -rf $BASEDIR/work $BASEDIR/publish $BASEDIR/build"
+          ssh ${{ secrets.MAC_CONNECT_STRING }} "ls $BASEDIR; echo \$(pwd)"
 
       # we must check out here, as  otherwise the build action is not available
       - name: Check out LMS code
@@ -59,26 +41,54 @@ jobs:
           path: server
           ref: ${{ inputs.branch }}
 
-      - name: Launch build process
-        uses: ./server/.github/actions/build
+      - name: Get Version Nunber
+        id: getversion
+        run: |
+          MAJOR=$(grep "\$VERSION" server/slimserver.pl | head -n1 | cut -d"'" -f2 | cut -d. -f1)
+          MINOR=$(grep "\$VERSION" server/slimserver.pl | head -n1 | cut -d"'" -f2 | cut -d. -f2)
+
+          echo "LMS_VERSION=$MAJOR.$MINOR" >> $GITHUB_OUTPUT
+          echo "GIT_BRANCH=public/$MAJOR.$MINOR" >> $GITHUB_OUTPUT
+
+      - name: Check out LMS platform code
+        uses: actions/checkout@v4
         with:
-          build-params: tarball "--noCPAN"
-          build-type: ${{ inputs.build_type }}
+          repository: Logitech/slimserver-platforms
+          path: platforms
+          ref: ${{ steps.getversion.outputs.GIT_BRANCH }}
+
+      - name: Build on build host
+        shell: bash
+        run: |
+          ssh ${{ secrets.MAC_CONNECT_STRING }} "mkdir -p $BASEDIR; rm -rf $BASEDIR/publish"
+          rsync -a --delete server platforms ${{ secrets.MAC_CONNECT_STRING }}:$BASEDIR/
+
+          ssh ${{ secrets.MAC_CONNECT_STRING }} "cd $BASEDIR && platforms/buildme.pl --build macosx --buildDir \$(pwd)/work --sourceDir \$(pwd) --destDir \$(pwd)/publish --releaseType ${{ inputs.build_type }}"
+
+          rm -rf publish
+          mkdir -p publish
+          scp ${{ secrets.MAC_CONNECT_STRING }}:$BASEDIR/publish/* publish/
+
+          ls -al publish/
+
+          if [ ! -f publish/LogitechMediaServer*pkg ]; then
+            exit 1;
+          fi
 
   linux:
     name: Build LMS for Linux
-    # if: false
+    if: false
     runs-on: ubuntu-22.04
     strategy:
       matrix:
         flavour:
-          # - [debian, "--x86_64"]
-          # - [debian, "--arm"]
-          # - [debian, "--i386"]
-          # - [debian, ""]
-          # - [rpm, ""]
-          # - [tarball, "--arm"]
-          # - [tarball, ""]
+          - [debian, "--x86_64"]
+          - [debian, "--arm"]
+          - [debian, "--i386"]
+          - [debian, ""]
+          - [rpm, ""]
+          - [tarball, "--arm"]
+          - [tarball, ""]
           - [tarball, "--noCPAN"]
 
     steps:
