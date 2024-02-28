@@ -45,7 +45,27 @@ runs:
         sed -ie "s/lmscommunity/mherger/" platforms/buildme.pl
         egrep "tag.*logitechmediaserver" platforms/buildme.pl
 
+    - name: ${{ inputs.build-params }} package on ${{ runner.os }}
+      if: ${{ startsWith(inputs.build-params, 'mac') }}
+      shell: bash
+      run: |
+        ssh ${{ secrets.MAC_CONNECT_STRING }} "mkdir -p $BASEDIR; rm -rf $BASEDIR/publish"
+        rsync -a --delete server platforms ${{ secrets.MAC_CONNECT_STRING }}:$BASEDIR/
+
+        ssh ${{ secrets.MAC_CONNECT_STRING }} "cd $BASEDIR && platforms/buildme.pl --build macosx --buildDir \$(pwd)/work --sourceDir \$(pwd) --destDir \$(pwd)/publish --releaseType ${{ inputs.build_type }}"
+
+        rm -rf publish
+        mkdir -p publish
+        scp ${{ secrets.MAC_CONNECT_STRING }}:$BASEDIR/publish/* publish/
+
+        ls -al publish/
+
+        if [ ! -f publish/LogitechMediaServer*pkg ]; then
+          exit 1;
+        fi
+
     - name: Build ${{ inputs.build-params }} package on ${{ runner.os }}
+      if: ${{ !startsWith(inputs.build-params, 'mac') }}
       shell: bash
       run: |
         SRC_PATH=$PWD
