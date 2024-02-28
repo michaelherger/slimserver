@@ -22,7 +22,6 @@ on:
 jobs:
   mac:
     name: Build LMS for Mac
-    # if: false
     runs-on: self-hosted
     timeout-minutes: 2    # increase once we're actually building...
     env:
@@ -40,21 +39,23 @@ jobs:
         with:
           build-params: macosx
           build-type: ${{ inputs.build_type }}
+          mac-connect-string: ${{ secrets.MAC_CONNECT_STRING }}
+          AWS_KEY_ID: ${{ secrets.AWS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
   linux:
     name: Build LMS for Linux
-    # if: false
     runs-on: ubuntu-22.04
     strategy:
       matrix:
         flavour:
-          # - [debian, "--x86_64"]
-          # - [debian, "--arm"]
-          # - [debian, "--i386"]
-          # - [debian, ""]
-          # - [rpm, ""]
-          # - [tarball, "--arm"]
-          # - [tarball, ""]
+          - [debian, "--x86_64"]
+          - [debian, "--arm"]
+          - [debian, "--i386"]
+          - [debian, ""]
+          - [rpm, ""]
+          - [tarball, "--arm"]
+          - [tarball, ""]
           - [tarball, "--noCPAN"]
 
     steps:
@@ -76,10 +77,11 @@ jobs:
         with:
           build-params: ${{ matrix.flavour[0] }} ${{ matrix.flavour[1] }}
           build-type: ${{ inputs.build_type }}
+          AWS_KEY_ID: ${{ secrets.AWS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
   docker:
     name: Build LMS for Docker
-    if: false
     runs-on: ubuntu-22.04
 
     steps:
@@ -107,7 +109,6 @@ jobs:
 
   windows:
     name: Build LMS for Windows
-    if: false
     runs-on: windows-2022
     steps:
       # we must check out here, as  otherwise the build action is not available
@@ -155,3 +156,7 @@ jobs:
         with:
           build-params: win64
           build-type: ${{ inputs.build_type }}
+          AWS_KEY_ID: ${{ secrets.AWS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+# TODO - re-build repository file

@@ -9,6 +9,12 @@ inputs:
     description: "`nightly` or `production`"
     required: true
     default: nightly
+  mac-connect-string:
+    description: Connection string to be used to to connect to Mac build host.
+  AWS_KEY_ID:
+    description: The key ID to use to upload to S3
+  AWS_SECRET_ACCESS_KEY:
+    description: The secret to use to upload to S3
 
 runs:
   using: composite
@@ -49,20 +55,14 @@ runs:
       if: ${{ startsWith(inputs.build-params, 'mac') }}
       shell: bash
       run: |
-        ssh ${{ secrets.MAC_CONNECT_STRING }} "mkdir -p $BASEDIR; rm -rf $BASEDIR/publish"
-        rsync -a --delete server platforms ${{ secrets.MAC_CONNECT_STRING }}:$BASEDIR/
+        ssh ${{ inputs.mac-connect-string }} "mkdir -p $BASEDIR; rm -rf $BASEDIR/publish"
+        rsync -a --delete server platforms ${{ inputs.mac-connect-string }}:$BASEDIR/
 
-        ssh ${{ secrets.MAC_CONNECT_STRING }} "cd $BASEDIR && platforms/buildme.pl --build macosx --buildDir \$(pwd)/work --sourceDir \$(pwd) --destDir \$(pwd)/publish --releaseType ${{ inputs.build_type }}"
+        ssh ${{ inputs.mac-connect-string }} "cd $BASEDIR && platforms/buildme.pl --build macosx --buildDir \$(pwd)/work --sourceDir \$(pwd) --destDir \$(pwd)/publish --releaseType ${{ inputs.build_type }}"
 
         rm -rf publish
         mkdir -p publish
-        scp ${{ secrets.MAC_CONNECT_STRING }}:$BASEDIR/publish/* publish/
-
-        ls -al publish/
-
-        if [ ! -f publish/LogitechMediaServer*pkg ]; then
-          exit 1;
-        fi
+        scp ${{ inputs.mac-connect-string }}:$BASEDIR/publish/* publish/
 
     - name: Build ${{ inputs.build-params }} package on ${{ runner.os }}
       if: ${{ !startsWith(inputs.build-params, 'mac') }}
@@ -78,9 +78,22 @@ runs:
 
         platforms/buildme.pl --build ${{ inputs.build-params }} ${{ steps.dockersetup.outputs.LMS_TAG }} --buildDir $BUILD_PATH --sourceDir $SRC_PATH --destDir $DEST_PATH --releaseType ${{ inputs.build-type }}
 
-    # TODO - upload to S3
+    - name: Verify results
+      if: ${{ !startsWith(inputs.build-params, 'docker') }}
+      shell: bash
+      run: |
+        if [ ! -f publish/* ]; then
+          exit 1;
+        fi
+
     - name: Upload artifacts
-      if: false
-      uses: actions/upload-artifact@v3
-      with:
-        path: publish
+      if: ${{ !startsWith(inputs.build-params, 'docker') }}
+      shell: bash
+      run: |
+        mkdir -p $HOME/.aws
+        echo "[downloads]" > $HOME/.aws/credentials
+        echo "region=us-east-1" >> $HOME/.aws/credentials
+        echo "aws_access_key_id=${{ inputs.AWS_KEY_ID }}" >> $HOME/.aws/credentials
+        echo "aws_secret_access_key=${{ inputs.AWS_SECRET_ACCESS_KEY }}" >> $HOME/.aws/credentials
+
+        aws --profile downloads s3 cp publish/* "s3://downloads.slimdevices.com/gh-build-test/"
