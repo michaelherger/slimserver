@@ -1,6 +1,7 @@
 package Slim::Control::XMLBrowser;
 
-# Logitech Media Server Copyright 2005-2020 Logitech.
+# Logitech Media Server Copyright 2005-2024 Logitech.
+# Lyrion Music Server Copyright 2024 Lyrion Community.
 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
@@ -1452,10 +1453,7 @@ sub _cliQuery_done {
 				# XXX this is probably obsolete because of move to myapps
 				# make a best effort to make a labeled title for the search
 				my $queryTypes = {
-					rhapsodydirect	=>	'PLUGIN_RHAPSODY_DIRECT_MODULE_NAME',
 					radiotime	=>	'PLUGIN_RADIOTIME_MODULE_NAME',
-					slacker		=>	'PLUGIN_SLACKER_MODULE_NAME',
-					lma		=>	'PLUGIN_LMA_MODULE_NAME',
 				};
 
 				my $title = $search;
@@ -1918,7 +1916,7 @@ sub _favoritesParams {
 	my $item = shift;
 
 	my $favorites_url    = $item->{favorites_url} || $item->{play} || $item->{url};
-	my $favorites_title  = $item->{title} || $item->{name};
+	my $favorites_title  = $item->{favorites_title} || $item->{title} || $item->{name};
 
 	if ( $favorites_url && !ref $favorites_url && $favorites_title ) {
 		if ( !$item->{favorites_url} && $item->{type} && $item->{type} eq 'playlist' && $item->{playlist} && !ref $item->{playlist}) {
@@ -1932,7 +1930,7 @@ sub _favoritesParams {
 		);
 		$presetParams{'parser'} = $item->{'parser'} if $item->{'parser'};
 
-		if (my $icon = $item->{'image'} || $item->{'icon'} || $item->{'cover'}) {
+		if (my $icon = $item->{favorites_icon} || $item->{'image'} || $item->{'icon'} || $item->{'cover'}) {
 			$presetParams{'icon'} = $icon;
 		}
 

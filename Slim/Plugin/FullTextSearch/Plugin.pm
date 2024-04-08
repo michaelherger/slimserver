@@ -11,7 +11,7 @@ use Slim::Utils::Text;
 
 use constant CAN_FTS4 => Slim::Utils::Versions->compareVersions($DBD::SQLite::VERSION, 1.42) > 0;
 
-use constant BUILD_STEPS => 7;
+use constant BUILD_STEPS => 6;
 use constant FIRST_COLUMN => 2;
 use constant LARGE_RESULTSET => 500;
 
@@ -55,6 +55,35 @@ use constant SQL_CREATE_TRACK_ITEM => q{
 		%s
 
 		GROUP BY tracks.id;
+};
+
+use constant SQL_CREATE_WORK_ITEM => q{
+	INSERT %s INTO fulltext (id, type, w10, w5, w3, w1)
+	
+		WITH temp(id,w3) AS (
+			SELECT tracks.id, UNIQUE_TOKENS(CONCAT_CONTRIBUTOR_ROLE(tracks.id, GROUP_CONCAT(contributor_track.contributor, ','), 'contributor_track'))
+			FROM tracks JOIN contributor_track ON contributor_track.track = tracks.id
+			GROUP BY tracks.id
+		)
+	
+		SELECT 'YXLWORKSYYYYYYYYYYYYYYYYYYYYYYYY' || works.id, 'work',
+		-- weight 10
+		UNIQUE_TOKENS(LOWER(IFNULL(works.title, '')) || ' ' || IFNULL(works.titlesearch, '') || ' ' || IFNULL(contributors.namesearch, '')),
+		-- weight 5
+		UNIQUE_TOKENS(IFNULL(tracks.year, '')),
+		-- weight 3
+		UNIQUE_TOKENS(GROUP_CONCAT(temp.w3, ' ')),
+		-- weight 1
+		''
+
+		FROM works
+		LEFT JOIN contributors ON contributors.id = works.composer
+		LEFT JOIN tracks ON works.id = tracks.work
+		JOIN temp on tracks.id = temp.id
+
+		%s
+
+		GROUP BY works.id;
 };
 
 use constant SQL_CREATE_ALBUM_ITEM => q{
@@ -373,8 +402,8 @@ sub parseSearchTerm {
 }
 
 # Calculate the record's weight: columns are weighed according to their importance
-# http://www.sqlite.org/fts3.html#matchinfo
-# http://www.sqlite.org/fts3.html#fts4aux - get information about the index and tokens
+# https://www.sqlite.org/fts3.html#matchinfo
+# https://www.sqlite.org/fts3.html#fts4aux - get information about the index and tokens
 sub _getWeight {
 	my $v = shift;
 
@@ -524,6 +553,13 @@ sub _rebuildIndex {
 	$sql = sprintf(SQL_CREATE_CONTRIBUTOR_ITEM, '', '');
 
 #	main::DEBUGLOG && $scanlog->is_debug && $scanlog->debug($sql);
+	$dbh->do($sql) or $scanlog->error($dbh->errstr);
+	main::idleStreams() unless main::SCANNER;
+
+	$scanlog->error("Create fulltext index for works");
+	$progress && $progress->update(string('WORKS'));
+	Slim::Schema->forceCommit if main::SCANNER;
+	$sql = sprintf(SQL_CREATE_WORK_ITEM, '', '');
 	$dbh->do($sql) or $scanlog->error($dbh->errstr);
 	main::idleStreams() unless main::SCANNER;
 

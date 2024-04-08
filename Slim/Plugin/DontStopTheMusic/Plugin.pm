@@ -1,6 +1,7 @@
 package Slim::Plugin::DontStopTheMusic::Plugin;
 
-# Logitech Media Server Copyright 2001-2020 Logitech.
+# Logitech Media Server Copyright 2001-2024 Logitech.
+# Lyrion Music Server Copyright 2024 Lyrion Community.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -363,10 +364,10 @@ sub getMixableProperties {
 
 	$client = $client->master;
 
-	my ($trackId, $artist, $title, $duration, $mbid, $artist_mbid, $tracks);
+	my ($trackId, $artist, $title, $duration, $mbid, $artist_mbid, $tracks, $extid);
 
 	foreach (@{ Slim::Player::Playlist::playList($client) }) {
-		($artist, $title, $duration, $trackId, $mbid, $artist_mbid) = $class->getMixablePropertiesFromTrack($client, $_);
+		($artist, $title, $duration, $trackId, $mbid, $artist_mbid, $extid) = $class->getMixablePropertiesFromTrack($client, $_);
 
 		next unless defined $artist && defined $title;
 
@@ -376,6 +377,7 @@ sub getMixableProperties {
 			title => $title,
 			mbid => $mbid,
 			artist_mbid => $artist_mbid,
+			extid => $extid,
 		};
 	}
 
@@ -421,6 +423,8 @@ sub getMixablePropertiesFromTrack {
 	my $duration = $track->duration;
 	my $mbid   = $track->musicbrainz_id;
 	my $artist_mbid = $track->artist->musicbrainz_id if $track->artist && !$track->remote;
+	my $extid  = $track->extid;
+	$extid ||= $track->url if $track->remote;
 
 	# we might have to look up titles for remote sources
 	if ( !($artist && $title && $duration) && $track && $track->remote && $url ) {
@@ -433,7 +437,7 @@ sub getMixablePropertiesFromTrack {
 		}
 	}
 
-	return ($artist, $title, $duration, $id, $mbid, $artist_mbid);
+	return ($artist, $title, $duration, $id, $mbid, $artist_mbid, $extid);
 }
 
 

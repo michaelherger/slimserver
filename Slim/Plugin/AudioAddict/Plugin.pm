@@ -1,6 +1,7 @@
 package Slim::Plugin::AudioAddict::Plugin;
 
-# Logitech Media Server Copyright 2001-2023 Logitech.
+# Logitech Media Server Copyright 2001-2024 Logitech.
+# Lyrion Music Server Copyright 2024 Lyrion Community.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -9,10 +10,15 @@ use strict;
 
 use base qw(Slim::Plugin::OPMLBased);
 use File::Spec::Functions qw(catfile);
-use FindBin qw($Bin);
 
 use Slim::Plugin::AudioAddict::API;
 use Slim::Utils::Prefs;
+
+our $pluginDir;
+BEGIN {
+	$pluginDir = $INC{"Slim/Plugin/AudioAddict/Plugin.pm"};
+	$pluginDir =~ s/Plugin.pm$//;
+}
 
 my $log = Slim::Utils::Log->addLogCategory( {
 	category     => 'plugin.audioaddict',
@@ -25,8 +31,7 @@ my $prefs = preferences('plugin.audioaddict');
 sub initPlugin {
 	my ($class) = @_;
 
-	my ($basePackage) = __PACKAGE__ =~ /(.*)::Plugin$/;
-	Slim::Utils::Strings::loadFile(catfile($Bin, split(/::/, $basePackage), 'strings.txt'));
+	Slim::Utils::Strings::loadFile(catfile($pluginDir, 'strings.txt'));
 
 	$class->SUPER::initPlugin(
 		feed   => sub {

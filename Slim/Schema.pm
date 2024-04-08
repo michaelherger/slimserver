@@ -1,7 +1,8 @@
 package Slim::Schema;
 
 
-# Logitech Media Server Copyright 2001-2020 Logitech.
+# Logitech Media Server Copyright 2001-2024 Logitech.
+# Lyrion Music Server Copyright 2024 Lyrion Community.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -16,7 +17,7 @@ my $track = Slim::Schema->objectForUrl($url);
 
 =head1 DESCRIPTION
 
-L<Slim::Schema> is the main entry point for all interactions with Logitech Media Server's
+L<Slim::Schema> is the main entry point for all interactions with Lyrion Music Server's
 database backend. It provides an ORM abstraction layer on top of L<DBI>,
 acting as a subclass of L<DBIx::Class::Schema>.
 
@@ -183,6 +184,8 @@ sub init {
 		Track
 		Year
 		Progress
+		Work
+		Composer
 	/);
 	$class->load_classes('TrackPersistent') unless (!main::STATISTICS);
 
@@ -477,7 +480,7 @@ sub migrateDB {
 
 	} else {
 
-		# this occurs if a user downgrades Logitech Media Server to a version with an older schema and which does not include
+		# this occurs if a user downgrades Lyrion Music Server to a version with an older schema and which does not include
 		# the required downgrade sql scripts - attempt to drop and create the database at current schema version
 
 		if ( $log->is_warn ) {
@@ -865,6 +868,7 @@ sub _objForDbUrl {
 		for my $term (split('&', $values)) {
 			if ($term =~ /(.*)=(.*)/) {
 				my $key = $1;
+				next if $key eq 'composer.name' || $key eq 'work.title' || $key eq 'track.grouping';
 				my $value = Slim::Utils::Misc::unescape($2);
 
 				if (utf8::is_utf8($value)) {
@@ -877,9 +881,10 @@ sub _objForDbUrl {
 		}
 
 		my $params;
+		$params->{prefetch} = [];
 		foreach (keys %$query) {
-			if (/^(.*)\./) {
-				$params->{prefetch} = $1;
+			if (/^(?!composer|work|track)(.*)\./) {
+				push @{ $params->{prefetch} }, $1;
 			}
 		}
 
@@ -944,7 +949,7 @@ sub _createOrUpdateAlbum {
 			!$albumHash->{extid} && $title && $albumHash->{title}
 			&& ( ($albumHash->{title} eq $noAlbum && $title ne $noAlbum) || $differentTitle )
 		) {
-			# https://github.com/Logitech/slimserver/issues/547
+			# https://github.com/LMS-Community/slimserver/issues/547
 			# check whether new album already exists if we're changing album title
 			$albumId = $albumHash->{id} if $differentTitle;
 			$create = 1;
@@ -1457,6 +1462,44 @@ sub _createComments {
 	}
 }
 
+sub _createWork {
+	my ($self, $work, $workSort, $composerID, $create) = @_;
+
+	if ( $work && $composerID ) {
+		# Using native DBI here to improve performance during scanning
+		my $dbh = Slim::Schema->dbh;
+
+		my $titlesort = Slim::Utils::Text::ignoreCaseArticles( $workSort || $work );
+		$titlesort =~ s/(\d+)/sprintf"%04d",$1/eg unless $workSort; #Use the WORKSORT tag as is if provided, otherwise zero-pad numbers. 
+		my $titlesearch = Slim::Utils::Text::ignoreCase($work, 1);
+
+		my $sth = $dbh->prepare_cached('SELECT id FROM works WHERE titlesearch = ? AND composer = ?');
+		$sth->execute($titlesearch, $composerID);
+		my ($workID) = $sth->fetchrow_array;
+		$sth->finish;
+
+		if ( !$workID ) {
+
+			my $sth_insert = $dbh->prepare_cached( qq{
+				INSERT INTO works
+				(composer, title, titlesort, titlesearch)
+				VALUES
+				(?, ?, ?, ?)
+			} );
+
+			$sth_insert->execute( $composerID, $work, $titlesort, $titlesearch );
+
+			main::DEBUGLOG && $log->is_debug && $log->debug("-- Inserted work '$work'");
+
+			return $dbh->last_insert_id(undef, undef, undef, undef);
+
+		} else {
+
+			return $workID;
+		}
+	}
+}
+
 sub _createTrack {
 	my ($self, $columnValueHash, $persistentColumnValueHash, $source) = @_;
 
@@ -1695,6 +1738,9 @@ sub _newTrack {
 		$columnValueHash{primary_artist} = $artist->[0];
 	}
 
+	### Create Work rows
+	my $workID = $self->_createWork($deferredAttributes->{'WORK'}, $deferredAttributes->{'WORKSORT'}, $contributors->{'COMPOSER'}->[0], 1);
+
 	### Find artwork column values for the Track
 	if ( !$columnValueHash{cover} && $columnValueHash{audio} ) {
 		# Track does not have embedded artwork, look for standalone cover
@@ -1727,6 +1773,7 @@ sub _newTrack {
 	);
 
 	### Create Track row
+	$columnValueHash{'work'} = $workID if $workID;
 	$columnValueHash{'album'} = $albumId if !$playlist;
 	$trackId = $self->_createTrack(\%columnValueHash, \%persistentColumnValueHash, $source);
 
@@ -1900,7 +1947,8 @@ sub updateOrCreateBase {
 
 			$key = lc($key);
 
-			if (defined $val && $val ne '' && exists $trackAttrs->{$key}) {
+			## Need to set grouping to null if no value passed in (may have had a value before this scan)
+			if ( (defined $val && $val ne '' || $key eq "grouping") && exists $trackAttrs->{$key} ) {
 
 				main::INFOLOG && $log->is_info && $log->info("Updating $url : $key to $val");
 
@@ -2715,7 +2763,7 @@ sub _preCheckAttributes {
 		COMPILATION REPLAYGAIN_ALBUM_PEAK REPLAYGAIN_ALBUM_GAIN
 		MUSICBRAINZ_ARTIST_ID MUSICBRAINZ_ALBUMARTIST_ID MUSICBRAINZ_ALBUM_ID
 		MUSICBRAINZ_ALBUM_TYPE MUSICBRAINZ_ALBUM_STATUS RELEASETYPE
-		ALBUMARTISTSORT COMPOSERSORT CONDUCTORSORT BANDSORT ALBUM_EXTID ARTIST_EXTID
+		ALBUMARTISTSORT COMPOSERSORT CONDUCTORSORT BANDSORT ALBUM_EXTID ARTIST_EXTID WORK WORKSORT
 	)) {
 
 		next unless defined $attributes->{$tag};
@@ -2746,6 +2794,13 @@ sub _preCheckAttributes {
 		$attributes->{'ALBUMNAME'} = $deferredAttributes->{'ALBUM'} if $deferredAttributes->{'ALBUM'};
 
 		# XXX maybe also want COMMENT & GENRE
+	}
+
+	# set Grouping attribute to null if it doesn't exist or trimmed length is zero, otherwise trim leading/trailing spaces:
+	if ( !exists($attributes->{'GROUPING'}) || length($attributes->{'GROUPING'} =~ s/^\s+|\s+$//gr) == 0 ) {
+		$attributes->{'GROUPING'} = undef;
+	} else {
+		$attributes->{'GROUPING'} =~ s/^\s+|\s+$//g;
 	}
 
 	if (main::DEBUGLOG && $log->is_debug) {
@@ -2921,9 +2976,17 @@ sub _postCheckAttributes {
 	# Walk through the valid contributor roles, adding them to the database.
 	my $contributors = $self->_mergeAndCreateContributors($attributes, $isCompilation, $create);
 
-	my $artist = $contributors->{ARTIST} || $contributors->{TRACKARTIST};
+	my $artist = $contributors->{'ALBUMARTIST'} || $contributors->{ARTIST} || $contributors->{TRACKARTIST};
 	if ($artist) {
 		$cols{primary_artist} = $artist->[0];
+	}
+
+	#Work
+	if (defined $attributes->{'WORK'}) {
+		my $workID = $self->_createWork($attributes->{'WORK'}, $attributes->{'WORKSORT'}, $contributors->{'COMPOSER'}->[0], 1);
+		if ($workID) {
+			$track->work($workID);
+		}
 	}
 
 	### Update Album row
@@ -3159,6 +3222,7 @@ sub totals {
 		genre => ['genres', 0, 1, 'tags:CC'],
 		track => ['titles', 0, 1, 'tags:CC'],
 		playlist => ['playlists', 0, 1, 'tags:CC'],
+		work => ['works', 0, 1, 'tags:CC'],
 	);
 
 	while (my ($key, $query) = each %categories) {

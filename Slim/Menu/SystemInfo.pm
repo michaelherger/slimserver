@@ -1,6 +1,7 @@
 package Slim::Menu::SystemInfo;
 
-# Logitech Media Server Copyright 2001-2020 Logitech.
+# Logitech Media Server Copyright 2001-2024 Logitech.
+# Lyrion Music Server Copyright 2024 Lyrion Community.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -317,13 +318,6 @@ sub infoServer {
 						. ($osDetails->{'osArch'} ? $osDetails->{'osArch'} : 'unknown'),
 		},
 	];
-
-	if ( !main::NOMYSB && $prefs->get('sn_timediff') ) {
-		push @{$items}, {
-			type => 'text',
-			name => cstring($client, 'INFORMATION_TIME_DIFF') . cstring($client, 'COLON') . ' ' . sprintf('%s %s', $prefs->get('sn_timediff'), cstring($client, 'SECONDS')),
-		};
-	}
 
 	if ( Slim::Schema::hasLibrary() ) {
 		push @{$items},	{

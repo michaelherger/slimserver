@@ -1,7 +1,8 @@
 package Slim::Buttons::Common;
 
 
-# Logitech Media Server Copyright 2001-2020 Logitech.
+# Logitech Media Server Copyright 2001-2024 Logitech.
+# Lyrion Music Server Copyright 2024 Lyrion Community.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -99,7 +100,7 @@ my $prefs = preferences('server');
 =head2 init( )
 
 This method must be called before all other Slim::Buttons::* modules.  It
-initialises all other Logitech Media Server core button modules and registers the "Now
+initialises all other Lyrion Music Server core button modules and registers the "Now
 Playing" screensaver.
 
 =cut
@@ -122,12 +123,6 @@ sub init {
 	Slim::Buttons::Power::init();
 	Slim::Buttons::ScreenSaver::init();
 	Slim::Buttons::GlobalSearch::init();
-
-	if (!main::NOMYSB) {
-		require Slim::Buttons::SqueezeNetwork;
-		Slim::Buttons::SqueezeNetwork::init();
-	}
-
 	Slim::Buttons::Synchronize::init();
 	Slim::Buttons::TrackInfo::init();
 	Slim::Buttons::RemoteTrackInfo::init();

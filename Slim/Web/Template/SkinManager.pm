@@ -1,7 +1,8 @@
 package Slim::Web::Template::SkinManager;
 
 
-# Logitech Media Server Copyright 2001-2020 Logitech.
+# Logitech Media Server Copyright 2001-2024 Logitech.
+# Lyrion Music Server Copyright 2024 Lyrion Community.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -288,13 +289,6 @@ sub _resizeImage {
 		# don't use imageproxy on local network
 		if ( $host && (Slim::Utils::Network::ip_is_private($host) || $host =~ /localhost/i) ) {
 			return $url;
-		}
-
-		# fall back to using external image proxy for external resources
-		elsif ( !main::NOMYSB && $url =~ m{^https?://} ) {
-			return Slim::Networking::SqueezeNetwork->url(
-				"/public/imageproxy?w=$width&h=$height&u=" . uri_escape($url)
-			);
 		}
 
 		# $url comes with resizing parameters

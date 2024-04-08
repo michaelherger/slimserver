@@ -6,17 +6,16 @@
 	<importmodule>Slim::Plugin::ExtendedBrowseModes::Libraries</importmodule>
 	<version>1.0</version>
 	<description>PLUGIN_EXTENDED_BROWSEMODES_DESC</description>
-	<creator>Logitech</creator>
+	<creator>Lyrion Community</creator>
 
 	<defaultState>enabled</defaultState>
-	<optionsURL>plugins/ExtendedBrowseModes/settings/browsemodes.html</optionsURL>        
-	<homepageURL>http://www.mysqueezebox.com/support</homepageURL>
+	<optionsURL>plugins/ExtendedBrowseModes/settings/browsemodes.html</optionsURL>
 	<icon>plugins/ExtendedBrowseModes/html/icon.png</icon>
 	<playerMenu>BROWSE_MUSIC</playerMenu>
 	<type>2</type>
 
 	<targetApplication>
-		<id>Logitech Media Server</id>
+		<id>Lyrion Music Server</id>
 		<minVersion>7.9.0</minVersion>
 		<maxVersion>*</maxVersion>
 	</targetApplication>

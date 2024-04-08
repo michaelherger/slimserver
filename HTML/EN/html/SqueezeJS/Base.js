@@ -787,14 +787,6 @@ SqueezeJS.SonginfoParser = {
 					}
 				}
 
-				// SqueezeJS.externalImageProxy must be a template accepting url and size values
-				if (coverart && width && SqueezeJS.externalImageProxy && publicURL) {
-					coverart = SqueezeJS.externalImageProxy.apply({
-						url: encodeURIComponent(coverart),
-						size: width
-					});
-				}
-
 				// some internal logos come without resizing parameters - add them here if size is defined
 				else if (coverart && width && !publicURL) {
 					coverart = coverart.replace(/(icon|image|cover)(\.\w+)$/, "$1_" + width + 'x' + width + "_p$2");
@@ -861,7 +853,7 @@ SqueezeJS.Utils = {
 		return (remaining ? '-' : '') + formattedTime;
 	},
 
-	toggleFavorite : function(el, url, title) {
+	toggleFavorite : function(el, url, title, icon) {
 		var el = Ext.get(el);
 		if (el) {
 			if (SqueezeJS.UI)
@@ -869,7 +861,7 @@ SqueezeJS.Utils = {
 
 			el.getUpdateManager().showLoadIndicator = false;
 			el.load({
-				url: 'plugins/Favorites/favcontrol.html?url=' + url + '&title=' + title + '&player=' + player,
+				url: 'plugins/Favorites/favcontrol.html?url=' + url + '&title=' + title + '&icon=' + icon + '&player=' + player,
 				method: 'GET'
 			});
 		}

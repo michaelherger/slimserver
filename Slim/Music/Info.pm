@@ -1,7 +1,8 @@
 package Slim::Music::Info;
 
 
-# Logitech Media Server Copyright 2001-2020 Logitech.
+# Logitech Media Server Copyright 2001-2024 Logitech.
+# Lyrion Music Server Copyright 2024 Lyrion Community.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -1147,11 +1148,6 @@ sub canSeek {
 
 sub isPlaylistURL {
 	my $url = shift || return 0;
-
-	# XXX: This method is pretty wrong, it says every remote URL is a playlist
-	# Bug 3484, We want rhapsody tracks to display the proper title format so they can't be
-	# seen as a playlist which forces only the title to be displayed.
-	return if $url =~ /^rhap.+wma$/;
 
 	if ($url =~ /^([a-zA-Z0-9\-]+):/) {
 

@@ -1,6 +1,7 @@
 package Slim::Utils::Firmware;
 
-# Logitech Media Server Copyright 2001-2020 Logitech.
+# Logitech Media Server Copyright 2001-2024 Logitech.
+# Lyrion Music Server Copyright 2024 Lyrion Community.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -45,7 +46,7 @@ my $dir;
 my $updatesDir;
 
 # Download location and check interval - this isn't a constant to allow 3rd party plugins to re-use the mechanism (eg. for the community firmware)
-sub BASE { 'http://update.slimdevices.com/update/firmware/' }
+sub BASE { 'http://downloads.lms-community.org/update/firmware/' }
 sub CHECK_INTERVAL { 86400 * 30 }
 
 # Check interval when firmware can't be downloaded
@@ -150,7 +151,7 @@ sub init_version_done {
 	my ($ver, $rev) = $version =~ m/^([^ ]+)\sr(\d+)/;
 
 	# on some systems we don't download firmware files
-	# we'll let the player download them from squeezenetwork directly
+	# we'll let the player download them from the origin host directly
 	if ( Slim::Utils::OSDetect->getOS()->directFirmwareDownload() && BASE() !~ /^https:/ ) {
 
 		$firmwares->{$model} = {
@@ -292,7 +293,7 @@ sub url {
 		return unless ($firmwares->{$model}->{file});	# Will be available immediately if custom f/w
 	}
 
-	# on some systems return the direct link from SqueezeNetwork
+	# on some systems return the direct link from the origin server
 	if ( Slim::Utils::OSDetect->getOS()->directFirmwareDownload() && BASE() !~ /^https:/ ) {
 		return BASE() . $::VERSION . '/' . $model
 			. '_' . $firmwares->{$model}->{version}

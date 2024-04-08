@@ -5,15 +5,14 @@
 	<module>Slim::Plugin::DnDPlay::Plugin</module>
 	<version>0.1</version>
 	<description>PLUGIN_DNDPLAY_DESC</description>
-	<creator>Logitech</creator>
+	<creator>Lyrion Community</creator>
 
 	<defaultState>enabled</defaultState>
-        
-	<homepageURL>http://www.mysqueezebox.com/support</homepageURL>
+
 	<type>2</type>
 
 	<targetApplication>
-		<id>Logitech Media Server</id>
+		<id>Lyrion Music Server</id>
 		<minVersion>7.9</minVersion>
 		<maxVersion>*</maxVersion>
 	</targetApplication>

@@ -1,8 +1,7 @@
 package Slim::Buttons::GlobalSearch;
 
-#	$Id: Information.pm 26931 2009-06-07 03:53:36Z michael $
-#
-#	Copyright (c) 2003-2020 Logitech, Cursor Software Limited.
+#	Logitech Media Server Copyright 2001-2024 Logitech.
+#	Lyrion Music Server Copyright 2024 Lyrion Community.
 #	All rights reserved.
 #
 #	This program is free software; you can redistribute it and/or modify
@@ -27,7 +26,7 @@ Slim::Buttons::GlobalSearch
 
 =head1 DESCRIPTION
 
-L<Slim::Buttons::GlobalSearch> is a Logitech Media Server module to easily
+L<Slim::Buttons::GlobalSearch> is a Lyrion Music Server module to easily
 search content in any search provider available to the server
 
 =cut
@@ -55,7 +54,7 @@ sub setMode {
 		Slim::Buttons::Common::popMode($client);
 		return;
 	}
-	
+
 	Slim::Buttons::Common::pushMode( $client, 'INPUT.Text', {
 		'useMode' => 'INPUT.Text',
 		'header' => 'GLOBAL_SEARCH',
@@ -65,7 +64,7 @@ sub setMode {
 		'numberLetterRef' => 'UPPER',
 		'callback' => \&searchHandler,
 	});
-	
+
 	$client->update();
 }
 
@@ -80,16 +79,16 @@ sub searchHandler {
 		Slim::Buttons::Common::popModeRight($client);
 	}
 	elsif ( $exitType eq 'NEXTCHAR' && defined $search && $search ne '' ) {
-		
+
 		my $tags = {
 			search => $search,
 		};
-	
+
 		my $getMenu = sub {
 			my ( $client, $callback ) = @_;
-	
+
 			my $menu = Slim::Menu::GlobalSearch->menu( $client, $tags );
-			
+
 			if ( $callback ) {
 				# Callback is used during a menu refresh
 				$callback->( $menu );

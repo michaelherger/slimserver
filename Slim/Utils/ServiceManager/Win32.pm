@@ -1,6 +1,7 @@
 package Slim::Utils::ServiceManager::Win32;
 
-# Logitech Media Server Copyright 2001-2020 Logitech.
+# Logitech Media Server Copyright 2001-2024 Logitech.
+# Lyrion Music Server Copyright 2024 Lyrion Community.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -14,8 +15,8 @@ use Win32::Process::List;
 use Win32::Service;
 use Win32::TieRegistry ('Delimiter' => '/');
 
-use constant SC_USER_REGISTRY_KEY => 'CUser/Software/Logitech/SqueezeCenter';
-use constant SB_USER_REGISTRY_KEY => 'CUser/Software/Logitech/Squeezebox';
+use constant LEGACY_USER_REGISTRY_KEY => 'CUser/Software/Logitech/Squeezebox';
+use constant USER_REGISTRY_KEY => 'CUser/Software/Lyrion/server';
 use constant SC_SERVICE_NAME => 'squeezesvc';
 
 use Slim::Utils::OSDetect;
@@ -32,7 +33,7 @@ sub init {
 	return $class;
 }
 
-# Determine how the user wants to start Logitech Media Server
+# Determine how the user wants to start Lyrion Music Server
 sub getStartupType {
 	my %services;
 
@@ -42,7 +43,7 @@ sub getStartupType {
 		return SC_STARTUP_TYPE_SERVICE;
 	}
 
-	if ($Registry->{SB_USER_REGISTRY_KEY . '/StartAtLogin'}) {
+	if ($Registry->{USER_REGISTRY_KEY . '/StartAtLogin'}) {
 		return SC_STARTUP_TYPE_LOGIN;
 	}
 
@@ -79,7 +80,7 @@ sub setStartupType {
 	my ($class, $type, $username, $password) = @_;
 	$username = '' unless defined $username;
 
-	$Registry->{SB_USER_REGISTRY_KEY . '/StartAtLogin'} = ($type == SC_STARTUP_TYPE_LOGIN || 0);
+	$Registry->{USER_REGISTRY_KEY . '/StartAtLogin'} = ($type == SC_STARTUP_TYPE_LOGIN || 0);
 
 	# enable service mode
 	if ($type == SC_STARTUP_TYPE_SERVICE) {
@@ -102,21 +103,21 @@ sub initStartupType {
 	my $class = shift;
 
 	# preset atLogin if it isn't defined yet
-	my $atLogin = $Registry->{SB_USER_REGISTRY_KEY . '/StartAtLogin'};
+	my $atLogin = $Registry->{USER_REGISTRY_KEY . '/StartAtLogin'};
 
 	if ($atLogin !~ /[01]/) {
 
 		# make sure our Key does exist before we can write to it
-		if (! (my $regKey = $Registry->{SB_USER_REGISTRY_KEY . ''})) {
-			$Registry->{'CUser/Software/Logitech/'} = {
-				'Squeezebox/' => {}
+		if (! (my $regKey = $Registry->{USER_REGISTRY_KEY . ''})) {
+			$Registry->{'CUser/Software/Lyrion/'} = {
+				'server/' => {}
 			};
 		}
 
 		# migrate startup setting
-		if (defined $Registry->{SC_USER_REGISTRY_KEY . '/StartAtLogin'}) {
-			$Registry->{SB_USER_REGISTRY_KEY . '/StartAtLogin'} = $Registry->{SC_USER_REGISTRY_KEY . '/StartAtLogin'};
-			delete $Registry->{SC_USER_REGISTRY_KEY . '/StartAtLogin'};
+		if (defined $Registry->{LEGACY_USER_REGISTRY_KEY . '/StartAtLogin'}) {
+			$Registry->{USER_REGISTRY_KEY . '/StartAtLogin'} = $Registry->{LEGACY_USER_REGISTRY_KEY . '/StartAtLogin'};
+			delete $Registry->{LEGACY_USER_REGISTRY_KEY . '/StartAtLogin'};
 		}
 
 		$class->setStartupType(SC_STARTUP_TYPE_LOGIN);

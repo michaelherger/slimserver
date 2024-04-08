@@ -6,17 +6,16 @@
         <module>Slim::Plugin::Podcast::Plugin</module>
         <version>2.0</version>
         <description>PLUGIN_PODCAST_DESC</description>
-        <creator>Logitech</creator>
+        <creator>Lyrion Community</creator>
 
 	<defaultState>disabled</defaultState>
-        
-	<homepageURL>http://www.mysqueezebox.com/appgallery/Podcasts</homepageURL>
+
 	<optionsURL>plugins/Podcast/settings/basic.html</optionsURL>
 	<icon>plugins/Podcast/html/images/icon.png</icon>
 	<type>2</type><!-- type=extension -->
 
         <targetApplication>
-  	        <id>Logitech Media Server</id>
+  	        <id>Lyrion Music Server</id>
                 <minVersion>7.0a</minVersion>
                 <maxVersion>*</maxVersion>
         </targetApplication>

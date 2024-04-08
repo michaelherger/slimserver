@@ -1,6 +1,7 @@
 package Slim::Control::Commands;
 
-# Logitech Media Server Copyright 2001-2020 Logitech.
+# Logitech Media Server Copyright 2001-2024 Logitech.
+# Lyrion Music Server Copyright 2024 Lyrion Community.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -18,7 +19,7 @@ Slim::Control::Commands
 
 =head1 DESCRIPTION
 
-Implements most Logitech Media Server commands and is designed to be exclusively called
+Implements most Lyrion Music Server commands and is designed to be exclusively called
 through Request.pm and the mechanisms it defines.
 
 =cut
@@ -298,32 +299,11 @@ sub clientConnectCommand {
 	if ( $client->hasServ() ) {
 		my ($host, $packed);
 		$host = $request->getParam('_where');
+		$host = Slim::Utils::Network::intip($host);
 
-		# Bug 14224, if we get jive/baby/fab4.squeezenetwork.com, use the configured prod SN hostname
-		if ( !main::NOMYSB && $host =~ /^(?:jive|baby|fab4)/i ) {
-			$host = Slim::Networking::SqueezeNetwork->get_server('sn');
-		}
-
-		if ( !main::NOMYSB && $host =~ /^www\.(?:squeezenetwork|mysqueezebox)\.com$/i ) {
-			$host = 1;
-		}
-		elsif ( !main::NOMYSB && $host =~ /^www\.test\.(?:squeezenetwork|mysqueezebox)\.com$/i ) {
-			$host = 2;
-		}
-		elsif ( main::NOMYSB && $host =~ /(?:squeezenetwork|mysqueezebox)\.com$/i ) {
+		if ( !$host ) {
 			$request->setStatusBadParams();
 			return;
-		}
-		elsif ( $host eq '0' ) {
-			# Logitech Media Server (used on SN)
-		}
-		else {
-			$host = Slim::Utils::Network::intip($host);
-
-			if ( !$host ) {
-				$request->setStatusBadParams();
-				return;
-			}
 		}
 
 		if ($client->controller()->allPlayers() > 1) {
@@ -440,34 +420,23 @@ sub disconnectCommand {
 		return;
 	}
 
-	# leave the SN case to its own command
-	if ( $server =~ /^www.(?:squeezenetwork|mysqueezebox).com$/i || $server =~ /^www.test.(?:squeezenetwork|mysqueezebox).com$/i ) {
+	$server = Slim::Networking::Discovery::Server::getWebHostAddress($server);
 
-		main::DEBUGLOG && $log->debug("Sending disconnect request for $remoteClient to $server");
-		Slim::Control::Request::executeRequest(undef, [ 'squeezenetwork', 'disconnect', $remoteClient ]);
-	}
+	my $http = Slim::Networking::SimpleAsyncHTTP->new(
+		sub {},
+		sub { $log->error("Problem disconnecting client $remoteClient from $server: " . shift->error); },
+		{ timeout => 10 }
+	);
 
-	else {
+	my $postdata = to_json({
+		id     => 1,
+		method => 'slim.request',
+		params => [ $remoteClient, ['connect', Slim::Utils::Network::hostAddr()] ]
+	});
 
-		$server = Slim::Networking::Discovery::Server::getWebHostAddress($server);
+	main::DEBUGLOG && $log->debug("Sending connect request to $server: $postdata");
 
-		my $http = Slim::Networking::SimpleAsyncHTTP->new(
-			sub {},
-			sub { $log->error("Problem disconnecting client $remoteClient from $server: " . shift->error); },
-			{ timeout => 10 }
-		);
-
-		my $postdata = to_json({
-			id     => 1,
-			method => 'slim.request',
-			params => [ $remoteClient, ['connect', Slim::Utils::Network::hostAddr()] ]
-		});
-
-		main::DEBUGLOG && $log->debug("Sending connect request to $server: $postdata");
-
-		$http->get( $server . 'jsonrpc.js', $postdata);
-
-	}
+	$http->get( $server . 'jsonrpc.js', $postdata);
 
 	$request->setStatusDone();
 }
@@ -2018,6 +1987,21 @@ sub playlistcontrolCommand {
 			return;
 		}
 
+	} elsif (defined(my $work_id = $request->getParam('work_id'))) {
+
+		my $criteria = {work => [ '=' => $work_id ]};
+
+		if (defined (my $album_id = $request->getParam('album_id'))) {
+			$criteria->{'album'} = [ '=' => $album_id ];
+		}
+
+		if (defined (my $grouping = $request->getParam('grouping'))) {
+			$criteria->{'grouping'} = [ '=' => $grouping ] if $grouping;
+			$criteria->{'grouping'} = [ '=' => undef ] unless $grouping;
+		}
+
+		@tracks = Slim::Schema->search('Track', $criteria)->all;
+
 	} elsif (defined(my $track_id_list = $request->getParam('track_id'))) {
 
 		# split on commas
@@ -2759,66 +2743,6 @@ sub rescanCommand {
 	$request->setStatusDone();
 }
 
-sub setSNCredentialsCommand { if (!main::NOMYSB) {
-	my $request = shift;
-
-	if ($request->isNotCommand([['setsncredentials']])) {
-		$request->setStatusBadDispatch();
-		return;
-	}
-
-	# get our parameters
-	my $username = $request->getParam('_username');
-	my $password = $request->getParam('_password');
-	my $sync     = $request->getParam('sync');
-	my $client   = $request->client;
-
-	# Sync can be toggled without username/password
-	if ( defined $sync ) {
-		$prefs->set('sn_sync', $sync);
-	}
-
-	# Verify username/password
-	if ($username) {
-
-		$request->setStatusProcessing();
-
-		Slim::Networking::SqueezeNetwork->login(
-			username => $username,
-			password => $password,
-			client   => $client,
-			cb       => sub {
-				$request->addResult('validated', 1);
-				$request->addResult('warning', $request->cstring('SETUP_SN_VALID_LOGIN'));
-
-				# Shut down all SN activity
-				Slim::Networking::SqueezeNetwork->shutdown();
-
-				$prefs->set('sn_email', $username);
-
-				# Start it up again if the user enabled it
-				Slim::Networking::SqueezeNetwork->init();
-
-				$request->setStatusDone();
-			},
-			ecb      => sub {
-				my (undef, $error) = @_;
-				$request->addResult('validated', 0);
-				$request->addResult('warning', $request->cstring('SETUP_SN_INVALID_LOGIN') . ($error ? " ($error)" : ''));
-
-				$request->setStatusDone();
-			},
-			interactive => 1,	# tell login() to attempt without respecting local rate limiting
-		);
-	}
-
-	# stop SN integration if either mail or password is undefined
-	else {
-		$request->addResult('validated', 1);
-		Slim::Networking::SqueezeNetwork->logout();
-	}
-} }
-
 sub showCommand {
 	my $request = shift;
 
@@ -3359,6 +3283,7 @@ sub _playlistXtracksCommand_parseSearchTerms {
 			my @roles = split(/,\s*/, $value);
 			push @roles, 'ARTIST' if $value =~ /^(?:ALBUMARTIST|5)$/ && !$prefs->get('useUnifiedArtistsList');
 			$find{$key} = [ { 'in' => [ map { Slim::Schema::Contributor->typeToRole($_) || $_ } @roles ] } ];
+			$joinMap{'contributorTracks'} = { 'contributorTracks' => 'track' };
 			next;
 		}
 
@@ -3407,6 +3332,11 @@ sub _playlistXtracksCommand_parseSearchTerms {
 			$sort = $albumSort;
 			$joinMap{'year'} = 'year';
 
+		} elsif ($key =~ /^work\./) {
+
+			$sort = $albumSort;
+			$joinMap{'work'} = 'work';
+
 		} elsif ($key =~ /^contributor\./) {
 
 			$sort = $albumSort;
@@ -3434,6 +3364,10 @@ sub _playlistXtracksCommand_parseSearchTerms {
 					$find{$key} = { 'like' => Slim::Utils::Text::searchStringSplit($value) };
 				}
 
+			} elsif ( $key eq 'me.grouping' ) {
+
+				$find{$key} = $value || undef;
+
 			} else {
 
 				$find{$key} = Slim::Utils::Text::ignoreCase($value, 1);
@@ -3450,6 +3384,8 @@ sub _playlistXtracksCommand_parseSearchTerms {
 			if ($sort eq $albumSort) {
 				$sort = $albumYearSort;
 			}
+		} elsif ($value eq 'album') {
+			$sort = $albumSort;
 		} elsif ($value !~ /^(artistalbum|albumtrack|new|random)$/) {
 			# Only use sort value if it is **not** an album sort.
 			$sort = $value;
@@ -3473,7 +3409,7 @@ sub _playlistXtracksCommand_parseSearchTerms {
 	} else {
 
 		# on search, only grab audio items.
-		$find{'audio'} = 1;
+		$find{'me.audio'} = 1;
 
 		my $vaObjId = Slim::Schema->variousArtistsObject->id;
 
@@ -3631,6 +3567,9 @@ sub _playlistXtracksCommand_parseDbItem {
 				if ( $class eq 'LibraryTracks' && $key eq 'library' && $value eq '-1' ) {
 					$classes{$class} = -1;
 				}
+				elsif ( $class eq 'Track' && $key eq 'grouping' ) {
+					$classes{$class} = $value;
+				}
 				# album favorites need to be filtered by contributor, too
 				elsif ($class eq 'Contributor' && (my $albumObj = $classes{Album})) {
 					my $lcClass = lc($class);
@@ -3674,6 +3613,7 @@ sub _playlistXtracksCommand_parseDbItem {
 			$class eq 'Contributor' ||
 			$class eq 'Genre' ||
 			$class eq 'Year' ||
+			$class eq 'Work' ||
 			( blessed $obj && $obj->can('content_type') && $obj->content_type ne 'dir')
 		) ) {
 			$terms .= "&" if ( $terms ne "" );
@@ -3686,8 +3626,13 @@ sub _playlistXtracksCommand_parseDbItem {
 		$terms .= sprintf( 'librarytracks.library=%d', $classes{LibraryTracks} );
 	}
 
+	if ( defined $classes{Track} ) {
+		$terms .= "&" if ( $terms ne "" );
+		$terms .= sprintf( 'track.grouping=%s', URI::Escape::uri_escape_utf8($classes{Track}) );
+	}
+
 	if ( $terms ne "" ) {
-			return _playlistXtracksCommand_parseSearchTerms($client, $terms);
+		return _playlistXtracksCommand_parseSearchTerms($client, $terms);
 	}
 	else {
 		return ();

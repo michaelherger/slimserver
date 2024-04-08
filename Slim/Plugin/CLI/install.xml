@@ -6,17 +6,16 @@
 	<module>Slim::Plugin::CLI::Plugin</module>
 	<version>1.0</version>
 	<description>PLUGIN_CLI_DESC</description>
-	<creator>Logitech</creator>
+	<creator>Lyrion Community</creator>
 
 	<defaultState>enabled</defaultState>
 	<enforce>1</enforce>
-        
-	<homepageURL>http://www.mysqueezebox.com/support</homepageURL>
+
 	<optionsURL>plugins/CLI/settings/basic.html</optionsURL>
 	<type>2</type><!-- type=extension -->
 
 	<targetApplication>
-		<id>Logitech Media Server</id>
+		<id>Lyrion Music Server</id>
 		<minVersion>7.0a</minVersion>
 		<maxVersion>*</maxVersion>
 	</targetApplication>

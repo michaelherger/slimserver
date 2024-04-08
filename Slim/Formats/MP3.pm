@@ -1,7 +1,8 @@
 package Slim::Formats::MP3;
 
 
-# Logitech Media Server Copyright 2001-2020 Logitech.
+# Logitech Media Server Copyright 2001-2024 Logitech.
+# Lyrion Music Server Copyright 2024 Lyrion Community.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -71,7 +72,10 @@ my %tagMapping = (
 	TCMP => "COMPILATION",
 	YTCP => "COMPILATION", # non-standard v2.3 frame
 	TCON => "GENRE",
+	TIT1 => "WORK",
+	GRP1 => "GROUPING",
 	TIT2 => "TITLE",
+	TIT3 => "SUBTITLE",
 	TPE1 => "ARTIST",
 	TPE2 => "BAND",
 	TPE3 => "CONDUCTOR",
@@ -111,6 +115,9 @@ sub getTag {
 
 	my $s = Audio::Scan->scan( $file );
 
+	if ( exists $s->{tags}->{GRP1} ) {
+		$s->{tags}->{GRP1} =~ s/\x0//g; # scanner is returning leading null in GRP1 tag, which messes things up.
+	}
 	my $info = $s->{info};
 	my $tags = $s->{tags};
 

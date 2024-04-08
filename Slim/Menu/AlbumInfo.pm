@@ -1,6 +1,7 @@
 package Slim::Menu::AlbumInfo;
 
-# Logitech Media Server Copyright 2001-2020 Logitech.
+# Logitech Media Server Copyright 2001-2024 Logitech.
+# Lyrion Music Server Copyright 2024 Lyrion Community.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -87,6 +88,11 @@ sub registerDefaultInfoProviders {
 	$class->registerInfoProvider( year => (
 		after => 'top',
 		func  => \&infoYear,
+	) );
+
+	$class->registerInfoProvider( fullalbum => (
+		after => 'top',
+		func  => \&infoAlbum,
 	) );
 
 	$class->registerInfoProvider( duration => (
@@ -330,6 +336,55 @@ sub infoYear {
 			url     => 'blabla',
 			name    => $year,
 			label   => 'YEAR',
+			itemActions => \%actions,
+		};
+	}
+
+	return $item;
+}
+
+sub infoAlbum {
+	# if the album listing is filtered by anything such that we're not showing all tracks, include a link to the full album in the header
+	my ( $client, $url, $album, $remoteMeta, $tags, $filter) = @_;
+
+	my $item;
+	my $library_id = $filter->{library_id} || Slim::Music::VirtualLibraries->getLibraryIdForClient($client);
+	my $albumName = $album->title;
+	my $totalAlbumTracks = $album->tracks->count;
+
+	if ( $albumName && $totalAlbumTracks > $filter->{track_count} ) {
+
+		my %actions = (
+			allAvailableActionsDefined => 1,
+			items => {
+				command     => ['browselibrary', 'items'],
+				fixedParams => { mode => 'tracks', album_id => $album->id, library_id => $library_id },
+			},
+			play => {
+				command     => ['playlistcontrol'],
+				fixedParams => {cmd => 'load', album_id => $album->id},
+			},
+			add => {
+				command     => ['playlistcontrol'],
+				fixedParams => {cmd => 'add', album_id => $album->id},
+			},
+			insert => {
+				command     => ['playlistcontrol'],
+				fixedParams => {cmd => 'insert', album_id => $album->id},
+			},
+			info => {
+				command     => ['albuminfo', 'items'],
+				fixedParams => {album_id => $album->id},
+			},
+		);
+		$actions{'playall'} = $actions{'play'};
+		$actions{'addall'} = $actions{'add'};
+
+		$item = {
+			type    => 'playlist',
+			url     => 'blabla',
+			name    => $albumName,
+			label   => 'ALBUM',
 			itemActions => \%actions,
 		};
 	}

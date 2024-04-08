@@ -1,6 +1,7 @@
 package Slim::Formats::FLAC;
 
-# Logitech Media Server Copyright 2001-2020 Logitech.
+# Logitech Media Server Copyright 2001-2024 Logitech.
+# Lyrion Music Server Copyright 2024 Lyrion Community.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -67,8 +68,6 @@ my %tagMapping = (
 	# for dBpoweramp CD Ripper
 	'TOTALDISCS'                => 'DISCC',
 );
-
-my @tagNames = (Slim::Schema::Contributor->contributorRoles, qw(ALBUM DISCNUMBER TITLE TRACKNUMBER DATE GENRE));
 
 # peem id (http://flac.sf.net/id.html http://peem.iconoclast.net/)
 my $PEEM = 1885693293;
@@ -265,7 +264,7 @@ sub _addInfoTags {
 	$tags->{SIZE}       = $info->{file_size};
 	$tags->{SECS}       = $info->{song_length_ms} / 1000;
 	$tags->{OFFSET}     = 0; # the header is an important part of the file. don't skip it
-	$tags->{BITRATE}    = sprintf "%d", $info->{bitrate};
+	$tags->{BITRATE}    = sprintf "%d", ($info->{bitrate} || $info->{bitrate_ogg});
 	$tags->{VBR_SCALE}  = 1;
 	$tags->{RATE}       = $info->{samplerate};
 	$tags->{SAMPLESIZE} = $info->{bits_per_sample};
@@ -380,7 +379,7 @@ sub _getXMLTags {
 	# retrieve the xml content from the flac
 	my $xml = $s->{tags}->{APPLICATION}->{$PEEM} || return 0;
 
-	# TODO: parse this using the same xml modules Logitech Media Server uses to parse iTunes
+	# TODO: parse this using the same xml modules Lyrion Music Server uses to parse iTunes
 	# even better, use RDF::Simple::Parser
 
 	# crude regex matching until we get a real rdf/xml parser in place
@@ -920,11 +919,11 @@ so we use this to set the track duaration value.
 =cut
 
 sub scanBitrate {
-	my ( $class, $fh, $url ) = @_;
+	my ( $class, $fh, $url, $format ) = @_;
 
 	seek $fh, 0, 0;
 
-	my $s = Audio::Scan->scan_fh( flac => $fh );
+	my $s = Audio::Scan->scan_fh( $format || 'flac' => $fh );
 
 	my $info = $s->{info};
 

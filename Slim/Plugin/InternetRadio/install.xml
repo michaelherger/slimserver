@@ -6,12 +6,11 @@
 	<module>Slim::Plugin::InternetRadio::Plugin</module>
 	<version>1.0</version>
 	<description>PLUGIN_INTERNET_RADIO_MODULE_NAME_DESC</description>
-	<creator>Logitech</creator>
+	<creator>Lyrion Community</creator>
 	<defaultState>enabled</defaultState>
-	<homepageURL>http://www.mysqueezebox.com/support</homepageURL>
 	<type>2</type><!-- type=extension -->
 	<targetApplication>
-		<id>Logitech Media Server</id>
+		<id>Lyrion Music Server</id>
 		<minVersion>7.3</minVersion>
 		<maxVersion>*</maxVersion>
 	</targetApplication>

@@ -1,6 +1,7 @@
 package Slim::Formats::XML;
 
-# Logitech Media Server Copyright 2006-2020 Logitech.
+# Logitech Media Server Copyright 2006-2024 Logitech.
+# Lyrion Music Server Copyright 2024 Lyrion Community.
 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
@@ -152,56 +153,6 @@ sub getFeedAsync {
 			&& ( my $username = Slim::Plugin::InternetRadio::TuneIn->getUsername($params->{client}) )
 		) {
 			$url .= '&username=' . uri_escape_utf8($username);
-		}
-	}
-
-	# If the URL is on SqueezeNetwork, add session headers or login first
-	if ( !main::NOMYSB && Slim::Networking::SqueezeNetwork->isSNURL($url) && !$params->{no_sn} ) {
-
-		# Sometimes from the web we won't have a client, so pick a random one
-		$params->{client} ||= Slim::Player::Client::clientRandom();
-
-		my %snHeaders = Slim::Networking::SqueezeNetwork->getHeaders( $params->{client} );
-		while ( my ($k, $v) = each %snHeaders ) {
-			$headers{$k} = $v;
-		}
-
-		# Don't require SN session for public URLs
-		if ( $url !~ m|/public/| ) {
-			main::INFOLOG && $log->is_info && $log->info("URL requires SqueezeNetwork session");
-
-			if ( !$params->{client} ) {
-				# No player connected, cannot continue
-				$ecb->( string('SQUEEZENETWORK_NO_PLAYER_CONNECTED'), $params );
-				return;
-			}
-
-			if ( my $snCookie = Slim::Networking::SqueezeNetwork->getCookie( $params->{client} ) ) {
-				$headers{Cookie} = $snCookie;
-			}
-			else {
-				main::INFOLOG && $log->is_info && $log->info("Logging in to SqueezeNetwork to obtain session ID");
-
-				# Login and get a session ID
-				Slim::Networking::SqueezeNetwork->login(
-					client => $params->{client},
-					cb     => sub {
-						if ( my $snCookie = Slim::Networking::SqueezeNetwork->getCookie( $params->{client} ) ) {
-							$headers{Cookie} = $snCookie;
-
-							main::INFOLOG && $log->is_info && $log->info('Got SqueezeNetwork session ID');
-						}
-
-						$http->get( $url, %headers );
-					},
-					ecb   => sub {
-						my ( $http, $error ) = @_;
-						$ecb->( $error, $params );
-					},
-				);
-
-				return;
-			}
 		}
 	}
 
@@ -617,7 +568,7 @@ sub parseOPML {
 		'items' => _parseOPMLOutline($xml->{'body'}->{'outline'}),
 	};
 
-	# Optional command to run (used by Pandora)
+	# Optional command to run
 	if ( $xml->{'command'} ) {
 		$opml->{'command'} = $xml->{'command'};
 

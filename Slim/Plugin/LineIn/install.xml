@@ -5,16 +5,15 @@
 	<module>Slim::Plugin::LineIn::Plugin</module>
 	<version>1.0</version>
 	<description>PLUGIN_LINE_IN_DESC</description>
-	<creator>Logitech</creator>
+	<creator>Lyrion Community</creator>
 
 	<defaultState>enabled</defaultState>
-        
-	<homepageURL>http://www.mysqueezebox.com/support</homepageURL>
+
 	<icon>plugins/LineIn/html/images/icon.png</icon>
 	<type>2</type>
 
 	<targetApplication>
-		<id>Logitech Media Server</id>
+		<id>Lyrion Music Server</id>
 		<minVersion>7.0a</minVersion>
 		<maxVersion>*</maxVersion>
 	</targetApplication>

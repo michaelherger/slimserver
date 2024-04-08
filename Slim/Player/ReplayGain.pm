@@ -1,7 +1,8 @@
 package Slim::Player::ReplayGain;
 
 
-# Logitech Media Server Copyright 2001-2020 Logitech.
+# Logitech Media Server Copyright 2001-2024 Logitech.
+# Lyrion Music Server Copyright 2024 Lyrion Community.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -28,7 +29,7 @@ sub fetchGainMode {
 	my $track  = $song->currentTrack();
 	my $url    = $track->url;
 
-	# Allow plugins to override replaygain (i.e. Pandora should always use track gain)
+	# Allow plugins to override replaygain
 	my $handler = $song->currentTrackHandler();
 	if ( $handler->can('trackGain') ) {
 		return $handler->trackGain( $client, $url );
@@ -148,7 +149,6 @@ sub trackAlbumMatch {
 	}
 
 	# For remote tracks, get metadata from the protocol handler
-	# This allows Rhapsody to support smart crossfade
 	if ( $current_track->remote ) {
 		if ( !$compare_track->remote ) {
 			# Other track is not remote, fail

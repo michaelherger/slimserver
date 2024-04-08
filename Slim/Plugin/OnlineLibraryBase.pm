@@ -1,6 +1,7 @@
 package Slim::Plugin::OnlineLibraryBase;
 
-# Logitech Media Server Copyright 2001-2020 Logitech.
+# Logitech Media Server Copyright 2001-2024 Logitech.
+# Lyrion Music Server Copyright 2024 Lyrion Community.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, version 2.
 
@@ -44,15 +45,12 @@ sub initPlugin { if (main::SCANNER) {
 sub initOnlineTracksTable { if (main::SCANNER && !$main::wipe) {
 	my $dbh = Slim::Schema->dbh();
 
+	my $createTemporary = (main::DEBUGLOG && $log->is_debug) ? '' : 'TEMPORARY';
+
 	main::INFOLOG && $log->is_info && $log->info("Re-build temporary table for online tracks");
 	$dbh->do('DROP TABLE IF EXISTS online_tracks');
 	$dbh->do(qq{
-		CREATE TEMPORARY TABLE online_tracks (url TEXT PRIMARY KEY);
-	});
-
-	$dbh->do('DROP TABLE IF EXISTS online_mapping');
-	$dbh->do(qq{
-		CREATE TABLE online_mapping (id INTEGER PRIMARY KEY, account char(128));
+		CREATE $createTemporary TABLE online_tracks (url TEXT PRIMARY KEY);
 	});
 } }
 

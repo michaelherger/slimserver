@@ -1,7 +1,8 @@
 package Slim::Player::Protocols::HTTP;
 
 
-# Logitech Media Server Copyright 2001-2020 Logitech, Vidur Apparao.
+# Logitech Media Server Copyright 2001-2024 Logitech, Vidur Apparao.
+# Lyrion Music Server Copyright 2024 Lyrion Community.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -90,11 +91,12 @@ sub response {
 
 	# re-parse the request string as it might have been overloaded by subclasses
 	my $request_object = HTTP::Request->parse($request);
+	my ($first) = $self->contentRange =~ /(\d+)-/;
 
 	# do we have the range we requested
-	if ($request_object->header('Range') =~ /^bytes=(\d+)-/ &&
-		$1 != ($self->contentRange =~ /(\d+)-/)) {
+	if ($request_object->header('Range') =~ /^bytes=(\d+)-/ && $first != $1) {
 		${*$self}{'_skip'} = $1;
+		$first = $1;
 		$log->info("range request not served, skipping $1 bytes");
 	}
 
@@ -111,7 +113,6 @@ sub response {
 			$request_object->uri("$proto://$host" . ($port ? ":$port" : '') . $uri);
 		}
 
-		my ($first) = $self->contentRange =~ /(\d+)-/;
 		my $length = $self->contentLength;
 
 		${*$self}{'_enhanced'} = {
@@ -481,7 +482,7 @@ sub readPersistentChunk {
 		$enhanced->{'first'} += $readLength;
 
 		# return sysread's result UNLESS we reach eof before expected length
-		return $readLength unless defined($readLength) && !$readLength && $enhanced->{'first'} != $self->contentLength;
+		return $readLength unless defined($readLength) && !$readLength && $enhanced->{'first'} < $self->contentLength;
 	}
 
 	# all received using persistent connection
@@ -496,7 +497,7 @@ sub readPersistentChunk {
 		$enhanced->{'status'} = CONNECTING;
 		$enhanced->{'lastSeen'} = undef;
 
-		$log->warn("Persistent streaming from $enhanced->{'first'} for ${*$self}{'url'}");
+		$log->warn("Persistent streaming from $enhanced->{'first'} up to ", $self->contentLength, " for ${*$self}{'url'}");
 
 		$enhanced->{'session'}->send_request( {
 			request   => $request,
@@ -600,13 +601,16 @@ sub _sysread {
 	return CORE::sysread($_[0], $_[1], $_[2], $_[3]) unless ${*$self}{'_skip'};
 
 	# skip what we need until done or EOF
-	my $bytes = CORE::sysread($_[0], $_[1], min(${*$self}{'_skip'}, $_[2]), $_[3]);
+	my $bytes = CORE::sysread($_[0], my $scratch, min(${*$self}{'_skip'}, 32768));
 	return $bytes if defined $bytes && !$bytes;
 
 	# pretend we don't have received anything until we've skipped all
 	${*$self}{'_skip'} -= $bytes if $bytes;
+	main::INFOLOG && $log->info("Done skipping bytes") unless ${*$self}{'_skip'};
+
+	# we should use EINTR (see S::P::Source) but this is too slow when skipping - will fix in 9.0
 	$_[1]= '';
-	$! = EINTR;
+	$! = EWOULDBLOCK;
 	return undef;
 }
 
@@ -1106,41 +1110,26 @@ sub getMetadataFor {
 
 	$artist ||= $track->artistName;
 
-	if ( $url =~ /archive\.org/ || $url =~ m|mysqueezebox\.com.+/lma/| ) {
-		if ( Slim::Utils::PluginManager->isEnabled('Slim::Plugin::LMA::Plugin') ) {
-			my $icon = Slim::Plugin::LMA::Plugin->_pluginDataFor('icon');
-			return {
-				title    => $title,
-				cover    => $cover || $icon,
-				icon     => $icon,
-				type     => 'Live Music Archive',
-			};
-		}
-	}
-	else {
-		# make sure that protocol handler is what the $song wanted, not just the $url-based one
-		my $handler = $current ? $song->currentTrackHandler : Slim::Player::ProtocolHandlers->handlerForURL($url);
+	# make sure that protocol handler is what the $song wanted, not just the $url-based one
+	my $handler = $current ? $song->currentTrackHandler : Slim::Player::ProtocolHandlers->handlerForURL($url);
 
-		if ( $handler && $handler !~ /^(?:$class|Slim::Player::Protocols::MMS|Slim::Player::Protocols::HTTPS?)$/ && $handler->can('getMetadataFor') ) {
-			return $handler->getMetadataFor( $client, $url );
-		}
-
-		my $type = uc( $track->content_type || '' ) . ' ' . Slim::Utils::Strings::cstring($client, 'RADIO');
-
-		my $icon = $class->getIcon($url, 'no fallback artwork') || $class->getIcon($playlistURL);
-
-		return {
-			artist   => $artist,
-			title    => $title,
-			type     => $type,
-			bitrate  => $track->prettyBitRate,
-			duration => $track->secs,
-			icon     => $icon,
-			cover    => $cover || $icon,
-		};
+	if ( $handler && $handler !~ /^(?:$class|Slim::Player::Protocols::MMS|Slim::Player::Protocols::HTTPS?)$/ && $handler->can('getMetadataFor') ) {
+		return $handler->getMetadataFor( $client, $url );
 	}
 
-	return {};
+	my $type = uc( $track->content_type || '' ) . ' ' . Slim::Utils::Strings::cstring($client, 'RADIO');
+
+	my $icon = $class->getIcon($url, 'no fallback artwork') || $class->getIcon($playlistURL);
+
+	return {
+		artist   => $artist,
+		title    => $title,
+		type     => $type,
+		bitrate  => $track->prettyBitRate,
+		duration => $track->secs,
+		icon     => $icon,
+		cover    => $cover || $icon,
+	};
 }
 
 sub getIcon {

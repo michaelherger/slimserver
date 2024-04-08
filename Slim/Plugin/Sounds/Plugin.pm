@@ -9,13 +9,13 @@ use HTTP::Status qw(RC_NOT_FOUND RC_OK);
 use Digest::MD5 qw(md5_hex);
 
 use Slim::Networking::SimpleAsyncHTTP;
-use Slim::Networking::SqueezeNetwork;
 use Slim::Player::ProtocolHandlers;
 use Slim::Plugin::Sounds::ProtocolHandler;
 use Slim::Utils::Log;
 use Slim::Utils::Prefs;
 use Slim::Utils::Strings qw(string);
 
+use constant BASE_URL => 'https://sounds.lms-community.org';
 use constant BASE_AUDIO_PATH => 'plugins/sounds/audio/';
 
 my $log = Slim::Utils::Log->addLogCategory({
@@ -26,9 +26,6 @@ my $log = Slim::Utils::Log->addLogCategory({
 
 my $serverPrefs = preferences('server');
 my $soundsCache = catfile($serverPrefs->get('cachedir'), 'Sounds');
-
-# change this to whatever when the time has come.
-my $baseUrl = Slim::Networking::SqueezeNetwork->get_server('content') . '/static/sounds';
 
 my $menus = {
 	MUSICAL => {
@@ -108,6 +105,7 @@ my $menus = {
 		TRAFFIC               => 'effects/traffic.mp3',
 		WIND_CHIME_FLOURISH   => 'effects/wind_chime_flourish.mp3',
 		WIND_CHIME            => 'effects/wind_chime.mp3',
+		ALARM_BUZZER          => 'html/slim-backup-alarm.mp3',
 	},
 };
 
@@ -158,8 +156,6 @@ sub getAlarmPlaylists {
 }
 
 sub getSortedSounds {
-	my ( $self, $c ) = @_;
-
 	main::INFOLOG && $log->is_info && $log->info("Sorting Sounds list alphabetically");
 	my @items = sort {
 		$a->{name} cmp $b->{name};
@@ -173,21 +169,18 @@ sub getSortedSounds {
 
 	my @playlistItems;
 
-	my $loopUrl = Slim::Utils::Network::serverURL() . BASE_AUDIO_PATH;
-	$loopUrl =~ s/^http/loop/;
-
 	for my $menu ( @items ) {
 		# Sort each submenu after localizing
 		my @subsorted = sort {
 			$a->{name} cmp $b->{name}
 		} map {
 			my $path = $menus->{$menu->{id}}->{$_};
-			$validPaths{$path} = 1;
+			$validPaths{$path} = string("PLUGIN_SOUNDS_$_");
 			{
 				name    => string("PLUGIN_SOUNDS_$_"),
 				bitrate => 128,
 				type    => 'audio',
-				url     => $loopUrl . $path,
+				url     => 'loop://' . $path,
 			};
 		} keys %{ $menus->{$menu->{id}} };
 
@@ -206,7 +199,7 @@ sub getSortedSounds {
 		delete $menu->{id};
 	}
 
-	main::DEBUGLOG && $log->is_debug && $log->debug(Data::Dump::dump(\@items));
+	main::DEBUGLOG && $log->is_debug && $log->debug(Data::Dump::dump(\@items, \%validPaths));
 
 	$alarmPlaylists = \@playlistItems;
 	return $soundsMenus = {
@@ -214,6 +207,28 @@ sub getSortedSounds {
 		type  => 'opml',
 		items => \@items
 	};
+}
+
+sub getSoundName {
+	my ($class, $path) = @_;
+	return $validPaths{$path =~ s/^loop:\/\///r};
+}
+
+sub getStreamUrl {
+	my ($class, $client, $url) = @_;
+
+	my $auth = '';
+	if ( $serverPrefs->get('authorize') ) {
+		my $password = Slim::Player::Squeezebox::generate_random_string(10);
+		$client->password($password);
+		$auth = "squeezeboxXXX:$password@";
+	}
+
+	my $serverURL = "http://$auth" . Slim::Utils::Network::serverAddr() . ':' . $serverPrefs->get('httpport');
+
+	return "$serverURL/$url" if $url =~ /^html/;
+
+	return "$serverURL/" . BASE_AUDIO_PATH . $url;
 }
 
 sub proxyRequest {
@@ -233,16 +248,17 @@ sub proxyRequest {
 	};
 
 	if (-f $soundsFile) {
+		main::INFOLOG && $log->is_info && $log->info("Serving from local cache ($soundsFile).");
 		return $sendFile->();
 	}
 
-	my $originUrl = "http://$baseUrl/$path";
+	my $originUrl = BASE_URL . "/$path";
 
 	Slim::Networking::SimpleAsyncHTTP->new(
 		sub {
 			return _notFound($httpClient, $response) unless -f $soundsFile;
 
-			main::DEBUGLOG && $log->is_debug && $log->debug("Downloaded $originUrl as $soundsFile");
+			main::INFOLOG && $log->is_info && $log->info("Downloaded $originUrl as $soundsFile");
 
 			$sendFile->();
 		},

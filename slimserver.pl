@@ -1,6 +1,7 @@
 #!/usr/bin/perl
 
-# Logitech Media Server Copyright 2001-2022 Logitech.
+# Logitech Media Server Copyright 2001-2024 Logitech.
+# Lyrion Music Server Copyright 2024 Lyrion Community.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -47,7 +48,7 @@ use constant INFOLOG      => ( grep { /--noinfolog/ } @ARGV ) ? 0 : 1;
 use constant STATISTICS   => ( grep { /--nostatistics/ } @ARGV ) ? 0 : 1;
 use constant SB1SLIMP3SYNC=> ( grep { /--nosb1slimp3sync/ } @ARGV ) ? 0 : 1;
 use constant WEBUI        => ( grep { /--noweb/ } @ARGV ) ? 0 : 1;
-use constant NOMYSB       => ( grep { /--nomysqueezebox/ } @ARGV ) ? 1 : 0;
+use constant NOMYSB       => 1;
 use constant LOCALFILE    => ( grep { /--localfile/ } @ARGV ) ? 1 : 0;
 use constant NOBROWSECACHE=> ( grep { /--nobrowsecache/ } @ARGV ) ? 1 : 0;
 
@@ -68,8 +69,8 @@ if (ISACTIVEPERL && $PerlSvc::VERSION) {
 	package PerlSvc;
 
 	our %Config = (
-		DisplayName => 'Logitech Media Server',
-		Description => "Logitech Media Server - streaming media server",
+		DisplayName => 'Lyrion Music Server',
+		Description => "Lyrion Music Server - streaming media server",
 		ServiceName => "squeezesvc",
 		StartNow    => 0,
 	);
@@ -162,7 +163,7 @@ BEGIN {
 		$ENV{PATH} = "$path;" . $ENV{PATH} if -d $path;
 	}
 
-	our $VERSION = '8.4.0';
+	our $VERSION = '9.0.0';
 
 	# With EV, only use select backend
 	# I have seen segfaults with poll, and epoll is not stable
@@ -383,7 +384,7 @@ sub init {
 
 	my $log = logger('server');
 
-	$log->error("Starting Logitech Media Server (v$main::VERSION, $REVISION, $BUILDDATE) perl $] - " . $main::Config{archname});
+	$log->error("Starting Lyrion Music Server (v$main::VERSION, $REVISION, $BUILDDATE) perl $] - " . $main::Config{archname});
 
 	if ($diag) {
 		eval "use diagnostics";
@@ -510,12 +511,6 @@ sub init {
 	main::INFOLOG && $log->info("Async HTTP init...");
 	Slim::Networking::Async::HTTP->init;
 	Slim::Networking::SimpleAsyncHTTP->init;
-
-	if (!main::NOMYSB) {
-		main::INFOLOG && $log->info("SqueezeNetwork Init...");
-		require Slim::Networking::SqueezeNetwork;
-		Slim::Networking::SqueezeNetwork->init();
-	}
 
 	main::INFOLOG && $log->info("Firmware init...");
 	Slim::Utils::Firmware->init;
@@ -768,8 +763,8 @@ Usage: $0 [--diag] [--daemon] [--stdio]
           [--localfile]
 
     --help           => Show this usage information.
-    --cachedir       => Directory for Logitech Media Server to save cached music and web data
-    --tmpdir         => Directory for Logitech Media Server's temporary files (cleaned on start and stop)
+    --cachedir       => Directory for Lyrion Music Server to save cached music and web data
+    --tmpdir         => Directory for Lyrion Music Server's temporary files (cleaned on start and stop)
     --diag           => Use diagnostics, shows more verbose errors.
                         Also slows down library processing considerably
     --logdir         => Specify folder location for log file
@@ -787,8 +782,7 @@ Usage: $0 [--diag] [--daemon] [--stdio]
     --httpport       => Activate the web interface on the specified port.
                         Set to 0 in order disable the web server.
     --httpaddr       => Activate the web interface on the specified IP address.
-    --advertiseaddr  => IP address to report as its exposed address (UI and to mysqueezebox.com).
-                        Basically the user facing IP address.
+    --advertiseaddr  => IP address to report as its exposed address. Basically the user facing IP address.
     --cliport        => Activate the command line interface TCP/IP interface
                         on the specified port. Set to 0 in order disable the
                         command line interface server.
@@ -812,8 +806,6 @@ Usage: $0 [--diag] [--daemon] [--stdio]
     --nosb1slimp3sync=> Disable support for SliMP3s, SB1s and associated synchronization
     --nostatistics   => Disable the TracksPersistent table used to keep to statistics across rescans (compiled out).
     --notranscoding  => Disable transcoding support.
-    --nomysqueezebox => Disable mysqueezebox.com integration.
-                        Warning: This effectively disables all music services provided by Logitech apps.
     --nobrowsecache  => Disable caching of rendered browse pages.
     --perfmon        => Enable internal server performance monitoring
     --perfwarn       => Generate log messages if internal tasks take longer than specified threshold
@@ -1015,7 +1007,7 @@ sub changeEffectiveUserAndGroup {
 	# Try starting as 'squeezeboxserver' instead.
 	if (!defined($user)) {
 		$user = 'squeezeboxserver';
-		print STDERR "Logitech Media Server must not be run as root!  Trying user $user instead.\n";
+		print STDERR "Lyrion Music Server must not be run as root!  Trying user $user instead.\n";
 	}
 
 
@@ -1052,7 +1044,7 @@ sub changeEffectiveUserAndGroup {
 	# Check that we're definately not trying to start as root, e.g. if
 	# we were passed '--user root' or any other used with uid 0.
 	if ($uid == 0) {
-		print STDERR "Logitech Media Server must not be run as root! Only do this if you know what you're doing!!\n";
+		print STDERR "Lyrion Music Server must not be run as root! Only do this if you know what you're doing!!\n";
 	}
 
 
@@ -1139,14 +1131,14 @@ sub canRestartServer {
 sub restartServer {
 	if ( canRestartServer() ) {
 		cleanup();
-		logger('')->info( 'Logitech Media Server restarting...' );
+		logger('')->info( 'Lyrion Music Server restarting...' );
 
 		if ( !Slim::Utils::OSDetect->getOS()->restartServer($0, \@argv) ) {
-			logger('')->error("Unable to restart Logitech Media Server");
+			logger('')->error("Unable to restart Lyrion Music Server");
 		}
 	}
 	else {
-		logger('')->error("Unable to restart Logitech Media Server - leaving it running.");
+		logger('')->error("Unable to restart Lyrion Music Server - leaving it running.");
 		return;
 	}
 
@@ -1157,13 +1149,13 @@ sub stopServer {
 
 	cleanup();
 
-	logger('')->info( 'Logitech Media Server shutting down.' );
+	logger('')->info( 'Lyrion Music Server shutting down.' );
 
 	exit();
 }
 
 sub cleanup {
-	logger('')->info("Logitech Media Server cleaning up.");
+	logger('')->info("Lyrion Music Server cleaning up.");
 
 	$::stop = 1;
 
@@ -1197,7 +1189,7 @@ sub cleanup {
 sub save_pid_file {
 	my $process_id = shift || $$;
 
-	logger('')->info("Logitech Media Server saving pid file.");
+	logger('')->info("Lyrion Music Server saving pid file.");
 
 	if (defined $pidfile) {
 		File::Slurp::write_file($pidfile, $process_id);

@@ -1,6 +1,7 @@
 package Slim::Utils::Scanner::Local;
 
-# Logitech Media Server Copyright 2001-2020 Logitech.
+# Logitech Media Server Copyright 2001-2024 Logitech.
+# Lyrion Music Server Copyright 2024 Lyrion Community.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, version 2.
 
@@ -306,6 +307,19 @@ sub rescan {
 			SELECT COUNT(*) FROM ( $changedOnlySQL ) AS t1
 		} ) if !(main::SCANNER && $main::wipe);
 
+		# if we've got changed tracks, add a table of albums being changed
+		if ( $changedOnlyCount ) {
+			$log->error("Build temporary table for changed albums") unless main::SCANNER && $main::progress;
+			$dbh->do('DROP TABLE IF EXISTS changed_albums');
+			$dbh->do("CREATE $createTemporary TABLE changed_albums (album INTEGER PRIMARY KEY UNIQUE)");
+			$dbh->do( qq{
+				INSERT INTO changed_albums
+					SELECT DISTINCT(tracks.album) AS album
+					FROM   changed
+					JOIN   tracks ON changed.url = tracks.url
+			} );
+		}
+
 		$class->deleteTracks($dbh, \$changes, $paths, $next, {
 			name  => 'deleted audio files',
 			count => $inDBOnlyCount,
@@ -314,6 +328,34 @@ sub rescan {
 		}, $args);
 
 		$class->updateTracks($dbh, \$changes, $paths, $next, $changedOnlyCount, $changedOnlySQL, $args);
+
+		# Completely rebuild contributor_album for all changed albums...
+		if ( $changedOnlyCount ) {
+			# ... first, now that tracks has been updated, add albums referenced now which weren't referenced before (in case the user has moved a track to a different album)
+			$log->error("Adding to temporary table for changed albums") unless main::SCANNER && $main::progress;
+			$dbh->do( qq{
+				INSERT OR IGNORE INTO changed_albums
+					SELECT DISTINCT(tracks.album) AS album
+					FROM changed
+						JOIN tracks ON changed.url = tracks.url
+			} );
+
+			# ... now, rebuild contributor_album
+			$dbh->do( qq{
+				DELETE FROM contributor_album
+				WHERE contributor_album.album IN (SELECT album FROM changed_albums)
+			} );
+
+			$dbh->do( qq{
+				INSERT INTO contributor_album (role,contributor,album)
+					SELECT DISTINCT role,contributor, tracks.album
+					FROM contributor_track
+						JOIN tracks ON tracks.id = contributor_track.track
+						JOIN changed_albums ON tracks.album = changed_albums.album
+			} );
+
+			main::SCANNER && Slim::Schema->forceCommit;
+		}
 
 		$class->addTracks($dbh, \$changes, $paths, $next, $onDiskOnlyCount, $onDiskOnlySQL, $args);
 

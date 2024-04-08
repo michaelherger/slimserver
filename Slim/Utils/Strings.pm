@@ -1,7 +1,8 @@
 package Slim::Utils::Strings;
 
 
-# Logitech Media Server Copyright 2001-2020 Logitech.
+# Logitech Media Server Copyright 2001-2024 Logitech.
+# Lyrion Music Server Copyright 2024 Lyrion Community.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -87,7 +88,7 @@ sub init {
 		checkChangedStrings();
 	}
 
-	# Load cached extra strings from mysb.com
+	# Load cached extra strings from other sources
 	loadExtraStrings();
 }
 
@@ -322,7 +323,6 @@ sub loadFile {
 	# Force the UTF-8 layer opening of the strings file.
 	open(my $fh, '<:utf8', $file) || do {
 		logError("Couldn't open $file - FATAL!");
-		die;
 	};
 
 	parseStrings($fh, $file, $args);

@@ -6,18 +6,17 @@
 	<importmodule>Slim::Plugin::iTunes::Importer</importmodule>
 	<version>1.0</version>
 	<description>ITUNES_DESC</description>
-	<creator>Logitech</creator>
-	
+	<creator>Lyrion Community</creator>
+
 	<defaultState>
 		<win>enabled</win>
 		<mac>enabled</mac>
 		<other>disabled</other>
 	</defaultState>
-	
-	<homepageURL>http://www.mysqueezebox.com/support</homepageURL>
+
 	<optionsURL>plugins/iTunes/settings/itunes.html</optionsURL>
 	<targetApplication>
-		<id>Logitech Media Server</id>
+		<id>Lyrion Music Server</id>
 		<minVersion>7.0a</minVersion>
 		<maxVersion>*</maxVersion>
 	</targetApplication>

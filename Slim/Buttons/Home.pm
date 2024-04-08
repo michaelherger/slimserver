@@ -1,6 +1,7 @@
 package Slim::Buttons::Home;
 
-# Logitech Media Server Copyright 2001-2020 Logitech.
+# Logitech Media Server Copyright 2001-2024 Logitech.
+# Lyrion Music Server Copyright 2024 Lyrion Community.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -22,7 +23,7 @@ Slim::Buttons::Home
 
 =head1 DESCRIPTION
 
-L<Slim::Buttons::Home> is a Logitech Media Server module for creating and
+L<Slim::Buttons::Home> is a Lyrion Music Server module for creating and
 navigating a configurable multilevel menu structure.
 
 =cut
@@ -656,9 +657,6 @@ sub menuOptions {
 
 	$menuChoices{""} = "";
 
-	# Exclude SN-disabled plugins
-	my $sn_disabled = $prefs->get('sn_disabled_plugins');
-
 	MENU:
 	for my $menuOption (sort keys %home) {
 
@@ -668,12 +666,6 @@ sub menuOptions {
 
 		if ($menuOption eq 'SAVED_PLAYLISTS' && !Slim::Utils::Misc::getPlaylistDir()) {
 			next;
-		}
-
-		if ( $sn_disabled ) {
-			for my $plugin ( @{$sn_disabled} ) {
-				next MENU if ($home{$menuOption}->{useMode} || '') =~ /^Slim::Plugin/ && $menuOption =~ /$plugin/i;
-			}
 		}
 
 		$menuChoices{$menuOption} = $menuOption;
@@ -826,9 +818,7 @@ sub updateMenu {
 				text => $title,
 			};
 
-			my $url = ( main::NOMYSB || $apps->{$app}->{url} =~ /^http/ )
-				? $apps->{$app}->{url}
-				: Slim::Networking::SqueezeNetwork->url( $apps->{$app}->{url} );
+			my $url = $apps->{$app}->{url};
 
 			# Create new XMLBrowser mode for this item
 			if ( !exists $home{$title} ) {

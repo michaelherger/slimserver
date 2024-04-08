@@ -1,7 +1,8 @@
 package Slim::Web::Settings::Server::Performance;
 
 
-# Logitech Media Server Copyright 2001-2020 Logitech.
+# Logitech Media Server Copyright 2001-2024 Logitech.
+# Lyrion Music Server Copyright 2024 Lyrion Community.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -71,7 +72,6 @@ sub handler {
 		1 => Slim::Utils::Strings::string('SETUP_IMAGEPROXY_LOCAL'),
 	};
 
-	$paramRef->{imageproxies}->{0} = Slim::Utils::Strings::string('SETUP_IMAGEPROXY_REMOTE') unless main::NOMYSB;
 	$paramRef->{imageproxies}->{2} = Slim::Utils::Strings::string('SETUP_IMAGEPROXY_HELPER') unless main::ISWINDOWS;
 
 	my $externalImageProxies = Slim::Web::ImageProxy->getExternalHandlers();

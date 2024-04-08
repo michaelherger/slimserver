@@ -1152,3 +1152,8 @@ PLUGIN_SOUNDS_WIND_CHIME
 	PL	Powiew wiatru
 	RU	Мелодия ветра
 	SV	Vindspel
+
+PLUGIN_SOUNDS_ALARM_BUZZER
+	DE	Weckersummton
+	EN	Alarm Buzzer
+	FR	Sonnerie d'alarme

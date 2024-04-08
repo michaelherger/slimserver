@@ -7,7 +7,7 @@
 	<importmodule>Slim::Plugin::MusicMagic::Importer</importmodule>
 	<version>1.0</version>
 	<description>MUSICMAGIC_DESC</description>
-	<creator>Logitech</creator>
+	<creator>Lyrion Community</creator>
 
 	<defaultState>
 		<mac>enabled</mac>
@@ -15,13 +15,12 @@
 		<other>disabled</other>
 	</defaultState>
 
-	<homepageURL>http://www.mysqueezebox.com/support</homepageURL>
 	<icon>plugins/MusicMagic/html/images/icon.png</icon>
 	<optionsURL>plugins/MusicMagic/settings/musicmagic.html</optionsURL>
 	<type>2</type><!-- type=extension -->
 
 	<targetApplication>
-		<id>Logitech Media Server</id>
+		<id>Lyrion Music Server</id>
 		<minVersion>7.0a</minVersion>
 		<maxVersion>*</maxVersion>
 	</targetApplication>

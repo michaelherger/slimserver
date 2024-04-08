@@ -9,11 +9,10 @@
   <email>triode1@btinternet.com</email>
 
   <defaultState>enabled</defaultState>
-        
-  <homepageURL>http://www.mysqueezebox.com/support</homepageURL>
+
   <type>2</type><!-- type=extension -->
   <targetApplication>
-  	<id>Logitech Media Server</id>
+  	<id>Lyrion Music Server</id>
     <minVersion>7.4</minVersion>
     <maxVersion>*</maxVersion>
   </targetApplication>

@@ -6,7 +6,8 @@ use Slim::Utils::Log;
 use Slim::Utils::Prefs;
 use Slim::Utils::Strings qw(cstring);
 
-use constant MAX_ALBUMS => 500;
+# Should we page through results instead of doing one huge bulk request?
+use constant MAX_ALBUMS => 1500;
 
 my $log = logger('database.info');
 my $prefs = preferences('server');
@@ -21,6 +22,9 @@ sub _releases {
 	my $orderBy    = $args->{'orderBy'} || $pt->{'orderBy'};
 	my $menuMode   = $args->{'params'}->{'menu_mode'};
 	my $menuRoles  = $args->{'params'}->{'menu_roles'};
+
+	# map menuRoles to name for readability
+	$menuRoles = join(',', map { Slim::Schema::Contributor->roleToType($_) } split(',', $menuRoles || ''));
 
 	Slim::Schema::Album->addReleaseTypeStrings();
 
@@ -69,6 +73,7 @@ sub _releases {
 	my $allComposers = ( $menuMode && $menuMode ne 'artists' && $menuRoles ) || $prefs->get('showComposerReleasesbyAlbum') == 1;
 
 	foreach (@{ $request->getResult('albums_loop') || [] }) {
+
 		# map to role's name for readability
 		$_->{role_ids} = join(',', map { Slim::Schema::Contributor->roleToType($_) } split(',', $_->{role_ids} || ''));
 
@@ -134,10 +139,9 @@ sub _releases {
 	}
 
 	my @items;
-	my $searchTags = [
-		"artist_id:$artistId",
-		"library_id:$library_id",
-	];
+
+	my $searchTags = [ "library_id:$library_id" ];
+	push @$searchTags, "artist_id:$artistId" if $artistId;
 
 	my @primaryReleaseTypes = map { uc($_) } @{Slim::Schema::Album->primaryReleaseTypes};
 	push @primaryReleaseTypes, 'COMPILATION';    # we handle compilations differently, it's not part of the primaryReleaseTypes
@@ -184,6 +188,23 @@ sub _releases {
 		push @items, _createItem($name || ucfirst($role), [ { searchTags => [@$searchTags, "role_id:$role", "album_id:" . join(',', @{$contributions{$role}})] } ]);
 	}
 
+	# Add item for Classical Works if the artist has any.
+	push @$searchTags, "role_id:$menuRoles" if $menuRoles && $menuMode && $menuMode ne 'artists';
+	main::INFOLOG && $log->is_info && $log->info("works ($index, $quantity): tags ->", join(', ', @searchTags));
+	my $requestRef = [ 'works', 0, MAX_ALBUMS, @$searchTags ];
+	my $request = Slim::Control::Request->new( $client ? $client->id() : undef, $requestRef );
+	$request->execute();
+	$log->error($request->getStatusText()) if $request->isStatusError();
+
+	push @items, {
+		name        => cstring($client, 'WORKS_CLASSICAL'),
+		image       => 'html/images/playlists.png',
+		type        => 'playlist',
+		playlist    => \&_tracks,
+		url         => \&_works,
+		passthrough => [ { searchTags => [@$searchTags, "wantMetadata:1", "wantIndex:1"] } ],
+	} if ( $request->getResult('count') > 1 || ( scalar @items && $request->getResult('count') ) );
+
 	# if there's only one category, display it directly
 	if (scalar @items == 1 && (my $handler = $items[0]->{url})) {
 		$handler->($client, $callback, $args, $pt);
@@ -195,8 +216,10 @@ sub _releases {
 	# navigate categories if there's more than one
 	else {
 		# add extra items
-		foreach ( grep { $_ } map { $_->($artistId) } @{getExtraItems('artist')} ) {
-			push @items, $_;
+		if ( $artistId ) {
+			foreach ( grep { $_ } map { $_->($artistId) } @{getExtraItems('artist')} ) {
+				push @items, $_;
+			}
 		}
 
 		# add "All" item

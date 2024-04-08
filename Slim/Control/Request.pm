@@ -1,11 +1,12 @@
 package Slim::Control::Request;
 
-# Logitech Media Server Copyright 2001-2020 Logitech.
+# Logitech Media Server Copyright 2001-2024 Logitech.
+# Lyrion Music Server Copyright 2024 Lyrion Community.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
 
-# This class implements a generic request mechanism for Logitech Media Server.
+# This class implements a generic request mechanism for Lyrion Music Server.
 # More documentation is provided below the table of commands & queries
 
 =head1 NAME
@@ -14,7 +15,7 @@ Slim::Control::Request
 
 =head1 DESCRIPTION
 
-This class implements a generic request mechanism for Logitech Media Server.
+This class implements a generic request mechanism for Lyrion Music Server.
 
 The general mechansim is to create a Request object and execute it. There is
 an option of specifying a callback function, to be called once the request is
@@ -77,7 +78,7 @@ my $request = Slim::Control::Request::executeRequest($client, ['stop']);
 
  Y    alarm           <tagged parameters>
  Y    button          <buttoncode>
- Y    connect         <ip|www.mysqueezebox.com|www.test.mysqueezebox.com>
+ Y    connect         <ip>
  Y    client          forget
  Y    display         <line1>                     <line2>                       <duration>
  Y    ir              <ircode>                    <time>
@@ -608,7 +609,6 @@ sub init {
 	addDispatch(['restartserver'],                                                                     [0, 0, 0, \&Slim::Control::Commands::stopServer]);
 	addDispatch(['search',         '_index',         '_quantity'],                                     [0, 1, 1, \&Slim::Control::Queries::searchQuery]);
 	addDispatch(['serverstatus',   '_index',         '_quantity'],                                     [0, 1, 1, \&Slim::Control::Queries::serverstatusQuery]);
-	addDispatch(['setsncredentials','_username',     '_password'],                                     [0, 0, 1, \&Slim::Control::Commands::setSNCredentialsCommand]) unless main::NOMYSB;
 	addDispatch(['show'],                                                                              [1, 0, 1, \&Slim::Control::Commands::showCommand]);
 	addDispatch(['signalstrength', '?'],                                                               [1, 1, 0, \&Slim::Control::Queries::signalstrengthQuery]);
 	addDispatch(['sleep',          '?'],                                                               [1, 1, 0, \&Slim::Control::Queries::sleepQuery]);
@@ -629,6 +629,7 @@ sub init {
 	addDispatch(['version',        '?'],                                                               [0, 1, 0, \&Slim::Control::Queries::versionQuery]);
 	addDispatch(['wipecache',      '_queue'],                                                          [0, 0, 0, \&Slim::Control::Commands::wipecacheCommand]);
 	addDispatch(['years',          '_index',         '_quantity'],                                     [0, 1, 1, \&Slim::Control::Queries::yearsQuery]);
+	addDispatch(['works',          '_index',         '_quantity'],                                     [0, 1, 1, \&Slim::Control::Queries::worksQuery]);
 	addDispatch(['artwork',        '_artworkid'],                                                      [0, 0, 0, \&Slim::Control::Queries::showArtwork]);
 	addDispatch(['rating',         '_item',          '?'],                                             [0, 1, 0, \&Slim::Control::Commands::ratingCommand]);
 	addDispatch(['rating',         '_item',          '_rating'],                                       [0, 0, 0, \&Slim::Control::Commands::ratingCommand]);
@@ -674,7 +675,7 @@ sub init {
 
 	return if !main::WEBUI;
 
-	# Normal Logitech Media Server commands can be accessed with URLs like
+	# Normal Lyrion Music Server commands can be accessed with URLs like
 	#   http://localhost:9000/status.html?p0=pause&player=00%3A00%3A00%3A00%3A00%3A00
 	# Use the protectCommand() API to prevent CSRF attacks on commands -- including commands
 	# not intended for use via the web interface!
@@ -1339,7 +1340,7 @@ my %statusMap = (
 	102 => 'Bad params!',
 	103 => 'Missing client!',
 	104 => 'Unknown in dispatch table',
-	105 => 'Bad Logitech Media Server config',
+	105 => 'Bad Lyrion Music Server config',
 );
 
 # validate the Request, make sure we are dispatchable

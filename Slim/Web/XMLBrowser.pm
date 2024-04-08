@@ -1,7 +1,8 @@
 package Slim::Web::XMLBrowser;
 
 
-# Logitech Media Server Copyright 2001-2020 Logitech.
+# Logitech Media Server Copyright 2001-2024 Logitech.
+# Lyrion Music Server Copyright 2024 Lyrion Community.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -540,7 +541,7 @@ sub handleFeed {
 			 && !($subFeed->{type} && $subFeed->{type} eq 'search')
 			 && !(ref $subFeed->{'url'}) )
 		) {
-			$subFeed->{'image'} ||= $subFeed->{'cover'} || $subFeed->{'icon'} || Slim::Player::ProtocolHandlers->iconForURL($subFeed->{'play'} || $subFeed->{'url'});
+			$subFeed->{'image'} ||= $subFeed->{'cover'} || $subFeed->{'icon'} || Slim::Player::ProtocolHandlers->iconForURL($subFeed->{'play'} || $subFeed->{'url'}, $client);
 			$subFeed->{'image'} = proxiedImage($subFeed->{'image'});
 
 			$stash->{'streaminfo'} = {
@@ -854,7 +855,7 @@ sub handleFeed {
 			my $i = 0;
 
 			my $roles = join ('|', Slim::Schema::Contributor->contributorRoles());
-			my $allLabels = join ('|', $roles, qw(ALBUM GENRE YEAR ALBUMREPLAYGAIN ALBUMLENGTH COMPILATION));
+			my $allLabels = join ('|', $roles, qw(ALBUM GENRE YEAR ALBUMREPLAYGAIN ALBUMLENGTH COMPILATION WORK));
 
 			foreach my $item ( @{ $feed->{'albumData'} || $stash->{'items'} } ) {
 
@@ -983,7 +984,9 @@ sub handleFeed {
 				}
 
 				if ($feed->{'favorites_url'} && $favs) {
+					$details->{'favorites_icon'} = $feed->{'favorites_icon'} || $feed->{'icon'} || $feed->{'image'} || $feed->{'cover'} || Slim::Player::ProtocolHandlers->iconForURL($feed->{'favorites_url'}, $client);
 					$details->{'favorites_url'} = $feed->{'favorites_url'};
+					$details->{'favorites_title'} = $feed->{'favorites_title'} || $feed->{'name'} || $feed->{'title'};
 					$details->{'favorites'} = $favs->hasUrl($feed->{'favorites_url'}) ? 2 : 1;
 				}
 
@@ -998,8 +1001,11 @@ sub handleFeed {
 			if ($stash->{'action'} eq 'favadd') {
 
 				my $type = $item->{'favorites_type'} || $item->{'type'} || 'link';
+				my $name = $item->{'favorites_title'} || $item->{'name'};
+				my $icon = $item->{'favorites_icon'} || $item->{'image'} || $item->{'icon'} ||
+						   Slim::Player::ProtocolHandlers->iconForURL($furl, $client) || 'html/images/favorites.png';
 
-				if ( $item->{'play'}
+				if ( ($item->{'play'} && !$item->{'favorites_type'})
 				    || ($type eq 'playlist' && $furl =~ /^(file|db):/)
 				) {
 					$type = 'audio';
@@ -1007,11 +1013,11 @@ sub handleFeed {
 
 				$favs->add(
 					$furl,
-					$item->{'name'},
+					$name,
 					$type,
 					$item->{'parser'},
 					1,
-					proxiedImage($item->{'image'} || $item->{'icon'} || Slim::Player::ProtocolHandlers->iconForURL($furl))
+					proxiedImage($icon)
 				);
 			} elsif ($stash->{'action'} eq 'favdel') {
 				$favs->deleteUrl( $furl );
@@ -1075,7 +1081,7 @@ sub handleFeed {
 		}
 	}
 
-#	$log->error(Data::Dump::dump($stash->{'items'}));
+
 
 	my $output = processTemplate($template, $stash);
 

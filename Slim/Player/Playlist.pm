@@ -1,6 +1,7 @@
 package Slim::Player::Playlist;
 
-# Logitech Media Server Copyright 2001-2020 Logitech.
+# Logitech Media Server Copyright 2001-2024 Logitech.
+# Lyrion Music Server Copyright 2024 Lyrion Community.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -190,10 +191,10 @@ sub addTracks {
 	my $playlist = playList($client);
 
 	my $maxPlaylistLength = $prefs->get('maxPlaylistLength');
-	
-	# do we need to plan for restart of streaming?
+
+	# we need to plan for restart of streaming in case the streaming song is the last one
 	my $restart = (Slim::Player::Source::playingSongIndex($client) == Slim::Player::Source::streamingSongIndex($client)) &&
-				  (Slim::Player::Source::playingSongIndex($client) == count($client) - 1);
+				  (Slim::Player::Source::streamingSongIndex($client) == count($client) - 1);
 
 	# How many tracks might we need to remove to make space?
 	my $need = $maxPlaylistLength ? (scalar @{$playlist} + scalar @{$tracksRef}) - $maxPlaylistLength : 0;
@@ -254,7 +255,7 @@ sub addTracks {
 		_insert_done($client, $canAdd);
 	}
 
-	# if we are adding a track while we are playing the last one, might 
+	# if we are adding a track while we are playing the last one, might
 	# need to relaunch the process if it has been streamed fully.
 	if ($restart) {
 		$log->info("adding track while playing last, check if streaming needs relaunch");
@@ -281,7 +282,7 @@ sub _insert_done {
 		# need to flush if we are changing streaming song
 		if (Slim::Player::Source::streamingSongIndex($client) == $playlistIndex % count($client)) {
 			main::INFOLOG && $log->info("add+replace streaming (not playing) track");
-			Slim::Player::Source::flushStreamingSong($client);			
+			Slim::Player::Source::flushStreamingSong($client);
 		}
 	} else {
 		if (count($client) != $size) {
@@ -357,7 +358,7 @@ sub removeTrack {
 		return 0;
 	}
 	if ($tracknum + $nTracks > count($client)) {
-		$log->warn("Arrempting to remove too many tracks ($nTracks)");
+		$log->warn("Attempting to remove too many tracks ($nTracks)");
 		$nTracks = count($client) - $tracknum;
 	}
 
@@ -399,7 +400,7 @@ sub removeTrack {
 	}
 
 	if (!$stopped) {
-		
+
 		my $index = Slim::Player::Source::streamingSongIndex($client);
 		my $queue = $client->currentsongqueue();
 
@@ -409,14 +410,14 @@ sub removeTrack {
 				$song->index($song->index() - $nTracks);
 			}
 		}
-		
+
 		if ($index >= $tracknum && $index < $tracknum + $nTracks) {
 			# If we're removing the streaming song (which is different from
 			# the playing song), get the client to flush out the current song
 			# from its audio pipeline.
 			main::INFOLOG && $log->info("Removing currently streaming track.");
 			Slim::Player::Source::flushStreamingSong($client);
-		} 
+		}
 
 	}
 
@@ -557,7 +558,7 @@ sub removeMultipleTracks {
 		for my $song (@{$queue}) {
 			$song->index($oldToNewShuffled{$song->index()} || 0);
 		}
-		
+
 		Slim::Player::Source::flushStreamingSong($client) if $flush;
 	}
 
@@ -623,7 +624,7 @@ sub moveSong {
 					$song->index(($dest>$src)? $index - 1 : $index + 1);
 				}
 			}
-			
+
 			# If we're streaming a different song than we're playing and
 			# moving either to or from the streaming song position, flush
 			# the streaming song, because it's no longer relevant.
@@ -634,10 +635,10 @@ sub moveSong {
 				Slim::Player::Source::flushStreamingSong($client);
 			}
 
-			# if we are either moving the last track or moving one after it, we 
+			# if we are either moving the last track or moving one after it, we
 			# might need to relaunch the process if it has been streamed fully.
-			if (($playingIndex == $streamingIndex) && 
-				($streamingIndex == count($client) - 1) && 
+			if (($playingIndex == $streamingIndex) &&
+				($streamingIndex == count($client) - 1) &&
 			    ($src == $streamingIndex || $dest == $streamingIndex)) {
 				$log->info("moving last track itsef or another track past it");
 				$client->controller->nextIfStreamed($client);
@@ -1132,7 +1133,7 @@ sub modifyPlaylistCallback {
 		($request->isCommand([['playlist'], ['jump', 'index', 'shuffle']]));
 
 	if (!$saveCurrentSong) {
-		main::INFOLOG && $log->info("saveCurrentSong not set. returing.");
+		main::INFOLOG && $log->info("saveCurrentSong not set. Returning.");
 		return;
 	}
 

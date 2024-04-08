@@ -1,7 +1,8 @@
 package Slim::Player::Protocols::MMS;
 
 
-# Logitech Media Server Copyright 2001-2020 Logitech, Vidur Apparao.
+# Logitech Media Server Copyright 2001-2024 Logitech, Vidur Apparao.
+# Lyrion Music Server Copyright 2024 Lyrion Community.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -485,18 +486,13 @@ sub setMetadata {
 
 	# Set title if available
 	if ( my $title = $wma->{tags}->{Title} ) {
+		Slim::Music::Info::setCurrentTitle($url, $title);
 
-		# Ignore title metadata for Rhapsody tracks
-		if ( $url !~ /^rhap/ ) {
-
-			Slim::Music::Info::setCurrentTitle($url, $title);
-
-			for my $everybuddy ( $client->syncGroupActiveMembers()) {
-				$everybuddy->update();
-			}
-
-			main::INFOLOG && $log->info("Setting title to '$title' from WMA metadata");
+		for my $everybuddy ( $client->syncGroupActiveMembers()) {
+			$everybuddy->update();
 		}
+
+		main::INFOLOG && $log->info("Setting title to '$title' from WMA metadata");
 	}
 }
 

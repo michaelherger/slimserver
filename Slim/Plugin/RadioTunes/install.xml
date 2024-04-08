@@ -6,11 +6,12 @@
 	<icon>plugins/RadioTunes/html/icon.png</icon>
 	<version>1.0</version>
 	<description>PLUGIN_RADIOTUNES_DESC</description>
-	<creator>Logitech</creator>
+	<creator>Lyrion Community</creator>
 	<defaultState>disabled</defaultState>
+	<optionsURL>plugins/sky/settings.html</optionsURL>
 	<type>2</type>
 	<targetApplication>
-		<id>Logitech Media Server</id>
+		<id>Lyrion Music Server</id>
 		<minVersion>8.4</minVersion>
 		<maxVersion>*</maxVersion>
 	</targetApplication>

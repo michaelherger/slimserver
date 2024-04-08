@@ -1,6 +1,7 @@
 package Slim::Control::Jive;
 
-# Logitech Media Server Copyright 2001-2020 Logitech
+# Logitech Media Server Copyright 2001-2024 Logitech.
+# Lyrion Music Server Copyright 2024 Lyrion Community.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -53,16 +54,16 @@ sub init {
        #        |  |  |  |Function to call
        #        C  Q  T  F
 
-	Slim::Control::Request::addDispatch(['menu', '_index', '_quantity'], 
+	Slim::Control::Request::addDispatch(['menu', '_index', '_quantity'],
 		[2, 1, 1, \&menuQuery]);
 
-	Slim::Control::Request::addDispatch(['alarmsettings', '_index', '_quantity'], 
+	Slim::Control::Request::addDispatch(['alarmsettings', '_index', '_quantity'],
 		[1, 1, 1, \&alarmSettingsQuery]);
 
-	Slim::Control::Request::addDispatch(['jiveupdatealarm', '_index', '_quantity'], 
+	Slim::Control::Request::addDispatch(['jiveupdatealarm', '_index', '_quantity'],
 		[1, 1, 1, \&alarmUpdateMenu]);
 
-	Slim::Control::Request::addDispatch(['jiveupdatealarmdays', '_index', '_quantity'], 
+	Slim::Control::Request::addDispatch(['jiveupdatealarmdays', '_index', '_quantity'],
 		[1, 1, 1, \&alarmUpdateDays]);
 
 	Slim::Control::Request::addDispatch(['syncsettings', '_index', '_quantity'],
@@ -315,7 +316,7 @@ sub mainMenu {
 		@{recentSearchMenu($client, 1)},
 		@{appMenus($client, 1)},
 
-		@{globalSearchMenu($client)},		
+		@{globalSearchMenu($client)},
 	);
 
 	if ( !$direct ) {
@@ -432,7 +433,7 @@ sub registerAppMenu {
 
 	my $isInfo = $log->is_info;
 
-	# if there already is a plugin dealing with the same ID, don't initialize the mysb.com app
+	# if there already is a plugin dealing with the same ID, don't initialize the app
 	my %seen = map { $_->{id} => 1 } @pluginMenus;
 	my @new;
 
@@ -608,8 +609,8 @@ sub alarmSettingsQuery {
 		choiceStrings  => [ @translatedAlarmStrings ],
 		selectedIndex  => $val + 1, # 1 is added to make it count like Lua
 		actions        => {
-			do => { 
-				choices => [ 
+			do => {
+				choices => [
 					{
 						player => 0,
 						cmd    => [ 'alarm', 'disableall' ],
@@ -646,7 +647,7 @@ sub alarmSettingsQuery {
 				player => 0,
 				cmd    => [ 'alarm', 'add' ],
 				params => {
-					time => '__TAGGEDINPUT__',	
+					time => '__TAGGEDINPUT__',
 					enabled => 1,
 				},
 			},
@@ -753,7 +754,7 @@ sub alarmUpdateMenu {
 				cmd    => [ 'alarm', 'update' ],
 				params => {
 					id   => $params->{id},
-					time => '__TAGGEDINPUT__',	
+					time => '__TAGGEDINPUT__',
 				},
 			},
 		},
@@ -1898,10 +1899,10 @@ sub repeatSettings {
 		choiceStrings  => [ @translated_repeat_strings ],
 		selectedIndex  => $repeat_setting + 1, # 1 is added to make it count like Lua
 		actions        => {
-			do => { 
-				choices => [ 
-					@repeatChoiceActions 
-				], 
+			do => {
+				choices => [
+					@repeatChoiceActions
+				],
 			},
 		},
 	};
@@ -2173,7 +2174,7 @@ sub dateQuery {
 
 	# manage the subscription
 	if (defined(my $timeout = $request->getParam('subscribe'))) {
-		$request->registerAutoExecute($timeout, \&dateQuery_filter);		
+		$request->registerAutoExecute($timeout, \&dateQuery_filter);
 	}
 
 	$request->setStatusDone();
@@ -2184,7 +2185,7 @@ sub firmwareUpgradeQuery_filter {
 	my $request = shift;
 
 	# update the query if new firmware downloaded for this machine type
-	if ($request->isCommand([['fwdownloaded']]) && 
+	if ($request->isCommand([['fwdownloaded']]) &&
 		(($request->getParam('machine') || 'jive') eq ($self->getParam('_machine') || 'jive')) ) {
 		return 1;
 	}
@@ -2212,7 +2213,7 @@ sub firmwareUpgradeQuery {
 		if ( $cur_rev >= 1659 && (!Slim::Utils::OSDetect->getOS()->directFirmwareDownload() || $url =~ /^https:/) ) {
 			$request->addResult( relativeFirmwareUrl => URI->new($url)->path );
 		}
-		# return full url when running some systems - we'll serve the direct download link from squeezenetwork
+		# return full url when running some systems - we'll serve the direct download link from origin host
 		else {
 			$request->addResult( firmwareUrl => $url );
 		}
@@ -2281,10 +2282,10 @@ sub playerPower {
 sub sleepInXHash {
 	main::INFOLOG && $log->info("Begin function");
 	my ($client, $val, $sleepTime) = @_;
-	my $text = $sleepTime == 0 ? 
+	my $text = $sleepTime == 0 ?
 		$client->string("SLEEP_CANCEL") :
 		$client->string('X_MINUTES', $sleepTime);
-	my %return = ( 
+	my %return = (
 		text    => $text,
 		actions => {
 			go => {
@@ -2858,10 +2859,10 @@ sub extensionsQuery {
 		for my $provider (@providers) {
 
 			$extensionProviders{$provider}->{'provider'}->( {
-				'name'   => $provider, 
-				'type'   => $type, 
+				'name'   => $provider,
+				'type'   => $type,
 				'target' => $target,
-				'version'=> $version, 
+				'version'=> $version,
 				'lang'   => $language,
 				'details'=> 1,
 				'cb'     => \&_extensionsQueryCB,
@@ -2975,9 +2976,8 @@ sub appMenus {
 					# flag as an app
 					$clone->{isApp} = 1;
 
-					# use icon as defined by MySB to allow for white-label solutions
+					# use icon as defined by the app to allow for white-label solutions
 					if ( my $icon = $apps->{$app}->{icon} ) {
-						$icon = Slim::Networking::SqueezeNetwork->url( $icon, 'external' ) unless main::NOMYSB || $icon =~ /^http/;
 						$clone->{window}->{'icon-id'} = Slim::Web::ImageProxy::proxiedImage($icon);
 					}
 
@@ -2992,41 +2992,10 @@ sub appMenus {
 				next;
 			}
 		}
-		else {			
+		else {
 			# For type=opml, use generic handler
 			if ( $apps->{$app}->{type} && $apps->{$app}->{type} eq 'opml' ) {
-				main::INFOLOG && $isInfo && $log->info( "App: $app, using generic OPML handler" );
-
-				my $url = ( main::NOMYSB || $apps->{$app}->{url} =~ /^http/ )
-					? $apps->{$app}->{url} 
-					: Slim::Networking::SqueezeNetwork->url( $apps->{$app}->{url} );
-
-				my $icon = ( main::NOMYSB || $apps->{$app}->{icon} =~ /^http/ )
-					? $apps->{$app}->{icon} 
-					: Slim::Networking::SqueezeNetwork->url( $apps->{$app}->{icon}, 'external' );
-
-				my $node = $apps->{$app}->{home_menu} == 1 ? 'home' : '';
-
-				push @{$menu}, {
-					actions => {
-						go => {
-							cmd    => [ 'opml_generic', 'items' ],
-							params => {
-								menu     => 'opml_generic',
-								opml_url => $url,
-							},
-							player => 0,
-						},
-					},
-					displayWhenOff => 0,
-					id             => 'opml' . $app,
-					isApp		=> 1,
-					node           => $node,
-					text           => $apps->{$app}->{title},
-					window         => {
-						'icon-id'  => Slim::Web::ImageProxy::proxiedImage($icon),
-					},
-				};
+				logBacktrace('Support for the OPML generic browse modes has been removed, as it relied on MySqueezebox.com');
 			}
 		}
 	}
@@ -3037,7 +3006,7 @@ sub appMenus {
 	my $weight = 25; # After Search
 
 	my @sorted =
-	 	map { $_->{weight} = $weight++; $_ } 
+	 	map { $_->{weight} = $weight++; $_ }
 		sort { $a->{text} cmp $b->{text} }
 		@{$menu};
 

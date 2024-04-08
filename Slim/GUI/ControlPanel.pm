@@ -1,6 +1,7 @@
 package Slim::GUI::ControlPanel::MainFrame;
 
-# Logitech Media Server Copyright 2001-2020 Logitech.
+# Logitech Media Server Copyright 2001-2024 Logitech.
+# Lyrion Music Server Copyright 2024 Lyrion Community.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -17,7 +18,6 @@ use Wx::Event qw(EVT_BUTTON EVT_NOTEBOOK_PAGE_CHANGED);
 
 use Slim::GUI::ControlPanel::Settings;
 use Slim::GUI::ControlPanel::Music;
-use Slim::GUI::ControlPanel::Account;
 use Slim::GUI::ControlPanel::Advanced;
 use Slim::GUI::ControlPanel::Status;
 use Slim::GUI::ControlPanel::Diagnostics;
@@ -68,41 +68,30 @@ sub new {
 		$_[0]->Destroy;
 	} );
 
-	if ($initialSetup) {
+	my $notebook = Wx::Notebook->new($panel);
 
-		require Slim::GUI::ControlPanel::InitialSettings;
+	EVT_NOTEBOOK_PAGE_CHANGED($self, $notebook, sub {
+		my ($self, $event) = @_;
 
-		$mainSizer->Add(Slim::GUI::ControlPanel::InitialSettings->new($panel, $self), 1, wxALL | wxGROW, 10);
+		eval {
+			my $child = $notebook->GetPage($notebook->GetSelection());
+			if ($child && $child->can('_update')) {
+				$child->_update($event);
+			};
+		}
+	});
 
-	}
+	$notebook->AddPage(Slim::GUI::ControlPanel::Settings->new($notebook, $self), string('CONTROLPANEL_SERVERSTATUS'), 1);
+	$notebook->AddPage(Slim::GUI::ControlPanel::Music->new($notebook, $self), string('CONTROLPANEL_MUSIC_LIBRARY'));
+	$notebook->AddPage(Slim::GUI::ControlPanel::Advanced->new($notebook, $self, $args), string('ADVANCED_SETTINGS'));
+	$notebook->AddPage(Slim::GUI::ControlPanel::Diagnostics->new($notebook, $self, $args), string('CONTROLPANEL_DIAGNOSTICS'));
+	$notebook->AddPage(Slim::GUI::ControlPanel::Status->new($notebook, $self), string('INFORMATION'));
 
-	else {
-
-		my $notebook = Wx::Notebook->new($panel);
-
-		EVT_NOTEBOOK_PAGE_CHANGED($self, $notebook, sub {
-			my ($self, $event) = @_;
-
-			eval {
-				my $child = $notebook->GetPage($notebook->GetSelection());
-				if ($child && $child->can('_update')) {
-					$child->_update($event);
-				};
-			}
-		});
-
-		$notebook->AddPage(Slim::GUI::ControlPanel::Settings->new($notebook, $self), string('CONTROLPANEL_SERVERSTATUS'), 1);
-		$notebook->AddPage(Slim::GUI::ControlPanel::Music->new($notebook, $self), string('CONTROLPANEL_MUSIC_LIBRARY'));
-		$notebook->AddPage(Slim::GUI::ControlPanel::Account->new($notebook, $self), string('CONTROLPANEL_ACCOUNT'));
-		$notebook->AddPage(Slim::GUI::ControlPanel::Advanced->new($notebook, $self, $args), string('ADVANCED_SETTINGS'));
-		$notebook->AddPage(Slim::GUI::ControlPanel::Diagnostics->new($notebook, $self, $args), string('CONTROLPANEL_DIAGNOSTICS'));
-		$notebook->AddPage(Slim::GUI::ControlPanel::Status->new($notebook, $self), string('INFORMATION'));
-
-		$mainSizer->Add($notebook, 1, wxALL | wxGROW, 10);
-	}
+	$mainSizer->Add($notebook, 1, wxALL | wxGROW, 10);
 
 	my $footerSizer = Wx::BoxSizer->new(wxHORIZONTAL);
 
+	# TODO - branding
 	if ($file = $self->_fixIcon('logitech-logo.png')) {
 		Wx::Image::AddHandler(Wx::PNGHandler->new());
 		my $icon = Wx::StaticBitmap->new( $panel, -1, Wx::Bitmap->new($file, wxBITMAP_TYPE_PNG) );
@@ -135,7 +124,7 @@ sub new {
 	my $footerSizer2 = Wx::BoxSizer->new(wxVERTICAL);
 	$footerSizer2->Add($btnsizer, 0, wxEXPAND);
 	$footerSizer2->AddSpacer(7);
-	$footerSizer2->Add(Wx::StaticText->new($panel, -1, string('COPYRIGHT_LOGITECH')), 0, wxALIGN_RIGHT | wxRIGHT, 3);
+	$footerSizer2->Add(Wx::StaticText->new($panel, -1, string('COPYRIGHT')), 0, wxALIGN_RIGHT | wxRIGHT, 3);
 
 	my ($version) = parseRevision();
 	$version = sprintf(string('VERSION'), $version);

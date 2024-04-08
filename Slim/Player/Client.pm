@@ -1,7 +1,8 @@
 package Slim::Player::Client;
 
 
-# Logitech Media Server Copyright 2001-2020 Logitech.
+# Logitech Media Server Copyright 2001-2024 Logitech.
+# Lyrion Music Server Copyright 2024 Lyrion Community.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -1439,7 +1440,7 @@ sub hasScrolling { 0 }
 sub apps {
 	my $client = shift;
 
-	my %clientApps = %{$prefs->client($client)->get('apps') || {}};
+	my %clientApps;
 
 	if (my $nonSNApps = Slim::Plugin::Base->nonSNApps) {
 		for my $plugin (@$nonSNApps) {

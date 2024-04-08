@@ -1,6 +1,7 @@
 package Slim::Networking::SimpleHTTP::Base;
 
-# Logitech Media Server Copyright 2003-2020 Logitech.
+# Logitech Media Server Copyright 2003-2024 Logitech.
+# Lyrion Music Server Copyright 2024 Lyrion Community.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -12,6 +13,7 @@ use base qw(Slim::Utils::Accessor);
 use Exporter::Lite;
 use HTTP::Date ();
 use HTTP::Request;
+use URI::Escape qw(uri_escape_utf8);
 
 our @EXPORT = qw(hasZlib unzip _cacheKey);
 
@@ -59,6 +61,8 @@ sub post { shift->_createHTTPRequest( POST => @_ ) }
 
 sub put { shift->_createHTTPRequest( PUT => @_ ) }
 
+sub delete { shift->_createHTTPRequest( DELETE => @_ ) }
+
 sub head { shift->_createHTTPRequest( HEAD => @_ ) }
 
 sub _createHTTPRequest {
@@ -82,10 +86,7 @@ sub _createHTTPRequest {
 			if (ref $data && $data->{_time}) {
 				$self->cachedResponse( $data );
 
-				# If the data was cached within the past 5 minutes,
-				# return it immediately without revalidation, to improve
-				# UI experience
-				if ( $data->{_no_revalidate} || time - $data->{_time} < 300 ) {
+				if ( $self->shouldNotRevalidate($data) ) {
 					main::DEBUGLOG && $log->is_debug && $log->debug("Using cached response [$url]");
 					return $self->sendCachedResponse();
 				}
@@ -153,6 +154,15 @@ sub _createHTTPRequest {
 	return wantarray ? ($request, $timeout) : $request;
 }
 
+sub shouldNotRevalidate {
+	my ($self, $data) = @_;
+
+	# If the data was cached within the past 5 minutes,
+	# return it immediately without revalidation, to improve
+	# UI experience
+	return $data->{_no_revalidate} || time - $data->{_time} < 300;
+}
+
 sub sendCachedResponse {}
 
 sub isNotModifiedResponse {
@@ -196,7 +206,7 @@ sub processResponse {
 			# By default, cached content can live for at most 1 day, this helps control the
 			# size of the cache.  We use ETag/Last Modified to check for stale data during
 			# this time.
-			my $max = 60 * 60 * 24;
+			my $max = 60 * 60 * 24 + 1;
 			my $expires; # undefined until max-age or expires header is seen, or caller defines it
 			my $no_revalidate;
 
@@ -304,7 +314,7 @@ sub _cacheKey {
 		$cachekey .= '-' . ($client->languageOverride || '');
 	}
 
-	return $cachekey;
+	return uri_escape_utf8($cachekey);
 }
 
 

@@ -6,13 +6,13 @@
 	<module>Slim::Plugin::PresetsEditor::Plugin</module>
 	<version>1.0</version>
 	<description>PLUGIN_PRESETS_EDITOR_DESC</description>
-	<creator>Logitech</creator>
+	<creator>Lyrion Community</creator>
 
 	<defaultState>enabled</defaultState>
 	<type>2</type><!-- type=extension -->
 
 	<targetApplication>
-		<id>Logitech Media Server</id>
+		<id>Lyrion Music Server</id>
 		<minVersion>7.7.0</minVersion>
 		<maxVersion>*</maxVersion>
 	</targetApplication>
