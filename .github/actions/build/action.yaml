@@ -51,8 +51,8 @@ runs:
         sed -ie "s/lmscommunity/mherger/" platforms/buildme.pl
         egrep "tag.*logitechmediaserver" platforms/buildme.pl
 
-    - name: ${{ inputs.build-params }} package on ${{ runner.os }}
-      if: ${{ startsWith(inputs.build-params, 'mac') }}
+    - name: Build ${{ inputs.build-params }} package on ${{ runner.os }} (self-hosted runner)
+      if: ${{ startsWith(inputs.build-params, 'macosx') }}
       shell: bash
       run: |
         ssh ${{ inputs.mac-connect-string }} "mkdir -p $BASEDIR; rm -rf $BASEDIR/publish"
@@ -65,7 +65,7 @@ runs:
         scp ${{ inputs.mac-connect-string }}:$BASEDIR/publish/* publish/
 
     - name: Build ${{ inputs.build-params }} package on ${{ runner.os }}
-      if: ${{ !startsWith(inputs.build-params, 'mac') }}
+      if: ${{ !startsWith(inputs.build-params, 'macosx') }}
       shell: bash
       run: |
         SRC_PATH=$PWD
