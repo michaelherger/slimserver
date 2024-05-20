@@ -47,6 +47,7 @@ use Slim::Utils::Log;
 use Slim::Utils::Unicode;
 use Slim::Utils::Prefs;
 use Slim::Utils::Text;
+use Slim::Utils::Strings qw(cstring);
 use Slim::Web::ImageProxy qw(proxiedImage);
 
 {
@@ -278,7 +279,8 @@ sub albumsQuery {
 	my $libraryID     = Slim::Music::VirtualLibraries->getRealId($request->getParam('library_id'));
 	my $year          = $request->getParam('year');
 	my $sort          = $request->getParam('sort') || ($roleID ? 'artistalbum' : 'album');
-	my $work	  = $request->getParam('work_id');
+	# a work_id of -1 would mean "all works"
+	my $work	         = $request->getParam('work_id');
 	my $composerID    = $request->getParam('composer_id');
 	my $fromSearch    = $request->getParam('from_search');
 
@@ -520,21 +522,6 @@ sub albumsQuery {
 			}
 		}
 
-		if (defined $work) {
-			$sql .= 'JOIN tracks ON tracks.album = albums.id ' unless $sql =~ /JOIN tracks/;
-			$sql .= 'JOIN works ON tracks.work = works.id ' unless $sql =~ /JOIN works/;
-			push @{$w}, 'tracks.work = ?';
-			push @{$p}, $work;
-			$sql .= 'JOIN contributors AS composer ON works.composer = composer.id ' ;
-			$sql .= 'JOIN contributor_track ON contributor_track.track = tracks.id ' unless $sql =~ /JOIN contributor_track/;
-			push @{$w}, 'contributor_track.contributor = ? AND contributor_track.role = 2';
-			push @{$p}, $composerID;
-			$c->{'tracks.work'} = 1;
-			$c->{'works.title'} = 1;
-			$c->{'composer.name'} = 1;
-			$c->{'tracks.grouping'} = 1;
-		}
-
 		if (defined $genreID) {
 			my @genreIDs = split(/,/, $genreID);
 			$sql .= 'JOIN tracks ON tracks.album = albums.id ' unless $sql =~ /JOIN tracks/;
@@ -552,6 +539,29 @@ sub albumsQuery {
 			}
 		}
 	}
+
+	if (defined $work) {
+		$sql .= 'JOIN tracks ON tracks.album = albums.id ' unless $sql =~ /JOIN tracks/;
+		$sql .= 'JOIN works ON tracks.work = works.id ' unless $sql =~ /JOIN works/;
+		$sql .= 'JOIN contributors AS composer ON works.composer = composer.id ' ;
+		$sql .= 'JOIN contributor_track ON contributor_track.track = tracks.id ' unless $sql =~ /JOIN contributor_track/;
+		$c->{'tracks.work'} = 1;
+		$c->{'works.title'} = 1;
+		$c->{'composer.name'} = 1;
+		$c->{'tracks.grouping'} = 1;
+		$order_by .= ", tracks.tracknum";
+
+		# -1 -> all works
+		if ($work ne '-1') {
+			push @{$w}, 'tracks.work = ?';
+			push @{$p}, $work;
+			if ( defined $composerID ) {
+				push @{$w}, 'contributor_track.contributor = ? AND contributor_track.role = 2';
+				push @{$p}, $composerID;
+			}
+		}
+	}
+
 
 	if ( $tags =~ /l/ ) {
 		# title/disc/discc is needed to construct (N of M) title
@@ -630,7 +640,7 @@ sub albumsQuery {
 
 	my $dbh = Slim::Schema->dbh;
 
-	$sql .= $work ? "GROUP BY tracks.grouping, albums.id " : "GROUP BY albums.id ";
+	$sql .= $work ? "GROUP BY tracks.grouping, tracks.work, albums.id " : "GROUP BY albums.id ";
 
 	if ($page_key && $tags =~ /Z/) {
 		$request->addResult('indexList', _createIndexList(sprintf($sql, "$page_key AS n") . " ORDER BY $order_by", $p));
@@ -739,44 +749,70 @@ sub albumsQuery {
 
 		my ($contributorSql, $contributorSth, $contributorNameSth, $contributorRoleSth);
 		if ( $tags =~ /(?:aa|SS)/ ) {
-			my @roles = ( 'ARTIST', 'ALBUMARTIST' );
+			# Override $contributorSql if we're dealing with a Work: output Artist, Orchestra, Conductor in that order.
+			if ( defined $work ) {
+				my @roles = ( 'ARTIST', 'BAND', 'CONDUCTOR' );
+				$contributorSql = sprintf( qq{
+					WITH temp AS (
+						SELECT
+							CASE
+								WHEN contributor_track.role = 1 THEN 'ARTIST'
+								WHEN contributor_track.role = 3 THEN 'CONDUCTOR'
+								WHEN contributor_track.role = 4 THEN 'BAND'
+							END AS role,
+							GROUP_CONCAT(DISTINCT contributors.name) AS name,
+							GROUP_CONCAT(DISTINCT contributors.id) AS id
+						FROM tracks
+						JOIN contributor_track ON tracks.id = contributor_track.track
+						JOIN contributors ON contributors.id = contributor_track.contributor
+						WHERE tracks.album = :album AND tracks.work = :work AND contributor_track.role IN (%s)
+							AND ( (:grouping IS NULL AND tracks.grouping IS NULL) OR tracks.grouping = :grouping )
+						GROUP BY contributor_track.role
+						ORDER BY role
+					)
+					SELECT GROUP_CONCAT(DISTINCT name) AS name, GROUP_CONCAT(DISTINCT id) AS id FROM temp
+				},
+				join(',', map { Slim::Schema::Contributor->typeToRole($_) } @roles));
+			} else {
+				my @roles = ( 'ARTIST', 'ALBUMARTIST' );
 
-			if ($prefs->get('useUnifiedArtistsList')) {
-				# Loop through each pref to see if the user wants to show that contributor role.
-				foreach (Slim::Schema::Contributor->contributorRoles) {
-					if ($prefs->get(lc($_) . 'InArtists')) {
-						push @roles, $_;
+				if ($prefs->get('useUnifiedArtistsList')) {
+					# Loop through each pref to see if the user wants to show that contributor role.
+					foreach (Slim::Schema::Contributor->contributorRoles) {
+						if ($prefs->get(lc($_) . 'InArtists')) {
+							push @roles, $_;
+						}
 					}
 				}
-			}
-
-			$contributorSql = sprintf( qq{
-				SELECT GROUP_CONCAT(contributors.name, ',') AS name, GROUP_CONCAT(contributors.id, ',') AS id
-				FROM contributor_album
-				JOIN contributors ON contributors.id = contributor_album.contributor
-				WHERE contributor_album.album = ? AND contributor_album.role IN (%s)
-				GROUP BY contributor_album.role
-				ORDER BY contributor_album.role DESC
-			}, join(',', map { Slim::Schema::Contributor->typeToRole($_) } @roles) );
-
-			# when filtering by role, put that role at the head of the list if it wasn't in there yet
-			if ($roleID) {
-				unshift @roles, map { Slim::Schema::Contributor->roleToType($_) || $_ } split(/,/, $roleID);
-				my %seen;
-				@roles = reverse grep !($seen{$_}++), reverse @roles;
 
 				$contributorSql = sprintf( qq{
-					SELECT GROUP_CONCAT(c.name, ',') AS name, GROUP_CONCAT(c.id, ',') AS id
-					FROM (
-						SELECT contributors.name AS name, contributors.id AS id
-						FROM contributor_album
-							JOIN	contributors ON contributors.id = contributor_album.contributor
-						WHERE contributor_album.album = ? AND contributor_album.role IN (%s)
-						GROUP BY contributors.id
-						ORDER BY contributor_album.role DESC
-					)
-					AS c;
+					SELECT GROUP_CONCAT(contributors.name, ',') AS name, GROUP_CONCAT(contributors.id, ',') AS id
+					FROM contributor_album
+					JOIN contributors ON contributors.id = contributor_album.contributor
+					WHERE contributor_album.album = :album AND contributor_album.role IN (%s)
+					GROUP BY contributor_album.role
+					ORDER BY contributor_album.role DESC
 				}, join(',', map { Slim::Schema::Contributor->typeToRole($_) } @roles) );
+
+				# when filtering by role, put that role at the head of the list if it wasn't in there yet
+				if ($roleID) {
+					unshift @roles, map { Slim::Schema::Contributor->roleToType($_) || $_ } split(/,/, $roleID);
+					my %seen;
+					@roles = reverse grep !($seen{$_}++), reverse @roles;
+
+					$contributorSql = sprintf( qq{
+						SELECT GROUP_CONCAT(c.name, ',') AS name, GROUP_CONCAT(c.id, ',') AS id
+						FROM (
+							SELECT contributors.name AS name, contributors.id AS id
+							FROM contributor_album
+								JOIN	contributors ON contributors.id = contributor_album.contributor
+							WHERE contributor_album.album = :album AND contributor_album.role IN (%s)
+							GROUP BY contributors.id
+							ORDER BY contributor_album.role DESC
+						)
+						AS c;
+					}, join(',', map { Slim::Schema::Contributor->typeToRole($_) } @roles) );
+				}
 			}
 		}
 
@@ -792,7 +828,23 @@ sub albumsQuery {
 			$request->addResultLoopIfValueDefined($loopname, $chunkCount, 'work_id', $c->{'tracks.work'});
 			$request->addResultLoopIfValueDefined($loopname, $chunkCount, 'work_name', $c->{'works.title'});
 			$request->addResultLoopIfValueDefined($loopname, $chunkCount, 'composer', $c->{'composer.name'});
-			$request->addResultLoopIfValueDefined($loopname, $chunkCount, 'grouping', $c->{'tracks.grouping'});
+			$request->addResultLoop($loopname, $chunkCount, 'grouping', $c->{'tracks.grouping'}||"");
+
+			my $favoritesUrl = $work
+				? sprintf('db:album.title=%s&contributor.name=%s&work.title=%s&composer.name=%s&track.grouping=%s',
+					URI::Escape::uri_escape_utf8($c->{'albums.title'}), URI::Escape::uri_escape_utf8($c->{'contributors.name'}),
+					URI::Escape::uri_escape_utf8($c->{'works.title'}), URI::Escape::uri_escape_utf8($c->{'composer.name'}), URI::Escape::uri_escape_utf8($c->{'tracks.grouping'}))
+				: sprintf('db:album.title=%s&contributor.name=%s', URI::Escape::uri_escape_utf8($c->{'albums.title'}), URI::Escape::uri_escape_utf8($c->{'contributors.name'}));
+			# even if we have an extid, it cannot be used when we're dealing here with a work, which is a subset of the album.
+			$request->addResultLoop($loopname, $chunkCount, 'favorites_url', $c->{'albums.extid'} && !$c->{'tracks.work'} ? $c->{'albums.extid'} : $favoritesUrl);
+			my $favoritesTitle = $c->{'albums.title'};
+			if ( $work ) {
+				$favoritesTitle = $c->{'composer.name'} ? $c->{'composer.name'} . cstring($client, 'COLON') . ' ' : '';
+				$favoritesTitle .= $c->{'works.title'} . ' (';
+				$favoritesTitle .= "$c->{'tracks.grouping'} " if $c->{'tracks.grouping'};
+				$favoritesTitle .= cstring($client,'FROM') . ' ' . $c->{'albums.title'} . ')';
+			}
+			$request->addResultLoop($loopname, $chunkCount, 'favorites_title', $favoritesTitle);
 
 			$tags =~ /l/ && $request->addResultLoop($loopname, $chunkCount, 'album', $construct_title->());
 			$tags =~ /y/ && $request->addResultLoopIfValueDefined($loopname, $chunkCount, 'year', $c->{'albums.year'});
@@ -805,23 +857,27 @@ sub albumsQuery {
 			$tags =~ /W/ && $request->addResultLoopIfValueDefined($loopname, $chunkCount, 'release_type', $wantsReleaseTypes ? $c->{'albums.release_type'} : 'ALBUM');
 			$tags =~ /E/ && $request->addResultLoopIfValueDefined($loopname, $chunkCount, 'extid', $c->{'albums.extid'});
 			$tags =~ /X/ && $request->addResultLoopIfValueDefined($loopname, $chunkCount, 'album_replay_gain', $c->{'albums.replay_gain'});
-			$tags =~ /S/ && $request->addResultLoopIfValueDefined($loopname, $chunkCount, 'artist_id', $contributorID || $c->{'albums.contributor'});
 
-			if ($tags =~ /a/) {
-				# Bug 15313, this used to use $eachitem->artists which
-				# contains a lot of extra logic.
+			#Don't use albums.contributor to set artist_id/artist for Works, it may well be completely wrong!
+			if ( !$work ) {
+				$tags =~ /S/ && $request->addResultLoopIfValueDefined($loopname, $chunkCount, 'artist_id', $contributorID || $c->{'albums.contributor'});
 
-				# Bug 17542: If the album artist is different from the current track's artist,
-				# use the album artist instead of the track artist (if available)
-				if ($contributorID && $c->{'albums.contributor'} && $contributorID != $c->{'albums.contributor'}) {
-					$contributorNameSth ||= $dbh->prepare_cached('SELECT name FROM contributors WHERE id = ?');
-					my ($name) = @{ $dbh->selectcol_arrayref($contributorNameSth, undef, $c->{'albums.contributor'}) };
-					$c->{'contributors.name'} = $name if $name;
+				if ($tags =~ /a/) {
+					# Bug 15313, this used to use $eachitem->artists which
+					# contains a lot of extra logic.
+
+					# Bug 17542: If the album artist is different from the current track's artist,
+					# use the album artist instead of the track artist (if available)
+					if ($contributorID && $c->{'albums.contributor'} && $contributorID != $c->{'albums.contributor'} && !$work) {
+						$contributorNameSth ||= $dbh->prepare_cached('SELECT name FROM contributors WHERE id = ?');
+						my ($name) = @{ $dbh->selectcol_arrayref($contributorNameSth, undef, $c->{'albums.contributor'}) };
+						$c->{'contributors.name'} = $name if $name;
+					}
+
+					utf8::decode( $c->{'contributors.name'} ) if exists $c->{'contributors.name'};
+
+					$request->addResultLoopIfValueDefined($loopname, $chunkCount, 'artist', $c->{'contributors.name'});
 				}
-
-				utf8::decode( $c->{'contributors.name'} ) if exists $c->{'contributors.name'};
-
-				$request->addResultLoopIfValueDefined($loopname, $chunkCount, 'artist', $c->{'contributors.name'});
 			}
 
 			if ($tags =~ /s/) {
@@ -840,7 +896,12 @@ sub albumsQuery {
 			# want multiple artists?
 			if ( $contributorSql && $c->{'albums.contributor'} != $vaObjId && !$c->{'albums.compilation'} ) {
 				$contributorSth ||= $dbh->prepare_cached($contributorSql);
-				$contributorSth->execute($c->{'albums.id'});
+				$contributorSth->bind_param(":album", $c->{'albums.id'});
+				if ( $work ) {
+					$contributorSth->bind_param(":work", $work);
+					$contributorSth->bind_param(":grouping", $c->{'tracks.grouping'}||undef);
+				}
+				$contributorSth->execute();
 
 				my $contributor = $contributorSth->fetchrow_hashref;
 				$contributorSth->finish;
@@ -848,10 +909,12 @@ sub albumsQuery {
 				# XXX - what if the artist name itself contains ','?
 				if ( $tags =~ /aa/ && $contributor->{name} ) {
 					utf8::decode($contributor->{name});
+					$request->addResultLoopIfValueDefined($loopname, $chunkCount, 'artist', (split(/,/, $contributor->{name}))[0]) if $work;
 					$request->addResultLoopIfValueDefined($loopname, $chunkCount, 'artists', $contributor->{name});
 				}
 
 				if ( $tags =~ /SS/ && $contributor->{id} ) {
+					$request->addResultLoopIfValueDefined($loopname, $chunkCount, 'artist_id', (split(/,/, $contributor->{id}))[0]) if $work;
 					$request->addResultLoopIfValueDefined($loopname, $chunkCount, 'artist_ids', $contributor->{id});
 				}
 			}
@@ -934,7 +997,7 @@ sub artistsQuery {
 	my $cacheKey;
 
 	my $collate = Slim::Utils::OSDetect->getOS()->sqlHelperClass()->collate();
-	my $sort    = "contributors.namesort, contributors.musicbrainz_id $collate";
+	my $sort    = "contributors.namesort $collate, contributors.musicbrainz_id";
 
 	# Manage joins
 	if (defined $trackID) {
@@ -1214,6 +1277,7 @@ sub artistsQuery {
 			if ($tags =~ /E/ && $extid) {
 				$request->addResultLoop($loopname, $chunkCount, 'extid', $extid);
 			}
+			$request->addResultLoop($loopname, $chunkCount, 'favorites_url', 'db:contributor.name=' . URI::Escape::uri_escape_utf8( $name ) );
 
 			$chunkCount++;
 
@@ -1772,6 +1836,7 @@ sub genresQuery {
 
 			$request->addResultLoop($loopname, $chunkCount, 'id', $id);
 			$request->addResultLoop($loopname, $chunkCount, 'genre', $name);
+			$request->addResultLoop($loopname, $chunkCount, 'favorites_url', 'db:genre.name=' . URI::Escape::uri_escape_utf8( $name ));
 			$tags =~ /s/ && $request->addResultLoop($loopname, $chunkCount, 'textkey', $textKey);
 
 			$chunkCount++;
@@ -2241,6 +2306,7 @@ sub mediafolderQuery {
 				$request->addResultLoop($loopname, $chunkCount, 'type', 'folder');
 			} elsif (Slim::Music::Info::isPlaylist($volatileUrl || $item)) {
 				$request->addResultLoop($loopname, $chunkCount, 'type', 'playlist');
+				$tags =~ /u/ && $request->addResultLoop($loopname, $chunkCount, 'favorites_url', $url);
 			} elsif ($params->{typeRegEx} && $filename =~ $params->{typeRegEx}) {
 				$request->addResultLoop($loopname, $chunkCount, 'type', $type);
 			} elsif (Slim::Music::Info::isSong($volatileUrl || $item)) {
@@ -2704,6 +2770,7 @@ sub playlistsQuery {
 				$request->addResultLoop($loopname, $chunkCount, "id", $id);
 				$request->addResultLoop($loopname, $chunkCount, "playlist", $eachitem->title);
 				$tags =~ /u/ && $request->addResultLoop($loopname, $chunkCount, "url", $eachitem->url);
+				$tags =~ /u/ && $request->addResultLoop($loopname, $chunkCount, "favorites_url", $eachitem->url);
 				$tags =~ /s/ && $request->addResultLoop($loopname, $chunkCount, 'textkey', $textKey);
 				$tags =~ /E/ && $request->addResultLoop($loopname, $chunkCount, 'extid', $eachitem->extid);
 				$tags =~ /x/ && $request->addResultLoop($loopname, $chunkCount, 'remote', $eachitem->remote ? 1 : 0);
@@ -3076,7 +3143,7 @@ sub searchQuery {
 		# contributors first
 		my $cols = "me.id, me.$name";
 		$cols    = join(', ', $cols, @$c) if $extended && $c && @$c;
-		
+
 		my $sql;
 
 		# we don't have a full text index for genres
@@ -4207,6 +4274,49 @@ sub syncGroupsQuery {
 }
 
 
+sub tagsQuery {
+	my $request = shift;
+
+	if ($request->isNotQuery([['tags']])) {
+		$request->setStatusBadConfig();
+		return;
+	}
+
+	# get our parameters
+	my $client  = $request->client;
+	my $url     = $request->getParam('url');
+	my $trackID = $request->getParam('track_id');
+
+	if (!$trackID && !$url) {
+		$request->setStatusBadParams();
+		return;
+	}
+
+	# find the track
+	if (!$url && $trackID){
+		my $track = Slim::Schema->find('Track', $trackID);
+		$url = $track->url;
+	}
+
+	$url =~ s/^tmp:/file:/;
+
+	if (!Slim::Music::Info::isFileURL($url)) {
+		$request->setStatusDone();
+		return;
+	}
+
+	my $info = Slim::Menu::TrackInfo::tagDump($client, undef, undef, Slim::Utils::Misc::pathFromFileURL($url));
+
+	my $separator = cstring($client, 'COLON') . ' ';
+	foreach (@{$info || []}) {
+		my ($title, $value) = split($separator, $_->{name}) if ref $_;
+		$request->addResult($title, $value) if $title && defined $value;
+	}
+
+	$request->setStatusDone();
+}
+
+
 sub timeQuery {
 	my $request = shift;
 
@@ -4295,7 +4405,8 @@ sub titlesQuery {
 	my $start;
 	my $end;
 
-	my ($items, $itemOrder, $totalCount) = _getTagDataForTracks( $tags, {
+
+	my $tagDataParams = {
 		where         => $where,
 		sort          => $order_by,
 		search        => $search,
@@ -4308,17 +4419,17 @@ sub titlesQuery {
 		releaseType   => $releaseType,
 		workId	      => $workID,
 		libraryId     => $libraryID,
-		grouping      => $grouping,
 		limit         => sub {
 			$count = shift;
 
 			my $valid;
 
 			($valid, $start, $end) = $request->normalize(scalar($index), scalar($quantity), $count);
-
 			return ($valid, $index, $quantity);
 		},
-	} );
+	};
+	$tagDataParams->{grouping} = $grouping if $grouping;
+	my ($items, $itemOrder, $totalCount) = _getTagDataForTracks( $tags, $tagDataParams );
 
 	if ($stillScanning) {
 		$request->addResult("rescan", 1);
@@ -4470,7 +4581,7 @@ sub yearsQuery {
 			$id += 0;
 
 			$request->addResultLoop($loopname, $chunkCount, 'year', $id);
-
+			$request->addResultLoop($loopname, $chunkCount, 'favorites_url', 'db:year.id=' . ($id || 0 ));
 			$chunkCount++;
 		}
 	}
@@ -4504,24 +4615,25 @@ sub worksQuery {
 	my $search        = $request->getParam('search');
 	my $libraryID     = Slim::Music::VirtualLibraries->getRealId($request->getParam('library_id'));
 	my $artistID      = $request->getParam('artist_id');
-	my $workID        = $request->getParam('work_id');
 	my $roleID        = $request->getParam('role_id');
+	my $genreID       = $request->getParam('genre_id');
+	my $year          = $request->getParam('year');
 
 	# get them all by default
 	my $where = {};
 	my $w   = ["tracks.work IS NOT NULL"];
 	my $p   = [];
 
-	my $columns = "works.title, works.id, composer.name, composer.id, composer.namesort, works.titlesort";
+	my $columns = "works.title, works.id, composer.name, composer.id, composer.namesort, works.titlesort, GROUP_CONCAT(DISTINCT albums.artwork), GROUP_CONCAT(DISTINCT albums.id)";
+	my $groupBy = "works.title, works.id, composer.name, composer.id, composer.namesort, works.titlesort";
 
 	my $sql = 'SELECT %s FROM tracks
-		JOIN contributor_track composer_track ON composer_track.track = tracks.id AND composer_track.role = 2 
-		JOIN contributors composer ON composer.id = composer_track.contributor 
-		JOIN contributor_track ON contributor_track.track = tracks.id 
-		JOIN contributors ON contributors.id = contributor_track.contributor 
-		JOIN works ON works.id = tracks.work AND works.composer = composer.id ';
-
-	my $page_key = "SUBSTR(composer.namesort,1,1)";
+		JOIN contributor_track composer_track ON composer_track.track = tracks.id AND composer_track.role = 2
+		JOIN contributors composer ON composer.id = composer_track.contributor
+		JOIN contributor_track ON contributor_track.track = tracks.id
+		JOIN contributors ON contributors.id = contributor_track.contributor
+		JOIN works ON works.id = tracks.work AND works.composer = composer.id
+		JOIN albums ON tracks.album = albums.id ';
 
 	if (specified($search)) {
 		if ( Slim::Schema->canFulltextSearch ) {
@@ -4531,17 +4643,33 @@ sub worksQuery {
 				type   => 'work',
 			});
 			$sql .= "JOIN worksSearch ON works.id = worksSearch.id ";
+
+			Slim::Plugin::FullTextSearch::Plugin->createHelperTable({
+				name   => 'albumsSearch',
+				search => $search,
+				type   => 'album',
+			});
+			$sql .= "JOIN albumsSearch ON albums.id = albumsSearch.id ";
 		} else {
 			my $strings = Slim::Utils::Text::searchStringSplit($search);
 			if ( ref $strings->[0] eq 'ARRAY' ) {
 				push @{$w}, '(' . join( ' OR ', map { 'works.titlesearch LIKE ?' } @{ $strings->[0] } ) . ')';
 				push @{$p}, @{ $strings->[0] };
+				push @{$w}, '(' . join( ' OR ', map { 'albums.titlesearch LIKE ?' } @{ $strings->[0] } ) . ')';
+				push @{$p}, @{ $strings->[0] };
 			}
 			else {
 				push @{$w}, 'works.titlesearch LIKE ?';
 				push @{$p}, @{$strings};
+				push @{$w}, 'albums.titlesearch LIKE ?';
+				push @{$p}, @{$strings};
 			}
 		}
+	}
+
+	if ( defined $year ) {
+		push @{$w}, "tracks.year = ?";
+		push @{$p}, $year;
 	}
 
 	if ( defined $roleID ) {
@@ -4550,11 +4678,6 @@ sub worksQuery {
 			push @{$p}, map { Slim::Schema::Contributor->typeToRole($_) } @roles;
 			push @{$w}, 'contributor_track.role IN (' . join(', ', map {'?'} @roles) . ')';
 		}
-	}
-
-	if (defined $workID) {
-		push @{$w}, "works.id = ?";
-		push @{$p}, $workID;
 	}
 
 	if (defined $artistID) {
@@ -4568,17 +4691,41 @@ sub worksQuery {
 		push @{$p}, $libraryID;
 	}
 
+	if (defined $genreID) {
+		my @genreIDs = split(/,/, $genreID);
+		$sql .= 'JOIN genre_track ON genre_track.track = tracks.id ';
+		push @{$w}, 'genre_track.genre IN (' . join(', ', map {'?'} @genreIDs) . ')';
+		push @{$p}, @genreIDs;
+	}
+
 	if ( @{$w} ) {
 		$sql .= 'WHERE ';
 		$sql .= join( ' AND ', @{$w} );
 		$sql .= ' ';
 	}
 
-	$sql .= " GROUP BY $columns ";
+	$sql .= " GROUP BY $groupBy ";
+
+	my $dbh = Slim::Schema->dbh;
+
+	# Get count of unique composers, the count is cached until the next rescan done event
+	my $cacheKey = md5_hex($sql . join( '', @{$p} ) . 'composerCount' . Slim::Music::VirtualLibraries->getLibraryIdForClient($client));
+
+	my $composerCount = $cache->{$cacheKey};
+	if ( !$composerCount ) {
+		my $ccSql = sprintf($sql, "composer.id AS cid");
+		my $total_sth = $dbh->prepare_cached( qq{
+			SELECT COUNT(DISTINCT cid)  FROM ( $ccSql ) AS t1
+		} );
+
+		$total_sth->execute( @{$p} );
+		($composerCount) = $total_sth->fetchrow_array();
+		$total_sth->finish;
+	}
 
 	my $order_by = "ORDER BY composer.namesort, works.titlesort";
 
-	my $dbh = Slim::Schema->dbh;
+	my $page_key = $composerCount == 1 ? "SUBSTR(works.titlesort,1,1)" : "SUBSTR(composer.namesort,1,1)";
 
 	if ($page_key && $tags =~ /Z/) {
 		$request->addResult('indexList', _createIndexList(sprintf($sql, "$page_key AS n") . " $order_by", $p));
@@ -4605,7 +4752,6 @@ sub worksQuery {
 		$total_sth->finish;
 	}
 
-#	$sql .= $artistID ?  "ORDER BY composer.namesort, works.titlesort" : "ORDER BY works.titlesort, composer.namesort";
 	$sql .= $order_by;
 
 	# now build the result
@@ -4636,24 +4782,37 @@ sub worksQuery {
 		my $sth = $dbh->prepare_cached($sql);
 		$sth->execute( @{$p} );
 
-		my ($work, $workId, $composer, $composerId, $nameSort, $titleSort );
-		$sth->bind_columns(\$work, \$workId, \$composer, \$composerId, \$nameSort, \$titleSort);
+		my ($work, $workId, $composer, $composerId, $nameSort, $titleSort, $images, $album_ids);
+		$sth->bind_columns(\$work, \$workId, \$composer, \$composerId, \$nameSort, \$titleSort, \$images, \$album_ids);
 
 		while ( $sth->fetch ) {
-			#$id += 0;
+
+			my $image = (split(/,/, $images))[0];
+
 			utf8::decode($work) if $work;
 			utf8::decode($composer) if $composer;
-			$request->addResultLoop($loopname, $chunkCount, 'work', $work);
 			$request->addResultLoop($loopname, $chunkCount, 'work_id', $workId);
+			if ( $composerCount == 1 && $composerId eq $artistID ) {
+				$request->addResultLoop($loopname, $chunkCount, 'single_composer', 1);
+			}
 			$request->addResultLoop($loopname, $chunkCount, 'composer', $composer);
+			$request->addResultLoop($loopname, $chunkCount, 'work', $work);
 			$request->addResultLoop($loopname, $chunkCount, 'composer_id', $composerId);
-#			$request->addResultLoop($loopname, $chunkCount, 'year', $year);
-#			$request->addResultLoop($loopname, $chunkCount, 'from_search', $search) if $search;
+			$request->addResultLoopIfValueDefined($loopname, $chunkCount, 'artwork_track_id', $image);
+			$request->addResultLoopIfValueDefined($loopname, $chunkCount, 'artwork_track_ids', $images);
+			$request->addResultLoop($loopname, $chunkCount, 'album_id', $album_ids);
 
-			my $textKey;
-			utf8::decode( $nameSort ) if $nameSort;
-			$textKey = substr $nameSort, 0, 1;
-			$request->addResultLoopIfValueDefined($loopname, $chunkCount, 'textkey', $textKey);
+			if ( $composerCount == 1 ) {
+				utf8::decode( $titleSort );
+				$request->addResultLoop($loopname, $chunkCount, 'textkey', substr($titleSort, 0, 1));
+			} else {
+				utf8::decode( $nameSort );
+				$request->addResultLoop($loopname, $chunkCount, 'textkey', substr($nameSort, 0, 1));
+			}
+
+			$request->addResultLoop($loopname, $chunkCount, 'favorites_url', sprintf('db:work.title=%s&composer.name=%s',
+				URI::Escape::uri_escape_utf8($work), URI::Escape::uri_escape_utf8($composer)));
+			$request->addResultLoop($loopname, $chunkCount, 'favorites_title', $composer . cstring($client, 'COLON') . " $work");
 
 			$chunkCount++;
 
@@ -4997,6 +5156,9 @@ my %tagMap = (
 	  's' => ['artist_id',        '',              'artistid'],         #->contributors
 	  'e' => ['album_id',         '',              'albumid'],          #album
 	  'l' => ['album',            'ALBUM',         'albumname'],        #->album.title
+	  'b' => ['work',             'WORK',          'worktitle'],        #->work.title
+	  'h' => ['grouping',         'GROUPING',      'grouping'],         #grouping
+	  'z' => ['subtitle',         'SUBTITLE',      'subtitle'],         #subtitle
 	  't' => ['tracknum',         'TRACK',         'tracknum'],         #tracknum
 	  'n' => ['modificationTime', 'MODTIME',       'modificationTime'], #timestamp
 	  'D' => ['addedTime',        'ADDTIME',       'addedTime'],        #added_time
@@ -5021,7 +5183,6 @@ my %tagMap = (
 	                                                                    #endian
 	  'm' => ['bpm',              'BPM',           'bpm'],              #bpm
 	  'v' => ['tagversion',       'TAGVERSION',    'tagversion'],       #tagversion
-	# 'z' => ['drm',              '',              'drm'],              #drm
 	  'M' => ['musicmagic_mixable', '',            'musicmagic_mixable'], #musicmagic_mixable
 	                                                                    #musicbrainz_id
 	                                                                    #lastplayed
@@ -5104,6 +5265,9 @@ my %colMap = (
 	c => 'tracks.coverid',
 	H => 'tracks.channels',
 	E => 'tracks.extid',
+	b => 'works.title',
+	h => 'tracks.grouping',
+	z => 'tracks.subtitle',
 );
 
 sub _songDataFromHash {
@@ -5116,8 +5280,6 @@ sub _songDataFromHash {
 
 	$returnHash{id}    = $res->{'tracks.id'};
 	$returnHash{title} = $res->{'tracks.title'};
-	$returnHash{work} = $res->{'works.title'};
-	$returnHash{grouping} = $res->{'tracks.grouping'};
 
 	my @contributorRoles = Slim::Schema::Contributor->contributorRoles;
 
@@ -5228,6 +5390,9 @@ sub _songData {
 			$remoteMeta->{T} = $remoteMeta->{samplerate};
 			$remoteMeta->{I} = $remoteMeta->{samplesize};
 			$remoteMeta->{W} = $remoteMeta->{releasetype};
+			$remoteMeta->{b} = $remoteMeta->{work};
+			$remoteMeta->{h} = $remoteMeta->{grouping};
+			$remoteMeta->{z} = $remoteMeta->{subtitle};
 
 			# Distance from the live edge of live remote stream. -1 is not live, 0 is live at the edge, >0 is distance in seconds from the live edge.
 			# $remoteMeta->{live_edge} contains distance from live edge. Will only be populated by 3rd party handlers that support dynamic adaptive live streams.
@@ -5557,8 +5722,8 @@ sub _getTagDataForTracks {
 
 	my $collate = Slim::Utils::OSDetect->getOS()->sqlHelperClass()->collate();
 
-	my $sql      = 'SELECT %s FROM tracks LEFT JOIN works ON works.id = tracks.work ';
-	my $c        = { 'tracks.id' => 1, 'tracks.title' => 1, 'works.title' => 1, 'works.id' => 1, 'tracks.grouping' => 1 };
+	my $sql      = 'SELECT %s FROM tracks ';
+	my $c        = { 'tracks.id' => 1, 'tracks.title' => 1 };
 	my $w        = [];
 	my $p        = [];
 	my $total    = 0;
@@ -5603,7 +5768,7 @@ sub _getTagDataForTracks {
 				},
 			});
 
-			$sql = 'SELECT %s FROM tracksSearch JOIN tracks ON tracks.id = tracksSearch.id LEFT JOIN works on tracks.work = works.id ';
+			$sql = 'SELECT %s FROM tracksSearch JOIN tracks ON tracks.id = tracksSearch.id ';
 
 			if (!$count_only) {
 				$sort = "tracksSearch.fulltextweight DESC" . ($sort ? ", $sort" : '');
@@ -5640,17 +5805,21 @@ sub _getTagDataForTracks {
 	}
 
 	if ( my $workId = $args->{workId} ) {
-		push @{$w}, 'tracks.work = ?';
-		push @{$p}, $workId;
-		if ( my $grouping = $args->{grouping} ) {
-			push @{$w}, 'tracks.grouping = ?';
-			push @{$p}, $grouping;
-		} elsif ( exists $args->{grouping} ) {
-			push @{$w}, 'tracks.grouping IS NULL';
+		if ( $workId eq '-1' ) {
+			push @{$w}, 'tracks.work IS NOT NULL';
+		} else {
+			push @{$w}, 'tracks.work = ?';
+			push @{$p}, $workId;
+			if ( my $grouping = $args->{grouping} ) {
+				push @{$w}, 'tracks.grouping = ?';
+				push @{$p}, $grouping;
+			} else {
+				push @{$w}, 'tracks.grouping IS NULL';
+			}
 		}
 	}
 
-	if ( my $libraryId = $args->{libraryId} ) {
+	if ( my $libraryId = Slim::Music::VirtualLibraries->getRealId($args->{libraryId}) ) {
 		$sql .= 'JOIN library_track ON library_track.track = tracks.id ';
 		push @{$w}, 'library_track.library = ?';
 		push @{$p}, $libraryId;
@@ -5660,6 +5829,12 @@ sub _getTagDataForTracks {
 	my $join_genre_track = sub {
 		if ( $sql !~ /JOIN genre_track/ ) {
 			$sql .= 'LEFT JOIN genre_track ON genre_track.track = tracks.id ';
+		}
+	};
+
+	my $join_works = sub {
+		if ( $sql !~ /JOIN works/ ) {
+			$sql .= 'LEFT JOIN works ON works.id = tracks.work ';
 		}
 	};
 
@@ -5758,6 +5933,13 @@ sub _getTagDataForTracks {
 	$tags =~ /c/ && do { $c->{'tracks.coverid'} = 1 };
 	$tags =~ /Y/ && do { $c->{'tracks.replay_gain'} = 1 };
 	$tags =~ /i/ && do { $c->{'tracks.disc'} = 1 };
+	$tags =~ /b/ && do {
+		$join_works->();
+		$c->{'works.title'} = 1;
+	};
+	$tags =~ /h/ && do { $c->{'tracks.grouping'} = 1 };
+	$tags =~ /z/ && do { $c->{'tracks.subtitle'} = 1 };
+
 	$tags =~ /g/ && do {
 		$join_genres->();
 		$c->{'genres.name'} = 1;
@@ -5875,7 +6057,7 @@ sub _getTagDataForTracks {
 	if ( $count_only || (my $limit = $args->{limit}) ) {
 		# Let the caller worry about the limit values
 
-		my $cacheKey = md5_hex($sql . join( '', @{$p}, @$w ) . (Slim::Utils::Text::ignoreCase($search, 1) || ''));
+		my $cacheKey = md5_hex($sql . utf8::decode(join( '', @{$p}, @$w )) . (Slim::Utils::Text::ignoreCase($search, 1) || ''));
 
 		# use short lived cache, as we might be dealing with changing data (eg. playcount)
 		if ( my $cached = $bmfCache{$cacheKey} ) {

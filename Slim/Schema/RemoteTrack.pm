@@ -58,6 +58,8 @@ my @allAttributes = (qw(
 	error
 
 	work
+	grouping
+	subtitle
 ));
 
 {

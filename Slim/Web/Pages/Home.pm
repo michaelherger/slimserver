@@ -40,12 +40,10 @@ sub init {
 	Slim::Web::Pages->addPageLinks("help", { 'REMOTE_STREAMING' => "html/docs/remotestreaming.html" });
 	Slim::Web::Pages->addPageLinks("help", { 'TECHNICAL_INFORMATION' => "html/docs/index.html" });
 	Slim::Web::Pages->addPageLinks("help", { 'COMMUNITY_FORUM' =>	"http://forums.slimdevices.com" });
-	Slim::Web::Pages->addPageLinks("help", { 'SOFTSQUEEZE' => "html/softsqueeze/index.html"});
 
 	Slim::Web::Pages->addPageLinks("plugins", { 'MUSICSOURCE' => "switchserver.html"});
 
 	Slim::Web::Pages->addPageLinks('icons', { 'RADIO_TUNEIN' => 'html/images/ServiceProviders/tuneinurl.png' });
-	Slim::Web::Pages->addPageLinks('icons', { 'SOFTSQUEEZE' => 'html/images/softsqueeze.png' });
 }
 
 sub home {
@@ -189,7 +187,7 @@ sub home {
 sub updateInfo {
 	my ($client, $params, $callback) = @_;
 
-	my ($current) = Slim::Plugin::Extensions::Plugin::getCurrentPlugins();
+	my ($current) = Slim::Utils::PluginRepoManager::getCurrentPlugins();
 
 	my $request = Slim::Control::Request->new(undef, ['appsquery']);
 

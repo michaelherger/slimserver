@@ -1,34 +1,51 @@
-[% PROCESS settings/header.html %]
+[% descHeight = 650 %]
+[% iconSize = 50 %]
+[% PROCESS settings/server/plugins_main.html %]
+<script>
+	var searchData = [% searchData %];
 
-	<div class="settingSection">
-		<div class="prefHead">[% "SETUP_GROUP_PLUGINS" | string %]</div>
-		<div class="prefDesc"><br/>[% (failsafe ? "SETUP_PLUGINS_SAFEMODE" : "SETUP_GROUP_PLUGINS_DESC") | string %]</div>
-	</div>
+	var selector = $('filterChooser').down();
+	var input = $('filterInput');
 
-	<div class="pluginSection">
-	[% FOREACH plugin = sortedPlugins %]
+	selector.observe('change', function(event) {
+		input.value = '';
+		var id = event.target.value;
+		togglePluginVisibility(id, function(s) {
+			return s.category == id;
+		});
+	});
 
-		[% name     = plugins.$plugin.name %]
-		[% version  = plugins.$plugin.version %]
-		[% enforce  = plugins.$plugin.enforce || plugins.$plugin.errorDesc %]
-		[% settings = failsafe && !enforce ? '' : plugins.$plugin.optionsURL %]
-		[% enabled  = pluginState.$plugin %]
+	input.observe('keyup', function(event) {
+		selector.value = '';
 
-		[% title = BLOCK %]
-			<input name="[% name %]" type="checkbox" [% enforce ? "disabled" : "" %] [% enabled ? "checked=\"1\"" : "" %] class="pluginEnablerCheckbox"> [% name | getstring %]
-			[% IF version %](v[% version %])[% END %]
-		[% END %]
+		var value = event.target.value;
+		var reg = new RegExp(value, 'i');
+		togglePluginVisibility(value, function(s) {
+			return reg.test(s.content);
+		});
+	});
 
-		[% WRAPPER setting desc = plugins.$plugin.description %]
-			[% IF plugins.$plugin.errorDesc %]<strong>[% plugins.$plugin.errorDesc %]</strong>
-			[% ELSE %]
-				[% PROCESS pluginLink %]&nbsp;
-				[% IF plugins.$plugin.opType %]<strong>([% "SETUP_GROUP_PLUGINS_NEEDS_RESTART" | string %])</strong>[% END %]
-			[% END %]
-		[% END %]
+	function togglePluginVisibility(value, validator) {
+		var pluginItems = $$('li.thumbwrap');
 
-	[%- END -%]
-	</div>
+		if (!value) {
+			pluginItems.forEach(function(item) {
+				item.show();
+			});
+		}
+		else {
+			pluginItems.forEach(function(item) {
+				var id = item.id.replace('plugin-', '');
 
-[% PROCESS settings/footer.html %]
-	
+				let s = searchData[id];
+
+				if (s && validator(s)) {
+					item.show();
+				}
+				else {
+					item.hide();
+				}
+			});
+		}
+	}
+</script>

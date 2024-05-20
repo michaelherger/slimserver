@@ -1,0 +1,195 @@
+[% descHeight = 65 %]
+[% iconSize = 50 %]
+[% IF useExtJS; extJsScripts = BLOCK %]
+<script TYPE="text/javascript">
+	var searchData = [% searchData %];
+	var category, search, collapsableSections = [];
+
+	Ext.onReady(function() {
+		[% PROCESS jsString id='SETUP_EXTENSIONS_WARNING_POPUP' %]
+		[% PROCESS jsString id='SETUP_EXTENSIONS_WARNING_POPUP2' %]
+		[% PROCESS jsString id='SETUP_EXTENSIONS_WARNING_POPUP_OTHERREPO' %]
+
+		if (SqueezeJS.UI) {
+			var categories = Ext.query('#filterChooser option');
+			var categoriesAllLabel = categories[0].innerHTML;
+
+			// plugin filtering
+			var filterChooser = new SqueezeJS.UI.SplitButton({
+				renderTo: 'filterChooser',
+				menu: new Ext.menu.Menu({shadow: Ext.isGecko && Ext.isMac ? true : 'sides'}),
+				text: categoriesAllLabel
+			});
+
+			Ext.each(categories, function(category, x) {
+				const catId = category.value;
+				const title = category.innerHTML;
+				filterChooser.menu.add(
+					new Ext.menu.CheckItem({
+						text: title,
+						value: catId,
+						checked: false,
+						cls: 'settingsList',
+						group: 'settingsList',
+						handler: function(ev) {
+							Ext.get('filterInput').dom.value = '';
+							expandAllSections();
+
+							category = ev.value;
+							filterChooser.setText(title);
+							togglePluginVisibility(catId, function(s) {
+								return s.category == catId;
+							});
+						}
+					})
+				);
+			});
+
+			Ext.select("#filterChooser select").remove()
+
+			new Ext.form.TextField({
+				applyTo: 'filterInput',
+				validationDelay: 100,
+				validateOnBlur: false,
+				selectOnFocus: true,
+
+				validator: function(value) {
+					filterChooser.setText(categoriesAllLabel);
+					expandAllSections();
+
+					var reg = new RegExp(value, 'i');
+					togglePluginVisibility(value, function(s) {
+						return reg.test(s.content);
+					});
+				}
+			});
+
+			var pluginDescriptions = Ext.query('div.pluginDesc');
+			Ext.each(pluginDescriptions, function(descEl) {
+				descEl = Ext.get(descEl);
+				if (descEl.getHeight() > [% descHeight %]) {
+					descEl.addClass('pluginDescLong');
+					new Ext.ToolTip({
+						target: descEl,
+						html: descEl.dom.innerHTML,
+						hideDelay: 1500,
+						maxWidth: 300
+					});
+				}
+			});
+
+			function togglePluginVisibility(value, validator) {
+				var pluginItems = Ext.query('li.thumbwrap');
+
+				if (!value) {
+					Ext.each(pluginItems, function(item) {
+						Ext.get(item).setDisplayed(true);
+					});
+				}
+				else {
+					Ext.each(pluginItems, function(item) {
+						var id = item.id.replace('plugin-', '');
+						item = Ext.get(item);
+
+						let s = searchData[id];
+
+						if (s && validator(s)) {
+							item.setDisplayed(true);
+						}
+						else {
+							item.setDisplayed(false);
+						}
+					});
+				}
+			}
+
+			function expandAllSections() {
+				collapsableSections.forEach(function(section) {
+					Settings.Page.expandItem(section[0], section[1]);
+				});
+			}
+		}
+
+		Settings.Page.submit = function(ajax, cb) {
+			// display warning if user wants to install "unsafe" plugins from 3rd parties or add the other repo
+			var unsafe = Ext.query('input.unsafePlugin');
+			var other  = Ext.query('input.otherrepo');
+			var msg    = '';
+
+			for (var i = 0; i < unsafe.length; i++) {
+				if (unsafe[i].checked)
+					msg += '<li>' + unsafe[i].value + '</li>';
+			}
+
+			if (msg > '') {
+				msg = SqueezeJS.string('plugin_extensions_warning_popup')
+						+ '<ul>' + msg + '</ul>'
+						+ SqueezeJS.string('plugin_extensions_warning_popup2');
+			}
+
+			if (other.length > 0) {
+				if (other[0].checked) {
+					msg = SqueezeJS.string('plugin_extensions_warning_popup_otherrepo');
+				}
+			}
+
+			if (msg > '') {
+				Ext.Msg.show({
+					title: SqueezeJS.string('settings'),
+					msg: msg,
+					width: 450,
+					closable: false,
+					buttons: Ext.Msg.OKCANCEL,
+					fn: function(btn) {
+						if (btn == 'ok') {
+							document.forms.settingsForm.submit();
+						}
+					}
+				});
+			}
+
+			else {
+				document.forms.settingsForm.submit();
+			}
+		};
+
+		collapsableSections = Settings.Page.initCollapsableItems('grid');
+	});
+</script>
+[% END; END %]
+<style>
+	.pluginItem img.pluginFallbackIcon {
+		border: 1px solid #bbb;
+		border-radius: 5px;
+		background-color: #eee;
+		padding: 2px;
+		width: [% iconSize - 6 %]px !important;
+	}
+
+	.pluginList .pluginDesc, .pluginFooter {
+		max-height: [% descHeight %]px !important;
+	}
+
+	.pluginList .pluginDescLong:before {
+		position: absolute;
+		content: '';
+		width: 100%;
+		height: 100%;
+		left: 0;
+		top: 0;
+		background: linear-gradient(transparent [% descHeight - 30 %]px, white) !important;
+	}
+
+	#pluginButtonBar #filterChooser {
+		width: 200px;
+	}
+
+	#pluginButtonBar span {
+		vertical-align: top;
+	}
+
+	#pluginButtonBar .x-form-text {
+		height: 20px;
+	}
+</style>
+[% PROCESS settings/server/plugins_main.html %]

@@ -292,6 +292,46 @@ PLUGIN_RANDOM_YEAR_DISABLE
 	RU	прекратить добавление годов
 	SV	sluta lägga till år
 
+PLUGIN_RANDOM_WORK
+	CS	Mix děl
+	EN	Work Mix
+	DE	Werkmix
+	ES	Mezcla de Composición
+	FR	Œuvres aléatoires
+	NL	Werkmix
+
+PLUGIN_RANDOM_WORK_ITEM
+	CS	Náhodná díla
+	EN	Random Work
+	DE	Zufälliges Werk
+	ES	Composición aleatorio
+	FR	Œuvre aléatoire
+	NL	Willekeurig werk
+
+PLUGIN_RANDOM_WORK_PLAYING
+	CS	Přehrávání náhodných děl
+	EN	Playing Random Works
+	DE	Zufällige Werke werden wiedergegeben
+	ES	Reproduciendo composiciónes aleatorios
+	FR	Lecture Œuvres aléatoires
+	NL	Werk worden willekeurig afgespeeld
+
+PLUGIN_RANDOM_WORK_DISABLE
+	CS	přestat přidávat díla
+	EN	stop adding works
+	DE	keine Werke mehr hinzuzufügen
+	ES	detener adición de composiciónes
+	FR	ne plus ajouter d'Œuvres
+	NL	stop toevoegen van werken
+
+PLUGIN_RANDOM_WORK_WEB
+	CS	Náhodná díla
+	EN	Random works
+	DE	Zufällige Werke
+	ES	Composición aleatorios
+	FR	Œuvres aléatoires
+	NL	Willekeurige werken
+
 PLUGIN_RANDOM_GENRE_FILTER
 	CS	Zahrnout žánry
 	DA	Medtag genrer
@@ -571,11 +611,13 @@ PLUGIN_RANDOM_ALBUM_MIX_WITH_GENRES
 	NO	Tilfeldig album (begrenset til nåværende sjangre)
 
 PLUGIN_RANDOM_TITLEMIX_KEEP_GENRES
+	CS	Mix skladeb (zachovat výběr žánrů)
 	DE	Titelmix (Genreauswahl beibehalten)
 	EN	Song Mix (keep genre selection)
 	FR	Morceaux aléatoires (conserver la sélection du genre)
 
 PLUGIN_RANDOM_ALBUM_MIX_KEEP_GENRES
+	CS	Náhodné album (zachovat výběr žánrů)
 	DE	Zufälliges Album (Genreauswahl beibehalten)
 	EN	Random Album (keep genre selection)
 	FR	Album aléatoire (conserver la sélection du genre)

@@ -44,6 +44,9 @@ my $log = logger('database.info');
 	$class->belongs_to('contributor' => 'Slim::Schema::Contributor');
 
 	$class->has_many('tracks'            => 'Slim::Schema::Track'            => 'album');
+	# need to duplicate this relation because it should have been 'track' not 'tracks', but changing this now would lead to breakages elsewhere.
+	# See https://github.com/LMS-Community/slimserver/pull/1060 for details.
+	$class->has_many('track'             => 'Slim::Schema::Track'            => 'album');
 	$class->has_many('contributorAlbums' => 'Slim::Schema::ContributorAlbum' => 'album');
 
 	if ($] > 5.007) {
@@ -256,6 +259,33 @@ sub artistsForRoles {
 		->search_related('contributor')->distinct->all;
 }
 
+sub artistPerformsOnWork {
+	my ($self, $work, $grouping, $artist) = @_;
+
+	my $sth = Slim::Schema->dbh->prepare_cached(
+		qq{
+			SELECT count(*)
+			from albums
+			JOIN tracks ON albums.id = tracks.album
+			JOIN contributor_track ON tracks.id = contributor_track.track
+			WHERE tracks.work = :work
+			AND albums.id = :album
+			AND contributor_track.contributor = :artist
+			AND ( (:grouping IS NULL AND tracks.grouping IS NULL) OR tracks.grouping = :grouping )
+		}
+	);
+
+	$sth->bind_param(":work", $work);
+	$sth->bind_param(":album", $self->id);
+	$sth->bind_param(":artist", $artist);
+	$sth->bind_param(":grouping", $grouping);
+	$sth->execute();
+
+	my ($count) = $sth->fetchrow_array;
+	$sth->finish;
+	return $count
+}
+
 # Return an array of artists associated with this album.
 sub artists {
 	my $self = shift;
@@ -373,11 +403,13 @@ sub rescan {
 
 sub duration {
 	my $self = shift;
+	my $workId = shift;
+	my $grouping = shift;
 
 	my $secs = 0;
 	foreach ($self->tracks) {
 		return if !defined $_->secs;
-		$secs += $_->secs;
+		$secs += $_->secs if !$workId || $_->get_column('work') == $workId && $_->get_column('grouping') eq $grouping;
 	}
 	return sprintf('%s:%02s', int($secs / 60), $secs % 60);
 }

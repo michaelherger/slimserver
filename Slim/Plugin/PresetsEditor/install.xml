@@ -7,9 +7,11 @@
 	<version>1.0</version>
 	<description>PLUGIN_PRESETS_EDITOR_DESC</description>
 	<creator>Lyrion Community</creator>
+	<category>tools</category>
 
 	<defaultState>enabled</defaultState>
 	<type>2</type><!-- type=extension -->
+	<optionsURL>settings/presets.html</optionsURL>
 
 	<targetApplication>
 		<id>Lyrion Music Server</id>

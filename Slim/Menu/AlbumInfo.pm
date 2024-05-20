@@ -246,6 +246,8 @@ sub infoContributors {
 
 				next unless $contributor->isInLibrary($library_id);
 
+				next if $filter->{work_id} && !$album->artistPerformsOnWork($filter->{work_id}, $filter->{grouping}, $contributor->id);
+
 				if ($linkRoles{$role}) {
 					my $id = $contributor->id;
 
@@ -410,11 +412,11 @@ sub infoDisc {
 }
 
 sub infoDuration {
-	my ( $client, $url, $album ) = @_;
+	my ( $client, $url, $album, $remoteMeta, $tags, $filter ) = @_;
 
 	my $item;
 
-	if ( my $duration = $album->duration ) {
+	if ( my $duration = $album->duration($filter->{work_id}, $filter->{grouping}) ) {
 		$item = {
 			type  => 'text',
 			label => 'ALBUMLENGTH',
@@ -588,7 +590,7 @@ sub cliQuery {
 	my $connectionId   = $request->connectionID || '';
 
 	my %filter;
-	foreach (qw(artist_id genre_id year library_id)) {
+	foreach (qw(artist_id genre_id year library_id work_id grouping)) {
 		if (my $arg = $request->getParam($_)) {
 			$filter{$_} = $arg;
 		}
