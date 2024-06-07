@@ -152,11 +152,29 @@ sub add {
 		my $search = Slim::Utils::Text::ignoreCase($name, 1);
 		my $sort   = Slim::Utils::Text::ignoreCaseArticles(($sortedList[$i] || $name));
 		my $mbid   = $brainzIDList[$i];
+		my ($id, $oldExtId, $oldMbid, $sth);
 
-		my $sth = $dbh->prepare_cached( 'SELECT id, extid FROM contributors WHERE name = ?' );
-		$sth->execute($name);
-		my ($id, $oldExtId) = $sth->fetchrow_array;
-		$sth->finish;
+		# check Musicbrainz ID first
+		if ($mbid) {
+			$sth = $dbh->prepare_cached( 'SELECT id, extid, musicbrainz_id FROM contributors WHERE musicbrainz_id = ?' );
+			$sth->execute($mbid);
+			($id, $oldExtId, $oldMbid) = $sth->fetchrow_array;
+			$sth->finish;
+
+			# no MBID found - try to merge with existing contributor of the same name for backwards compatibility
+			if ( !$id ) {
+				$sth = $dbh->prepare_cached( 'SELECT id, extid FROM contributors WHERE name = ? AND musicbrainz_id IS NULL' );
+				$sth->execute($name);
+				($id, $oldExtId) = $sth->fetchrow_array;
+				$sth->finish;
+			}
+		}
+		else {
+			$sth = $dbh->prepare_cached( 'SELECT id, extid, musicbrainz_id FROM contributors WHERE name = ? LIMIT 1' );
+			$sth->execute($name);
+			($id, $oldExtId, $oldMbid) = $sth->fetchrow_array;
+			$sth->finish;
+		}
 
 		if ( !$id ) {
 			$sth = $dbh->prepare_cached( qq{
@@ -173,6 +191,12 @@ sub add {
 			if ( $search ne Slim::Utils::Unicode::utf8toLatin1Transliterate($sort) ) {
 				$sth = $dbh->prepare_cached('UPDATE contributors SET namesort = ? WHERE id = ?');
 				$sth->execute( $sort, $id );
+			}
+
+			# if we've found a contributor without Musicbrainz ID, merge for backwards compatibility
+			if ( $mbid && $mbid ne $oldMbid ) {
+				$sth = $dbh->prepare_cached('UPDATE contributors SET musicbrainz_id = ? WHERE id = ?');
+				$sth->execute( $mbid, $id );
 			}
 
 			# allow adding external IDs from multiple services
@@ -231,10 +255,6 @@ sub rescan {
 		SELECT COUNT(*) FROM contributor_track WHERE contributor = ?
 	} );
 
-	my $albumSth = $dbh->prepare_cached( qq{
-		SELECT COUNT(1) FROM tracks WHERE album = ? AND primary_artist = ?
-	} );
-
 	for my $id ( @$ids ) {
 		$contributorSth->execute($id);
 		my ($count) = $contributorSth->fetchrow_array;
@@ -245,16 +265,6 @@ sub rescan {
 
 			# This will cascade within the database to contributor_album and contributor_track
 			$dbh->do( "DELETE FROM contributors WHERE id = ?", undef, $id );
-		}
-		# contributor->album relations aren't removed automatically when the last track with this primary_artist disappears
-		elsif ( $albumId ) {
-			$albumSth->execute($albumId, $id);
-			($count) = $albumSth->fetchrow_array;
-			$albumSth->finish;
-
-			if ( !$count ) {
-				$dbh->do( "DELETE FROM contributor_album WHERE role IN (1, 5) AND album = ? AND contributor = ?", undef, $albumId, $id );
-			}
 		}
 	}
 }

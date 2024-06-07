@@ -255,7 +255,7 @@ sub needsUpgrade {
 	main::INFOLOG && $log->info("Reading firmware version file: $versionFilePath");
 
 	if (!open($versionFile, "<$versionFilePath")) {
-		warn("can't open $versionFilePath\n");
+		$log->warn("can't open $versionFilePath\n");
 		return 0;
 	}
 
@@ -767,7 +767,7 @@ sub stream_s {
 		$pcmchannels     = '?';
 		$outputThreshold = 1;
 
-		# Handler may override pcmsamplesize (Rhapsody)
+		# Handler may override pcmsamplesize
 		if ( $currentTrackHandler && $currentTrackHandler->can('pcmsamplesize') ) {
 			$pcmsamplesize = $currentTrackHandler->pcmsamplesize( $client, $params );
 		}

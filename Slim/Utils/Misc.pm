@@ -63,7 +63,7 @@ my $scannerlog = logger('scan.scanner');
 my $ospathslog = logger('os.paths');
 my $osfileslog = logger('os.files');
 
-my $WEBLINK_SUPPORTED_UA_RE = qr/\b(?:iPeng|SqueezePad|OrangeSqueeze|Squeeze-Control)\b/i;
+my $WEBLINK_SUPPORTED_UA_RE = qr/\b(?:iPeng|SqueezePad|OrangeSqueeze|Squeeze-Control|Squeezer|OpenSqueeze)\b/i;
 my $WEBBROWSER_UA_RE = qr/\b(?:FireFox|Chrome|Safari|Mozilla)\b/i;
 
 my $canFollowAlias = 0;
@@ -1216,9 +1216,7 @@ sub userAgentString {
 	my $osDetails = Slim::Utils::OSDetect::details();
 
 	# We masquerade as iTunes for radio stations that really want it.
-	# Note: Using SqueezeNetwork/SqueezeCenter here until RadioTime relaxes their user-agent restrictions
 	$userAgentString = sprintf("iTunes/4.7.1 (%s; N; %s; %s; %s; %s) %s/$::VERSION/$::REVISION",
-
 		$osDetails->{'os'},
 		$osDetails->{'osName'},
 		($osDetails->{'osArch'} || 'Unknown'),
@@ -1437,7 +1435,7 @@ Returns true if running as a Windows service.
 
 =cut
 
-sub runningAsService { if (main::ISWINDOWS) {
+sub runningAsService { if (main::ISACTIVEPERL) {
 
 	if (defined(&PerlSvc::RunningAsService) && PerlSvc::RunningAsService()) {
 		return 1;

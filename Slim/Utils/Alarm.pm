@@ -1133,19 +1133,7 @@ sub _playFallback {
 
 	my $client = $self->client;
 
-	my $url;
-
-	my $server = Slim::Utils::Network::serverAddr();
-	my $port   = $prefs->get('httpport');
-
-	my $auth = '';
-	if ( $prefs->get('authorize') ) {
-		my $password = Slim::Player::Squeezebox::generate_random_string(10);
-		$client->password($password);
-		$auth = "squeezeboxXXX:${password}@";
-	}
-
-	$url = "loop://${auth}${server}:${port}/html/slim-backup-alarm.mp3";
+	my $url = "loop://html/slim-backup-alarm.mp3";
 
 	main::DEBUGLOG && $log->is_debug && $log->debug("Starting fallback alarm: $url");
 
@@ -1429,8 +1417,7 @@ sub scheduleNext {
 			} else {
 				# TODO: schedule a bit early to allow for timers firing late.  Once this is done and the early
 				# timer fires, check every second to see if the alarm should sound.  10 secs early should be more
-				# than enough.  This is only really needed for mysqueezebox.com where 1000s of clients can lead
-				# to timers firing a few seconds late.
+				# than enough.
 				my $alarmTime = $nextAlarm->{_nextDue};
 				main::DEBUGLOG && $isDebug && $log->debug('Scheduling alarm');
 				$nextAlarm->{_timerRef} = Slim::Utils::Timers::setTimer($nextAlarm, $alarmTime, \&sound, $alarmTime);

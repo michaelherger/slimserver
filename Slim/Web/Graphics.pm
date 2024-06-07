@@ -28,6 +28,7 @@ sub init {
 	# Get cache for artwork
 	$cache = Slim::Utils::ArtworkCache->new();
 
+	Slim::Utils::ImageResizer->initDaemon();
 	Slim::Web::ImageProxy->init();
 
 	if (main::SCANNER) {
@@ -42,9 +43,10 @@ sub init {
 sub serverResizesArt { 1 }
 
 sub _cached {
-	my $path = shift;
+	my ($path, $force) = @_;
 
-	return if !main::SCANNER && main::NOBROWSECACHE;
+	# force reading from cache when using the external resizer daemon
+	return if !main::SCANNER && main::NOBROWSECACHE && !$force;
 
 	my $isInfo = main::INFOLOG && $log->is_info;
 
@@ -146,8 +148,8 @@ sub artworkRequest {
 
 	# If path begins with "music" it's a cover path using either coverid
 	# or the old trackid format
-	elsif ( $path =~ m{^(music)/([^/]+)/} ) {
-		my ($type, $id) = ($1, $2);
+	elsif ( $path =~ m{^music/([^/]+)/} ) {
+		my $id = $1;
 
 		# Special case:
 		# /music/current/cover.jpg (mentioned in CLI docs)
@@ -166,9 +168,13 @@ sub artworkRequest {
 						my $remoteMeta = $handler->getMetadataFor( $client, $url );
 
 						if ( $remoteMeta && (my $cover = $remoteMeta->{cover}) ) {
+							# sometimes we'd get an already proxied URL - remove the proxy params to start over
+							if ($cover =~ s/^\/?imageproxy\/(.*)\/image\.(?:png|jpg)?$/$1/) {
+								$cover = URI::Escape::uri_unescape($cover);
+							}
 
 							if ($cover =~ /^http/) {
-								$id = 'imageproxy/' . $remoteMeta->{cover};
+								$id = 'imageproxy/' . $cover;
 								$path=~ s/music\/current/$id/;
 
 								main::INFOLOG && $isInfo && $log->info("  Special path translated to $path");
@@ -243,7 +249,7 @@ sub artworkRequest {
 			$sth->finish;
 
 			# border case: 8 characters we're assuming it's a cover ID, but it could be a track ID, too
-			if ( (!$url || !$cover) && $type eq 'music' && $id =~ /\d{8}/ ) {
+			if ( (!$url || !$cover) && $id =~ /\d{8}/ ) {
 				$sth = Slim::Schema->dbh->prepare_cached( qq{
 					SELECT url, cover FROM tracks WHERE id = ?
 				} );
@@ -259,10 +265,7 @@ sub artworkRequest {
 		}
 		elsif ( !$url || !$cover ) {
 			# Invalid ID or no cover available, use generic CD image
-			if ($type eq 'image') {
-				$path = "html/images/icon_photo_";
-			}
-			elsif ($id =~ /^-/) {
+			if ($id =~ /^-/) {
 				$path = 'html/images/radio_';
 			}
 			else {
@@ -301,7 +304,7 @@ sub artworkRequest {
 		else {
 			# Image to resize is either a cover path or the audio file if cover is
 			# a number (length of embedded art)
-			$fullpath = ($cover =~ /^\d+$/ || $type eq 'image')
+			$fullpath = $cover =~ /^\d+$/
 				? Slim::Utils::Misc::pathFromFileURL($url)
 				: $cover;
 		}
@@ -430,10 +433,10 @@ sub artworkRequest {
 		my $doResize = sub {
 			my $cover = $_[0];
 			Slim::Utils::ImageResizer->resize($cover, $path, $spec, sub {
-				my ($body, $format) = @_;
+				my ($body, $format, $readFromCache) = @_;
 
 				# if we didn't get a valid reference returned, try to read from cache
-				if ( !($body && $format && ref $body eq 'SCALAR') && (my $c = _cached($path)) ) {
+				if ( !($body && $format && ref $body eq 'SCALAR') && (my $c = _cached($path, $readFromCache)) ) {
 					$body = $c->{data_ref};
 					$format = $c->{content_type};
 				}

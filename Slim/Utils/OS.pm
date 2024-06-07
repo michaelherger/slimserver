@@ -69,7 +69,10 @@ sub sqlHelperClass {
 }
 
 # Skip obsolete plugins, they should be deleted by installers
-sub skipPlugins {return (qw(Picks ShoutcastBrowser Webcasters Health));}
+# AudioAddict is a base class for others, thus not loaded
+sub skipPlugins {
+	return (qw(AudioAddict Picks ShoutcastBrowser Webcasters Health));
+}
 
 =head2 initSearchPath( [$baseDir] )
 
@@ -511,7 +514,7 @@ sub aclFiletest {
 
 Return true if you don't want the server to download and cache firmware
 upgrades for your players. It will then tell the player to download them directly
-from SqueezeNetwork.
+from the origin server.
 
 Use this if you are running the server on low spec hardware or flash with limited capacity.
 

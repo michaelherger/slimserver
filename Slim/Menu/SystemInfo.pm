@@ -61,8 +61,13 @@ sub registerDefaultInfoProviders {
 		func  => \&infoServer,
 	) );
 
-	$class->registerInfoProvider( library => (
+	$class->registerInfoProvider( perl => (
 		after => 'server',
+		func  => \&infoPerl,
+	) );
+
+	$class->registerInfoProvider( library => (
+		after => 'perl',
 		func  => \&infoLibrary,
 	) );
 
@@ -311,7 +316,37 @@ sub infoServer {
 			name => cstring($client, 'INFORMATION_ARCHITECTURE' . ($menu ? '_ABBR' : '')) . cstring($client, 'COLON') . ' '
 						. ($osDetails->{'osArch'} ? $osDetails->{'osArch'} : 'unknown'),
 		},
+	];
 
+	if ( Slim::Schema::hasLibrary() ) {
+		push @{$items},	{
+			type => 'text',
+			name => cstring($client, 'DATABASE_VERSION') . cstring($client, 'COLON') . ' '
+						. Slim::Utils::OSDetect->getOS->sqlHelperClass->sqlVersion( Slim::Schema->dbh ),
+		};
+	}
+
+	push @{$items},	{
+		type => 'text',
+		name => cstring($client, 'INFORMATION_CLIENTS') . cstring($client, 'COLON') . ' '
+					. Slim::Player::Client::clientCount,
+	};
+
+	return {
+		name  => cstring($client, 'INFORMATION_MENU_SERVER'),
+		items => $items,
+	};
+}
+
+sub infoPerl {
+	my $client = shift;
+	my $tags   = shift;
+
+	my $menu   = $tags->{menuMode};
+
+	my $osDetails = Slim::Utils::OSDetect::details();
+
+	my $items = [
 		{
 			type => 'text',
 			name => cstring($client, 'PERL_VERSION') . cstring($client, 'COLON') . ' '
@@ -325,33 +360,34 @@ sub infoServer {
 
 		{
 			type => 'text',
+			name => 'DBD::SQLite' . cstring($client, 'COLON') . " $DBD::SQLite::VERSION (sqlite " . Slim::Utils::Cache->new()->{_cache}->{dbh}->{sqlite_version} . ')'
+		},
+
+		{
+			type => 'text',
 			name => 'IO::Socket::SSL' . cstring($client, 'COLON') . ' ' . (Slim::Networking::Async::HTTP->hasSSL() ? $IO::Socket::SSL::VERSION : cstring($client, 'BLANK')),
+		},
+
+		{
+			type => 'text',
+			name => 'Mozilla::CA' . cstring($client, 'COLON') . ' ' . $Mozilla::CA::VERSION,
+		},
+
+		{
+			type => 'text',
+			name => sprintf("Net::SSLeay%s %s - %s", cstring($client, 'COLON'), $Net::SSLeay::VERSION, Net::SSLeay::SSLeay_version(Net::SSLeay::SSLEAY_VERSION())),
 		},
 	];
 
-	if ( !main::NOMYSB && $prefs->get('sn_timediff') ) {
-		push @{$items}, {
+	if ( Slim::Utils::OSDetect->getOS->sqlHelperClass() =~ /MySQL/i ) {
+		splice(@{$items}, 5, 0,	{
 			type => 'text',
-			name => cstring($client, 'INFORMATION_TIME_DIFF') . cstring($client, 'COLON') . ' ' . sprintf('%s %s', $prefs->get('sn_timediff'), cstring($client, 'SECONDS')),
-		};
+			name => 'DBD::mysql' . cstring($client, 'COLON') . ' ' . $DBD::mysql::VERSION,
+		});
 	}
-
-	if ( Slim::Schema::hasLibrary() ) {
-		push @{$items},	{
-			type => 'text',
-			name => cstring($client, 'DATABASE_VERSION') . cstring($client, 'COLON') . ' '
-						. Slim::Utils::OSDetect->getOS->sqlHelperClass->sqlVersionLong( Slim::Schema->dbh ),
-		};
-	}
-
-	push @{$items},	{
-		type => 'text',
-		name => cstring($client, 'INFORMATION_CLIENTS') . cstring($client, 'COLON') . ' '
-					. Slim::Player::Client::clientCount,
-	};
 
 	return {
-		name  => cstring($client, 'INFORMATION_MENU_SERVER'),
+		name  => cstring($client, 'INFORMATION_MENU_PERL'),
 		items => $items,
 	};
 }

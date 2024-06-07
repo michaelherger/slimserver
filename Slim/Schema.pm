@@ -206,8 +206,6 @@ sub init {
 	# Use our debug and stats class to get logging and perfmon for db queries
 	$class->storage->debugobj('Slim::Schema::Debug');
 
-	$class->updateDebug;
-
 	# Bug 17609, avoid a possible locking issue by ensuring VA object is up to date at init time
 	# instead of waiting until the first time it's called, for example through artistsQuery.
 	$class->variousArtistsObject;
@@ -245,10 +243,13 @@ sub init {
 		# Wipe cached data after rescan
 		Slim::Control::Request::subscribe( sub {
 			$class->wipeCaches;
+			Slim::Schema::Album->addReleaseTypeStrings;
 		}, [['rescan'], ['done']] );
 	}
 
 	$initialized = 1;
+
+	$class->updateDebug;
 }
 
 sub hasLibrary {
@@ -551,6 +552,21 @@ sub single {
 	return $class->rs(ucfirst($rsClass))->single(@_);
 }
 
+=head2 first( $class, $cond )
+
+Returns the first result from a search on the specified class' L<DBIx::Class::ResultSet>
+
+A shortcut for resultset($class)->search($cond)->first()
+
+=cut
+
+sub first {
+	my $class   = shift;
+	my $rsClass = shift;
+
+	return $class->rs(ucfirst($rsClass))->search(@_)->first();
+}
+
 =head2 count( $class, $cond, $attr )
 
 Returns the count result from a search on the specified class' L<DBIx::Class::ResultSet>
@@ -790,6 +806,10 @@ sub objectForUrl {
 		return undef;
 	}
 
+	if ( $url =~ /^db:/) {
+		return _objForDbUrl($url);
+	}
+
 	# Create a canonical version, to make sure we only have one copy.
 	if ( $url =~ /^(file|http)/i ) {
 		$url = URI->new($url)->canonical->as_string;
@@ -833,6 +853,38 @@ sub objectForUrl {
 	}
 
 	return $track;
+}
+
+sub _objForDbUrl {
+	my ($url) = @_;
+
+	if ($url =~ /^db:(\w+)\.(.+)/ ) {
+		my ($class, $values) = ($1, $2);
+
+		my $query = {};
+		for my $term (split('&', $values)) {
+			if ($term =~ /(.*)=(.*)/) {
+				my $key = $1;
+				my $value = Slim::Utils::Misc::unescape($2);
+
+				if (utf8::is_utf8($value)) {
+					utf8::decode($value);
+					utf8::encode($value);
+				}
+
+				$query->{$key} = $value;
+			}
+		}
+
+		my $params;
+		foreach (keys %$query) {
+			if (/^(.*)\./) {
+				$params->{prefetch} = $1;
+			}
+		}
+
+		return Slim::Schema->search(ucfirst($class), $query, $params)->first;
+	}
 }
 
 sub _createOrUpdateAlbum {
@@ -919,6 +971,7 @@ sub _createOrUpdateAlbum {
 				compilation => 0, # Will be set to 1 below, if needed
 				year        => 0,
 				contributor => $vaObjId || $self->variousArtistsObject->id,
+				release_type=> 'ALBUM',
 			};
 
 			$_unknownAlbumId = $self->_insertHash( albums => $albumHash );
@@ -1178,8 +1231,13 @@ sub _createOrUpdateAlbum {
 	# Bug 2393 - was fixed here (now obsolete due to further code rework)
 	$albumHash->{compilation} = $isCompilation;
 
+	# let's not mess with compilation - we've already got our logic, and it's messy enough!
+	my ($releaseType) = grep { lc($_) ne 'compilation' } Slim::Music::Info::splitTag($attributes->{RELEASETYPE});
+	$albumHash->{release_type} = Slim::Utils::Text::ignoreCase( $releaseType || 'album' );
+	Slim::Schema::Album->addReleaseTypeMap($releaseType, $albumHash->{release_type});
+
 	# Bug 3255 - add album contributor which is either VA or the primary artist, used for sort by artist
-	my $vaObjId = $vaObjId || $self->variousArtistsObject->id;
+	$vaObjId ||= $self->variousArtistsObject->id;
 
 	if ( $isCompilation && !$hasAlbumArtist ) {
 		$albumHash->{contributor} = $vaObjId
@@ -1309,6 +1367,9 @@ sub _createOrUpdateAlbum {
 
 			main::DEBUGLOG && $isDebug && $log->debug( "Not a Comp : " . $albumHash->{title} );
 		}
+	}
+	else {
+		$albumHash->{compilation} ||= 0;
 	}
 
 	# Bug: 3911 - don't add years for tracks without albums.
@@ -1903,8 +1964,9 @@ sub variousArtistsObject {
 	# Fetch a VA object and/or update it's name if the user has changed it.
 	# XXX - exception should go here. Coming soon.
 	if (!blessed($vaObj) || !$vaObj->can('name')) {
-
-		$vaObj  = $class->rs('Contributor')->update_or_create({
+		$vaObj = $class->first('Contributor', {
+			'namesearch' => Slim::Utils::Text::ignoreCase($vaString, 1),
+		}) || $class->rs('Contributor')->update_or_create({
 			'name'       => $vaString,
 			'namesearch' => Slim::Utils::Text::ignoreCase($vaString, 1),
 			'namesort'   => Slim::Utils::Text::ignoreCaseArticles($vaString),
@@ -1919,10 +1981,10 @@ sub variousArtistsObject {
 		$vaObj->namesort( Slim::Utils::Text::ignoreCaseArticles($vaString) );
 		$vaObj->namesearch( Slim::Utils::Text::ignoreCase($vaString, 1) );
 		$vaObj->update;
-
-		# this will not change while in the external scanner
-		$vaObjId = $vaObj->id if main::SCANNER;
 	}
+
+	# this will not change while in the external scanner
+	$vaObjId = $vaObj->id if main::SCANNER;
 
 	return $vaObj;
 }
@@ -2121,6 +2183,7 @@ sub wipeCaches {
 
 	# clear the references to these singletons
 	$vaObj          = undef;
+	$vaObjId        = undef;
 	$_unknownArtist = '';
 	$_unknownGenre  = '';
 	$_unknownAlbumId = undef;
@@ -2334,26 +2397,6 @@ sub _retrieveTrack {
 	return undef;
 }
 
-sub _retrieveTrackMetadata {
-	my ($self, $url, $musicbrainz_id) = @_;
-
-	return undef if !$url;
-	return undef if ref($url);
-
-	my $trackMetadata;
-
-	$trackMetadata = $self->rs('TrackMetadata')->single({ 'url' => $url });
-
-	if (blessed($trackMetadata)) {
-		return $trackMetadata;
-	}elsif($musicbrainz_id) {
-		$trackMetadata = $self->rs('TrackMetadata')->single({ 'musicbrainz_id' => $musicbrainz_id });
-		return $trackMetadata if blessed($trackMetadata);
-	}
-
-	return undef;
-}
-
 sub _checkValidity {
 	my $self  = shift;
 	my $track = shift;
@@ -2376,10 +2419,12 @@ sub _checkValidity {
 		main::DEBUGLOG && $isDebug && $log->debug("Re-reading tags from $url as it has changed.");
 
 		my $oldid = $track->id;
+		my $oldAlbum = $track->albumid;
 
 		# Do a cascading delete for has_many relationships - this will
 		# clear out Contributors, Genres, etc.
 		$track->delete;
+		Slim::Schema::Album->rescan($oldAlbum);
 
 		# Add the track back into database with the same id as the record deleted.
 		my $trackId = $self->_newTrack({
@@ -2669,7 +2714,7 @@ sub _preCheckAttributes {
 		COMMENT GENRE ARTISTSORT PIC APIC ALBUM ALBUMSORT DISCC
 		COMPILATION REPLAYGAIN_ALBUM_PEAK REPLAYGAIN_ALBUM_GAIN
 		MUSICBRAINZ_ARTIST_ID MUSICBRAINZ_ALBUMARTIST_ID MUSICBRAINZ_ALBUM_ID
-		MUSICBRAINZ_ALBUM_TYPE MUSICBRAINZ_ALBUM_STATUS
+		MUSICBRAINZ_ALBUM_TYPE MUSICBRAINZ_ALBUM_STATUS RELEASETYPE
 		ALBUMARTISTSORT COMPOSERSORT CONDUCTORSORT BANDSORT ALBUM_EXTID ARTIST_EXTID
 	)) {
 
@@ -2876,7 +2921,7 @@ sub _postCheckAttributes {
 	# Walk through the valid contributor roles, adding them to the database.
 	my $contributors = $self->_mergeAndCreateContributors($attributes, $isCompilation, $create);
 
-	my $artist = $contributors->{ARTIST} || $contributors->{TRACKARTIST};
+	my $artist = $contributors->{'ALBUMARTIST'} || $contributors->{ARTIST} || $contributors->{TRACKARTIST};
 	if ($artist) {
 		$cols{primary_artist} = $artist->[0];
 	}
@@ -3138,7 +3183,7 @@ sub _insertHash {
 	my $colstring = join( ',', @cols );
 	my $ph        = join( ',', map { '?' } @cols );
 
-	my $sth = $dbh->prepare("INSERT INTO $table ($colstring) VALUES ($ph)");
+	my $sth = $dbh->prepare_cached("INSERT INTO $table ($colstring) VALUES ($ph)");
 	$sth->execute( map { $hash->{$_} } @cols );
 
 	return $dbh->last_insert_id(undef, undef, undef, undef);
@@ -3153,7 +3198,7 @@ sub _updateHash {
 	my @cols      = keys %{$hash};
 	my $colstring = join( ', ', map { $_ . (defined $hash->{$_} ? ' = ?' : ' = NULL') } @cols );
 
-	my $sth = $class->dbh->prepare("UPDATE $table SET $colstring WHERE $pk = ?");
+	my $sth = $class->dbh->prepare_cached("UPDATE $table SET $colstring WHERE $pk = ?");
 	$sth->execute( (grep { defined $_ } map { $hash->{$_} } @cols), $id );
 
 	$hash->{$pk} = $id;

@@ -30,6 +30,7 @@ sub handler {
 	$paramRef->{info} = $paramRef->{info}->{items};
 
 	$paramRef->{server}  = _extractGroup($paramRef, cstring($client, 'INFORMATION_MENU_SERVER'));
+	$paramRef->{perl}    = _extractGroup($paramRef, cstring($client, 'INFORMATION_MENU_PERL'));
 	$paramRef->{library} = _extractGroup($paramRef, cstring($client, 'INFORMATION_MENU_LIBRARY'));
 	$paramRef->{players} = _extractGroup($paramRef, cstring($client, 'INFORMATION_MENU_PLAYER'));
 
@@ -54,8 +55,6 @@ sub handler {
 	$paramRef->{logs}    = _extractGroup($paramRef, cstring($client, 'SETUP_DEBUG_SERVER_LOG'));
 
 	$paramRef->{'scanning'} = Slim::Music::Import->stillScanning();
-	$paramRef->{'radioNeedsFakeVersion'} = Slim::Networking::Discovery->needsFakeVersion;
-	$paramRef->{'needsTimeSync'} = !main::NOMYSB && Slim::Networking::SqueezeNetwork::Time->needsTimeSync;
 
 	if (Slim::Schema::hasLibrary()) {
 		# skeleton for the progress update

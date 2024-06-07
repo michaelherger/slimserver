@@ -40,7 +40,8 @@ if ( !main::SCANNER ) {
 	Slim::Control::Request::subscribe( \&wipeCaches, [['library','rescan','favorites'], ['changed','done','changed']] );
 
 	$prefs->setChange( \&wipeCaches, qw(itemsPerPage thumbSize showArtist showYear additionalPlaylistButtons noGenreFilter noRoleFilter searchSubString browseagelimit
-				composerInArtists conductorInArtists bandInArtists variousArtistAutoIdentification titleFormat titleFormatWeb language useUnifiedArtistsList) );
+		composerInArtists conductorInArtists bandInArtists variousArtistAutoIdentification titleFormat titleFormatWeb language useUnifiedArtistsList
+		groupArtistAlbumsByReleaseType ignoreReleaseTypes releaseTypesToIgnore showComposerReleasesbyAlbum showComposerReleasesbyAlbumGenres) );
 }
 
 tie my %cacheables, 'Tie::RegexpHash';
@@ -58,9 +59,9 @@ sub handleWebIndex {
 	my $asyncArgs = $args->{'args'};
 	my $item      = $args->{'item'} || {};
 	my $pageicon  = $Slim::Web::Pages::additionalLinks{icons}{$title};
-	
+
 	main::DEBUGLOG && $log->is_debug && $log->debug( "feed is :" . Data::Dump::dump($feed) );
-	
+
 	if ($title eq uc($title)) {
 		$title = string($title);
 	}
@@ -539,7 +540,7 @@ sub handleFeed {
 			 && !($subFeed->{type} && $subFeed->{type} eq 'search')
 			 && !(ref $subFeed->{'url'}) )
 		) {
-			$subFeed->{'image'} ||= $subFeed->{'cover'} || $subFeed->{'icon'} || Slim::Player::ProtocolHandlers->iconForURL($subFeed->{'play'} || $subFeed->{'url'});
+			$subFeed->{'image'} ||= $subFeed->{'cover'} || $subFeed->{'icon'} || Slim::Player::ProtocolHandlers->iconForURL($subFeed->{'play'} || $subFeed->{'url'}, $client);
 			$subFeed->{'image'} = proxiedImage($subFeed->{'image'});
 
 			$stash->{'streaminfo'} = {
@@ -673,7 +674,7 @@ sub handleFeed {
 			}
 
 			next if !$url;
-			
+
 			main::INFOLOG && $log->info("Playing/adding $url");
 			main::DEBUGLOG && $log->is_debug && $log->debug("item is " . Data::Dump::dump($item));
 
@@ -982,7 +983,9 @@ sub handleFeed {
 				}
 
 				if ($feed->{'favorites_url'} && $favs) {
+					$details->{'favorites_icon'} = $feed->{'favorites_icon'} || $feed->{'icon'} || $feed->{'image'} || $feed->{'cover'} || Slim::Player::ProtocolHandlers->iconForURL($feed->{'favorites_url'}, $client);
 					$details->{'favorites_url'} = $feed->{'favorites_url'};
+					$details->{'favorites_title'} = $feed->{'favorites_title'} || $feed->{'name'} || $feed->{'title'};
 					$details->{'favorites'} = $favs->hasUrl($feed->{'favorites_url'}) ? 2 : 1;
 				}
 
@@ -997,8 +1000,11 @@ sub handleFeed {
 			if ($stash->{'action'} eq 'favadd') {
 
 				my $type = $item->{'favorites_type'} || $item->{'type'} || 'link';
+				my $name = $item->{'favorites_title'} || $item->{'name'};
+				my $icon = $item->{'favorites_icon'} || $item->{'image'} || $item->{'icon'} || 
+						   Slim::Player::ProtocolHandlers->iconForURL($furl, $client) || 'html/images/favorites.png';
 
-				if ( $item->{'play'}
+				if ( ($item->{'play'} && !$item->{'favorites_type'})
 				    || ($type eq 'playlist' && $furl =~ /^(file|db):/)
 				) {
 					$type = 'audio';
@@ -1006,11 +1012,11 @@ sub handleFeed {
 
 				$favs->add(
 					$furl,
-					$item->{'name'},
+					$name,
 					$type,
 					$item->{'parser'},
 					1,
-					proxiedImage($item->{'image'} || $item->{'icon'} || Slim::Player::ProtocolHandlers->iconForURL($furl))
+					proxiedImage($icon)
 				);
 			} elsif ($stash->{'action'} eq 'favdel') {
 				$favs->deleteUrl( $furl );
@@ -1074,7 +1080,7 @@ sub handleFeed {
 		}
 	}
 
-#	$log->error(Data::Dump::dump($stash->{'items'}));
+
 
 	my $output = processTemplate($template, $stash);
 

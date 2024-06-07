@@ -453,11 +453,11 @@ sub setRemoteMetadata {
 		$attr->{BITRATE}   = $meta->{bitrate} * 1000;
 		$attr->{VBR_SCALE} = ( exists $cbr{ $meta->{bitrate} } ) ? undef : 1;
 	}
-	
+
 	if ( $meta->{year} ) {
 		$attr->{YEAR} = $meta->{year};
 	}
-	
+
 	if ( main::DEBUGLOG && $log->is_debug ) {
 		$log->debug( "meta data is " . Data::Dump::dump($meta) );
 		$log->debug( "Updating metadata for $url: " . Data::Dump::dump($attr) );
@@ -1147,11 +1147,6 @@ sub canSeek {
 
 sub isPlaylistURL {
 	my $url = shift || return 0;
-
-	# XXX: This method is pretty wrong, it says every remote URL is a playlist
-	# Bug 3484, We want rhapsody tracks to display the proper title format so they can't be
-	# seen as a playlist which forces only the title to be displayed.
-	return if $url =~ /^rhap.+wma$/;
 
 	if ($url =~ /^([a-zA-Z0-9\-]+):/) {
 

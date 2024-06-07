@@ -49,7 +49,8 @@ my %tagMapping = (
 	'MUSICBRAINZ_ALBUMARTISTID' => 'MUSICBRAINZ_ALBUMARTIST_ID',
 	'MUSICBRAINZ_ALBUMID'       => 'MUSICBRAINZ_ALBUM_ID',
 	'MUSICBRAINZ_ALBUMSTATUS'   => 'MUSICBRAINZ_ALBUM_STATUS',
-	'MUSICBRAINZ_ALBUMTYPE'     => 'MUSICBRAINZ_ALBUM_TYPE',
+	'MUSICBRAINZ_ALBUMTYPE'     => 'RELEASETYPE',               # https://picard-docs.musicbrainz.org/en/appendices/tag_mapping.html#id32
+	'MUSICBRAINZ_ALBUM_TYPE'    => 'RELEASETYPE',
 	'MUSICBRAINZ_ARTISTID'      => 'MUSICBRAINZ_ARTIST_ID',
 	'MUSICBRAINZ_TRACKID'       => 'MUSICBRAINZ_ID',
 	'MUSICBRAINZ_TRMID'         => 'MUSICBRAINZ_TRM_ID',
@@ -264,7 +265,7 @@ sub _addInfoTags {
 	$tags->{SIZE}       = $info->{file_size};
 	$tags->{SECS}       = $info->{song_length_ms} / 1000;
 	$tags->{OFFSET}     = 0; # the header is an important part of the file. don't skip it
-	$tags->{BITRATE}    = sprintf "%d", $info->{bitrate};
+	$tags->{BITRATE}    = sprintf "%d", ($info->{bitrate} || $info->{bitrate_ogg});
 	$tags->{VBR_SCALE}  = 1;
 	$tags->{RATE}       = $info->{samplerate};
 	$tags->{SAMPLESIZE} = $info->{bits_per_sample};
@@ -919,11 +920,11 @@ so we use this to set the track duaration value.
 =cut
 
 sub scanBitrate {
-	my ( $class, $fh, $url ) = @_;
+	my ( $class, $fh, $url, $format ) = @_;
 
 	seek $fh, 0, 0;
-
-	my $s = Audio::Scan->scan_fh( flac => $fh );
+	
+	my $s = Audio::Scan->scan_fh( $format || 'flac' => $fh );
 
 	my $info = $s->{info};
 

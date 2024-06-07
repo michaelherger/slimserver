@@ -147,6 +147,7 @@ should be passed a reference to a real sub (not an anonymous one).
 use strict;
 use JSON::XS::VersionOneAndTwo;
 
+use Slim::Menu::BrowseLibrary::Releases;
 use Slim::Music::VirtualLibraries;
 use Slim::Utils::Cache;
 use Slim::Utils::Log;
@@ -525,7 +526,6 @@ sub _registerBaseNodes {
 			name         => 'BROWSE_BY_ALL_ARTISTS',
 			params       => {
 				mode => 'artists',
-				role_id => join ',', Slim::Schema::Contributor->contributorRoles(),
 			},
 			feed         => \&_artists,
 			jiveIcon     => 'html/images/artists.png',
@@ -540,7 +540,7 @@ sub _registerBaseNodes {
 			type         => 'link',
 			name         => 'BROWSE_BY_ALBUM',
 			params       => {mode => 'albums'},
-			feed         => \&_albums,
+			feed         => \&_albumsOrReleases,
 			icon         => 'html/images/albums.png',
 			homeMenuText => 'BROWSE_ALBUMS',
 			condition    => \&isEnabledNode,
@@ -578,7 +578,7 @@ sub _registerBaseNodes {
 			icon         => 'html/images/newmusic.png',
 			params       => {mode => 'albums', sort => 'new', wantMetadata => 1},
 			                                                  # including wantMetadata is a hack for ip3k
-			feed         => \&_albums,
+			feed         => \&_albumsOrReleases,
 			homeMenuText => 'BROWSE_NEW_MUSIC',
 			condition    => \&isEnabledNode,
 			id           => 'myMusicNewMusic',
@@ -711,7 +711,7 @@ sub setMode {
 	$client->modeParam( handledTransition => 1 );
 }
 
-our @topLevelArgs = qw(track_id artist_id genre_id album_id playlist_id year folder_id role_id library_id remote_library);
+our @topLevelArgs = qw(track_id artist_id genre_id album_id playlist_id year folder_id role_id library_id remote_library release_type);
 
 sub _topLevel {
 	my ($client, $callback, $args, $pt) = @_;
@@ -1053,6 +1053,8 @@ sub _artists {
 	my $search     = $pt->{'search'};
 	my $library_id = $args->{'library_id'} || $pt->{'library_id'};
 	my $remote_library = $args->{'remote_library'} ||= $pt->{'remote_library'};
+	my $mode = $args->{'params'}->{'mode'};
+	my $roleIdParam = $args->{'params'}->{'role_id'};
 
 	if (!$search && !scalar @searchTags && $args->{'search'}) {
 		push @searchTags, 'library_id:' . $library_id if $library_id;
@@ -1062,26 +1064,30 @@ sub _artists {
 	my @ptSearchTags = @searchTags;
 	@ptSearchTags = grep {$_ !~ /^genre_id:/} @ptSearchTags if _getPref('noGenreFilter', $remote_library);
 
-	if ( _getPref('noRoleFilter', $remote_library) && (my (@roles) = grep /^role_id:/, @ptSearchTags) ) {
-		@ptSearchTags = grep {$_ !~ /^role_id:/} @ptSearchTags;
+	if ( _getPref('noRoleFilter', $remote_library) ) {
+		@ptSearchTags = grep {$_ !~ /^role_id:/} @ptSearchTags if $mode && $mode eq 'artists';
+	} else {
 
-		# "no role filter" means the default role list _plus_ what we specifically want
+		# if single artist list, filter is the default role list _plus_ what we specifically want
 		if ( _getPref('useUnifiedArtistsList', $remote_library) ) {
+			my @roles = grep {$_ =~ /^role_id:/} @ptSearchTags;
 			@roles = map {
 				/role_id:(.*)/;
 				Slim::Schema::Contributor->roleToType($1);
-			} @roles;
+			} @roles  if @roles;
 
-			push @roles, 'ARTIST', 'TRACKARTIST', 'ALBUMARTIST';
+			if ( $mode && $mode eq 'artists' ) {
+				push @roles, 'ARTIST', 'TRACKARTIST', 'ALBUMARTIST';
 
-			# Loop through each pref to see if the user wants to show that contributor role.
-			foreach (Slim::Schema::Contributor->contributorRoles) {
-				if (_getPref(lc($_) . 'InArtists', $remote_library)) {
-					push @roles, $_;
+				# Loop through each pref to see if the user wants to show that contributor role.
+				foreach (Slim::Schema::Contributor->contributorRoles) {
+					if (_getPref(lc($_) . 'InArtists', $remote_library)) {
+						push @roles, $_;
+					}
 				}
-			}
 
-			push @ptSearchTags, 'role_id:' . join(',', @roles);
+				push @ptSearchTags, 'role_id:' . join(',', @roles);
+			}
 		}
 	}
 
@@ -1097,6 +1103,10 @@ sub _artists {
 		push @searchTags, 'include_online_only_artists:1'
 	}
 
+	#For use down the line in _releases
+	push @ptSearchTags, 'menu_mode:' . $mode if $mode;
+	push @ptSearchTags, 'menu_roles:' . $roleIdParam if $roleIdParam;
+
 	_generic($client, $callback, $args, 'artists',
 		[@searchTags, ($search ? 'search:' . $search : undef)],
 		sub {
@@ -1108,7 +1118,7 @@ sub _artists {
 				$_->{'name'}          = $_->{'artist'};
 				$_->{'type'}          = 'playlist';
 				$_->{'playlist'}      = \&_tracks;
-				$_->{'url'}           = \&_albums;
+				$_->{'url'}           = \&_albumsOrReleases;
 				$_->{'passthrough'}   = [ { searchTags => [@ptSearchTags, "artist_id:" . $_->{'id'}], remote_library => $remote_library } ];
 				$_->{'favorites_url'} = 'db:contributor.name=' .
 						URI::Escape::uri_escape_utf8( $_->{'name'} );
@@ -1384,6 +1394,31 @@ my %mapArtistOrders = (
 	artflow          => 'yearalbum'
 );
 
+sub _albumsOrReleases {
+	my ($client, $callback, $args, $pt) = @_;
+	my @searchTags = $pt->{'searchTags'} ? @{$pt->{'searchTags'}} : ();
+
+	# We only display the grouped albums if:
+	# 1. the feature is enabled
+	if (!$prefs->get('ignoreReleaseTypes') && $prefs->get('groupArtistAlbumsByReleaseType')
+		# 2. a specific artist is requested or user wants release type groups always
+		&& ( $prefs->get('groupArtistAlbumsByReleaseType') == 2 || grep /^artist_id:/, @searchTags )
+		# 3. any one of the following is true:
+		#    3a. we don't apply a role filter (eg. drilling down from a "Composers" menu)
+		&& ($prefs->get('noRoleFilter')
+			# 3b. no specific role is requested
+			|| !(grep /^role_id:/, @searchTags)
+			# 3c. we request the album artist
+			|| (grep /^role_id:.*ALBUMARTIST/, @searchTags)
+		)
+	) {
+		_releases(@_);
+	}
+	else {
+		_albums(@_);
+	}
+}
+
 sub _albums {
 	my ($client, $callback, $args, $pt) = @_;
 	my @searchTags = $pt->{'searchTags'} ? @{$pt->{'searchTags'}} : ();
@@ -1398,10 +1433,19 @@ sub _albums {
 	if (!$sort || $sort !~ /^sort:(?:random|new)$/) {
 		$sort = $pt->{'orderBy'} || $args->{'orderBy'} || $sort;
 	}
+	$sort = 'sort:' . $sort if $sort && $sort !~ /^sort:/;
 
 	if (!$search && !scalar @searchTags && $args->{'search'}) {
 		push @searchTags, 'library_id:' . $library_id if $library_id;
 		$search = $args->{'search'};
+	}
+
+	# filter out some release types if wanted, unless we are already filtering for a release type
+	my %releaseTypesToIgnore = map { $_ => 1 } @{ $prefs->get('releaseTypesToIgnore') || [] };
+	if ( keys %releaseTypesToIgnore && !grep /^release_type:/, @searchTags) {
+		push @searchTags, 'release_type:' . join(',', grep {
+			!$releaseTypesToIgnore{$_}
+		} @{Slim::Schema::Album->releaseTypes});
 	}
 
 	my @artistIds = grep /artist_id:/, @searchTags;
@@ -1424,7 +1468,7 @@ sub _albums {
 
 	# Under certain circumstances (random albums in web UI or with remote streams) we are only
 	# to return one item. In this case pull a list of IDs from the cache, as requesting a bunch
-	# of random albums would retun a different list than what we were showing the user.
+	# of random albums would return a different list than what we were showing the user.
 	my $cacheKey = 'randomAlbumIDs_' . ($client ? $client->id : '') if $sort && $sort =~ 'random';
 
 	# shortcut if we hit a cached list
@@ -1435,6 +1479,8 @@ sub _albums {
 			return;
 		}
 	}
+
+	my $trackArtistOnly = grep /role_id:TRACKARTIST/, @searchTags;
 
 	_generic($client, $callback, $args, 'albums',
 		[@searchTags, ($sort ? $sort : ()), ($search ? 'search:' . $search : undef)],
@@ -1470,7 +1516,7 @@ sub _albums {
 				# If an artist was not used in the selection criteria or if one was
 				# used but is different to that of the primary artist, then provide
 				# the primary artist name in name2.
-				if (!$artistId || $artistId != $_->{'artist_id'}) {
+				if (!$artistId || $artistId != $_->{'artist_id'} || $trackArtistOnly) {
 					$_->{'name2'} = join(', ', @{$_->{'artists'} || []}) || $_->{'artist'};
 				}
 

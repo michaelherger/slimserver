@@ -234,6 +234,7 @@ sub alarmsQuery {
 			$request->addResultLoop($loopname, $cnt, 'dow', join(',', @dow));
 			$request->addResultLoop($loopname, $cnt, 'enabled', $alarm->enabled());
 			$request->addResultLoop($loopname, $cnt, 'repeat', $alarm->repeat());
+			$request->addResultLoop($loopname, $cnt, 'shufflemode', $alarm->shufflemode());
 			$request->addResultLoop($loopname, $cnt, 'time', $alarm->time());
 			$request->addResultLoop($loopname, $cnt, 'volume', $alarm->volume());
 			$request->addResultLoop($loopname, $cnt, 'url', $alarm->playlist() || 'CURRENT_PLAYLIST');
@@ -272,6 +273,7 @@ sub albumsQuery {
 	my $trackID       = $request->getParam('track_id');
 	my $albumID       = $request->getParam('album_id');
 	my $roleID        = $request->getParam('role_id');
+	my $releaseType   = $request->getParam('release_type');
 	my $libraryID     = Slim::Music::VirtualLibraries->getRealId($request->getParam('library_id'));
 	my $year          = $request->getParam('year');
 	my $sort          = $request->getParam('sort') || ($roleID ? 'artistalbum' : 'album');
@@ -301,13 +303,18 @@ sub albumsQuery {
 		push @{$w}, 'tracks.id = ?';
 		push @{$p}, $trackID;
 	}
-	elsif ( defined $albumID ) {
+	# ignore everything if a single $album_id was specified
+	elsif ( defined $albumID && $albumID !~ /,/ ) {
 		push @{$w}, 'albums.id = ?';
 		push @{$p}, $albumID;
 	}
-	# ignore everything if $track_id or $album_id was specified
 	else {
-		if (specified($search)) {
+		if ( defined $albumID ) {
+			my @albumIds = split(',', $albumID);
+			push @{$w}, 'albums.id IN (' . join(',', map {'?'} @albumIds) . ')';
+			push @{$p}, @albumIds;
+		}
+		elsif (specified($search)) {
 			if ( Slim::Schema->canFulltextSearch ) {
 				Slim::Plugin::FullTextSearch::Plugin->createHelperTable({
 					name   => 'albumsSearch',
@@ -475,6 +482,12 @@ sub albumsQuery {
 			push @{$p}, $libraryID;
 		}
 
+		if (defined $releaseType) {
+			my @releaseTypes = map { uc($_) } split(',', $releaseType);
+			push @{$w}, 'albums.release_type IN (' . join(', ', map {'?'} @releaseTypes) . ')';
+			push @{$p}, @releaseTypes;
+		}
+
 		if (defined $year) {
 			push @{$w}, 'albums.year = ?';
 			push @{$p}, $year;
@@ -527,6 +540,11 @@ sub albumsQuery {
 		$c->{'albums.compilation'} = 1;
 	}
 
+	my $wantsReleaseTypes = !$prefs->get('ignoreReleaseTypes');
+	if ( $tags =~ /W/ && $wantsReleaseTypes ) {
+		$c->{'albums.release_type'} = 1;
+	}
+
 	if ( $tags =~ /E/ ) {
 		$c->{'albums.extid'} = 1;
 	}
@@ -535,7 +553,7 @@ sub albumsQuery {
 		$c->{'albums.replay_gain'} = 1;
 	}
 
-	if ( $tags =~ /S/ ) {
+	if ( $tags =~ /R|S/ ) {
 		$c->{'albums.contributor'} = 1;
 	}
 
@@ -677,7 +695,7 @@ sub albumsQuery {
 			);
 		};
 
-		my ($contributorSql, $contributorSth, $contributorNameSth);
+		my ($contributorSql, $contributorSth, $contributorNameSth, $contributorRoleSth);
 		if ( $tags =~ /(?:aa|SS)/ ) {
 			my @roles = ( 'ARTIST', 'ALBUMARTIST' );
 
@@ -735,6 +753,7 @@ sub albumsQuery {
 			$tags =~ /i/ && $request->addResultLoopIfValueDefined($loopname, $chunkCount, 'disc', $c->{'albums.disc'});
 			$tags =~ /q/ && $request->addResultLoopIfValueDefined($loopname, $chunkCount, 'disccount', $c->{'albums.discc'});
 			$tags =~ /w/ && $request->addResultLoopIfValueDefined($loopname, $chunkCount, 'compilation', $c->{'albums.compilation'});
+			$tags =~ /W/ && $request->addResultLoopIfValueDefined($loopname, $chunkCount, 'release_type', $wantsReleaseTypes ? $c->{'albums.release_type'} : 'ALBUM');
 			$tags =~ /E/ && $request->addResultLoopIfValueDefined($loopname, $chunkCount, 'extid', $c->{'albums.extid'});
 			$tags =~ /X/ && $request->addResultLoopIfValueDefined($loopname, $chunkCount, 'album_replay_gain', $c->{'albums.replay_gain'});
 			$tags =~ /S/ && $request->addResultLoopIfValueDefined($loopname, $chunkCount, 'artist_id', $contributorID || $c->{'albums.contributor'});
@@ -785,6 +804,16 @@ sub albumsQuery {
 
 				if ( $tags =~ /SS/ && $contributor->{id} ) {
 					$request->addResultLoopIfValueDefined($loopname, $chunkCount, 'artist_ids', $contributor->{id});
+				}
+			}
+
+			if ( $tags =~ /R/ ) {
+				$contributorRoleSth ||= $dbh->prepare_cached("SELECT role FROM contributor_album WHERE album = ? AND contributor = ?");
+				my $rolesRef = $dbh->selectall_arrayref($contributorRoleSth, , undef, $c->{'albums.id'}, $contributorID || $c->{'albums.contributor'});
+
+				if ($rolesRef) {
+					my $roles = join(',', map { $_->[0] } @$rolesRef);
+					$request->addResultLoopIfValueDefined($loopname, $chunkCount, 'role_ids', $roles);
 				}
 			}
 
@@ -856,7 +885,7 @@ sub artistsQuery {
 	my $cacheKey;
 
 	my $collate = Slim::Utils::OSDetect->getOS()->sqlHelperClass()->collate();
-	my $sort    = "contributors.namesort $collate";
+	my $sort    = "contributors.namesort $collate, contributors.musicbrainz_id";
 
 	# Manage joins
 	if (defined $trackID) {
@@ -995,7 +1024,7 @@ sub artistsQuery {
 		$sql .= 'WHERE ';
 		my $s = join( ' AND ', @{$w} );
 		$s =~ s/\%/\%\%/g;
-		$sql .= ($wantExternal ? "($s) OR (contributors.extid IS NOT NULL AND contributors.extid != '')" : $s) . ' ';
+		$sql .= (($wantExternal && !$libraryID) ? "($s) OR (contributors.extid IS NOT NULL AND contributors.extid != '')" : $s) . ' ';
 	}
 
 	my $dbh = Slim::Schema->dbh;
@@ -3236,7 +3265,7 @@ sub serverstatusQuery {
 				squeezeplay => 'SqueezePlay'
 			}->{$model} || $model;
 
-			main::INFOLOG && logger('network.protocol')->info("Found outdated SB $model, need to return compatible version string: $ua");
+			main::DEBUGLOG && logger('network.protocol')->debug("Found outdated SB $model, need to return compatible version string: $ua");
 			$request->addResult('version', Slim::Networking::Discovery::getFakeVersion($model));
 		}
 		else {
@@ -3246,6 +3275,14 @@ sub serverstatusQuery {
 	else {
 		$request->addResult('version', $::VERSION);
 	}
+
+	$request->addResult('newversion', $::newVersion) if $::newVersion;
+	$request->addResult('needsrestart', 1) if Slim::Utils::PluginManager->needsRestart;
+	$request->addResult('pluginsdownloading', 1) if Slim::Utils::PluginDownloader->downloading;
+	if (my $newPlugins = Slim::Utils::PluginManager->message) {
+		$request->addResult('newplugins', $newPlugins);
+	}
+
 
 	# add server_uuid
 	$request->addResult('uuid', $prefs->get('server_uuid'));
@@ -3303,42 +3340,6 @@ sub serverstatusQuery {
 
 	if ($valid) {
 		_addPlayersLoop($request, $start, $end, $savePrefs{'player'});
-	}
-
-	if (!main::NOMYSB) {
-		# return list of players connected to SN
-		my @sn_players = Slim::Networking::SqueezeNetwork::Players->get_players();
-
-		$count = scalar @sn_players || 0;
-
-		$request->addResult('sn player count', $count);
-
-		($valid, $start, $end) = $request->normalize(scalar($index), scalar($quantity), $count);
-
-		if ($valid) {
-
-			my $sn_cnt = 0;
-
-			for my $player ( @sn_players ) {
-				$request->addResultLoop(
-					'sn_players_loop', $sn_cnt, 'id', $player->{id}
-				);
-
-				$request->addResultLoop(
-					'sn_players_loop', $sn_cnt, 'name', $player->{name}
-				);
-
-				$request->addResultLoop(
-					'sn_players_loop', $sn_cnt, 'playerid', $player->{mac}
-				);
-
-				$request->addResultLoop(
-					'sn_players_loop', $sn_cnt, 'model', $player->{model}
-				);
-
-				$sn_cnt++;
-			}
-		}
 	}
 
 	# return list of players connected to other servers
@@ -3625,6 +3626,11 @@ sub statusQuery {
 		if ($canSeek) {
 			$request->addResult('can_seek', 1);
 		}
+
+		my $trackGain = Slim::Player::ReplayGain->fetchGainMode($client, $song);
+		if (defined $trackGain) {
+			$request->addResult('replay_gain', $trackGain);
+		}
 	}
 
 	if ($client->currentSleepTime()) {
@@ -3700,8 +3706,7 @@ sub statusQuery {
 		$request->addResult('digital_volume_control', $digitalVolumeControl + 0);
 	}
 
-	# give a count in menu mode no matter what
-	if ($menuMode) {
+	if ($menuMode || $request->getParam('alarmData')) {
 		# send information about the alarm state to SP
 		my $alarmNext    = Slim::Utils::Alarm->alarmInNextDay($client);
 		my $alarmComing  = $alarmNext ? 'set' : 'none';
@@ -3709,7 +3714,7 @@ sub statusQuery {
 		# alarm_state
 		# 'active': means alarm currently going off
 		# 'set':    alarm set to go off in next 24h on this player
-		# 'none':   alarm set to go off in next 24h on this player
+		# 'none':   no alarm set to go off in next 24h on this player
 		# 'snooze': alarm is active but currently snoozing
 		if (defined($alarmCurrent)) {
 			my $snoozing     = $alarmCurrent->snoozeActive();
@@ -3755,7 +3760,9 @@ sub statusQuery {
 		# send client pref for alarm timeout
 		my $alarm_timeout_seconds = $prefs->client($client)->get('alarmTimeoutSeconds');
 		$request->addResult('alarm_timeout_seconds', defined $alarm_timeout_seconds ? $alarm_timeout_seconds + 0 : 300);
+	}
 
+	if ($menuMode) {
 		# send which presets are defined
 		my $presets = $prefs->client($client)->get('presets');
 		my $presetLoop;
@@ -4181,7 +4188,7 @@ sub titlesQuery {
 	my $index         = $request->getParam('_index');
 	my $quantity      = $request->getParam('_quantity');
 	my $tagsprm       = $request->getParam('tags');
-	my $sort          = $request->getParam('sort');
+	my $sort          = $request->getParam('sort') || 'title';
 	my $search        = $request->getParam('search');
 	my $genreID       = $request->getParam('genre_id');
 	my $contributorID = $request->getParam('artist_id');
@@ -4191,7 +4198,7 @@ sub titlesQuery {
 	my $libraryID     = Slim::Music::VirtualLibraries->getRealId($request->getParam('library_id'));
 	my $year          = $request->getParam('year');
 	my $menuStyle     = $request->getParam('menuStyle') || 'item';
-
+	my $releaseType   = $request->getParam('release_type');
 
 	# did we have override on the defaults?
 	# note that this is not equivalent to
@@ -4216,6 +4223,10 @@ sub titlesQuery {
 			$tags .= 'tl';
 			$order_by = "albums.titlesort, tracks.disc, tracks.tracknum, tracks.titlesort $collate"; # XXX titlesort had prepended 0
 		}
+		# when sorting by title and we're including albums and all that, sort by album, artist etc. too
+		elsif ($sort eq 'title' && $tags =~ /[as]/ && $tags =~ /[el]/) {
+			$order_by = "tracks.titlesort, contributors.namesort, albums.titlesort, tracks.year $collate";
+		}
 	}
 
 	$tags .= 'R' if $search && $search =~ /tracks_persistent\.rating/ && $tags !~ /R/;
@@ -4237,6 +4248,7 @@ sub titlesQuery {
 		contributorId => $contributorID,
 		trackId       => $trackID,
 		roleId        => $roleID,
+		releaseType   => $releaseType,
 		libraryId     => $libraryID,
 		limit         => sub {
 			$count = shift;
@@ -4738,6 +4750,7 @@ my %tagMap = (
 	                                                                    #titlesort
 	                                                                    #titlesearch
 	  'a' => ['artist',           'ARTIST',        'artistName'],       #->contributors
+	  's' => ['artist_id',        '',              'artistid'],         #->contributors
 	  'e' => ['album_id',         '',              'albumid'],          #album
 	  'l' => ['album',            'ALBUM',         'albumname'],        #->album.title
 	  't' => ['tracknum',         'TRACK',         'tracknum'],         #tracknum
@@ -4768,34 +4781,35 @@ my %tagMap = (
 	  'M' => ['musicmagic_mixable', '',            'musicmagic_mixable'], #musicmagic_mixable
 	                                                                    #musicbrainz_id
 	                                                                    #lastplayed
-	                                                                    #lossless
+	  'Q' => ['lossless',         'LOSSLESS',      'lossless'],         #lossless
 	  'w' => ['lyrics',           'LYRICS',        'lyrics'],           #lyrics
 	  'R' => ['rating',           'RATING',        'rating'],           #rating
-	  'O' => ['playcount',        'PLAYCOUNT',     'playcount'],        #playcOunt
+	  'O' => ['playcount',        'PLAYCOUNT',     'playcount'],        #playcount
 	  'Y' => ['replay_gain',      'REPLAYGAIN',    'replay_gain'],      #replay_gain
 	                                                                    #replay_peak
 
 	  'c' => ['coverid',          'COVERID',       'coverid'],          # coverid
 	  'K' => ['artwork_url',      '',              'coverurl'],         # artwork URL
 	  'B' => ['buttons',          '',              'buttons'],          # radio stream special buttons
-	  'L' => ['info_link',        '',              'info_link'],        # special trackinfo link for i.e. Pandora
+	  'L' => ['info_link',        '',              'info_link'],        # special trackinfo link
 	  'N' => ['remote_title'],                                          # remote stream title
 	  'E' => ['extid',            '',              'extid'],            # a track's external identifier (eg. on an online music service)
+	  'V' => ['live_edge',        '',              'live_edge'],        # a remote live streams maximum available seek point in seconds within the current duration.
 
+	  'g' => ['genre',            'GENRE',         'genrename'],        #->genre_track->genre.name
+	  'p' => ['genre_id',         '',              'genreid'],          #->genre_track->genre.id
 
 	# Tag    Tag name              Token              Relationship     Method          Track relationship
 	#--------------------------------------------------------------------------------------------------
-	  's' => ['artist_id',         '',                'artist',        'id'],           #->contributors
 	  'A' => ['<role>',            '<ROLE>',          'contributors',  'name'],         #->contributors[role].name
 	  'S' => ['<role>_ids',        '',                'contributors',  'id'],           #->contributors[role].id
 
 	  'q' => ['disccount',         '',                'album',         'discc'],        #->album.discc
 	  'J' => ['artwork_track_id',  'COVERART',        'album',         'artwork'],      #->album.artwork
 	  'C' => ['compilation',       'COMPILATION',     'album',         'compilation'],  #->album.compilation
+	  'W' => ['release_type',      'RELEASETYPE',     'album',         'release_type'], #->album.release_type
 	  'X' => ['album_replay_gain', 'ALBUMREPLAYGAIN', 'album',         'replay_gain'],  #->album.replay_gain
 
-	  'g' => ['genre',             'GENRE',           'genre',         'name'],         #->genre_track->genre.name
-	  'p' => ['genre_id',          '',                'genre',         'id'],           #->genre_track->genre.id
 	  'G' => ['genres',            'GENRE',           'genres',        'name'],         #->genre_track->genres.name
 	  'P' => ['genre_ids',         '',                'genres',        'id'],           #->genre_track->genres.id
 
@@ -4820,6 +4834,7 @@ my %colMap = (
 	y => 'tracks.year',
 	m => 'tracks.bpm',
 	M => sub { $_[0]->{'tracks.musicmagic_mixable'} ? 1 : 0 },
+ 	Q => sub { $_[0]->{'tracks.lossless'} ? 1 : 0 },
 	k => 'comment',
 	o => 'tracks.content_type',
 	v => 'tracks.tagversion',
@@ -4840,6 +4855,7 @@ my %colMap = (
 	I => 'tracks.samplesize',
 	u => 'tracks.url',
 	w => 'tracks.lyrics',
+	W => 'albums.release_type',
 	x => sub { $_[0]->{'tracks.remote'} ? 1 : 0 },
 	c => 'tracks.coverid',
 	H => 'tracks.channels',
@@ -4912,7 +4928,7 @@ sub _songData {
 	}
 
 	# figure out the track object
-	my $track     = Slim::Schema->objectForUrl($pathOrObj);
+	my $track = Slim::Schema->objectForUrl($pathOrObj);
 
 	if (!blessed($track) || !$track->can('id')) {
 
@@ -4935,6 +4951,11 @@ sub _songData {
 	my $isRemote = $track->remote;
 	my $url = $track->url;
 
+	my $song;
+	if ( my $client = $request->client ) {
+		$song = $client->currentSongForUrl($url);
+	}
+
 	if ( $isRemote ) {
 		my $handler = Slim::Player::ProtocolHandlers->handlerForURL($url);
 
@@ -4946,6 +4967,7 @@ sub _songData {
 
 			$remoteMeta->{a} = $remoteMeta->{artist};
 			$remoteMeta->{A} = $remoteMeta->{artist};
+			$remoteMeta->{E} = $remoteMeta->{extid};
 			$remoteMeta->{l} = $remoteMeta->{album};
 			$remoteMeta->{i} = $remoteMeta->{disc};
 			$remoteMeta->{K} = $remoteMeta->{cover};
@@ -4957,18 +4979,23 @@ sub _songData {
 			$remoteMeta->{L} = $remoteMeta->{info_link};
 			$remoteMeta->{t} = $remoteMeta->{tracknum};
 			$remoteMeta->{y} = $remoteMeta->{year};
+			$remoteMeta->{T} = $remoteMeta->{samplerate};
+			$remoteMeta->{I} = $remoteMeta->{samplesize};
+			$remoteMeta->{W} = $remoteMeta->{releasetype};
+
+			# Distance from the live edge of live remote stream. -1 is not live, 0 is live at the edge, >0 is distance in seconds from the live edge.
+			# $remoteMeta->{live_edge} contains distance from live edge. Will only be populated by 3rd party handlers that support dynamic adaptive live streams.
+			$remoteMeta->{V} = $remoteMeta->{live_edge} // ($song && $song->isLive() ? 0 : -1);
 		}
 	}
 
 	my $parentTrack;
-	if ( my $client = $request->client ) { # Bug 13062, songinfo may be called without a client
-		if (my $song = $client->currentSongForUrl($url)) {
-			my $t = $song->currentTrack();
-			if ($t->url ne $url) {
-				$parentTrack = $track;
-				$track = $t;
-				$isRemote = $track->remote;
-			}
+	if ( $song ) {
+		my $t = $song->currentTrack();
+		if ($t->url ne $url) {
+			$parentTrack = $track;
+			$track = $t;
+			$isRemote = $track->remote;
 		}
 	}
 
@@ -4979,9 +5006,11 @@ sub _songData {
 
 	$returnHash{'id'}    = $track->id;
 	$returnHash{'title'} = $remoteMeta->{title} || $track->title;
+	my %seen;
 
 	# loop so that stuff is returned in the order given...
 	for my $tag (split (//, $tags)) {
+		next if $seen{$tag}++;		# don't process tags multiple times
 
 		my $tagref = $tagMap{$tag} or next;
 
@@ -5008,19 +5037,41 @@ sub _songData {
 				$returnHash{artist} = $meta;
 				next;
 			}
+			elsif ( $track->isa('Slim::Schema::RemoteTrack')) {
+				next;
+			}
 
 			if ( defined(my $submethod = $tagref->[3]) ) {
 
 				my $postfix = ($tag eq 'S')?"_ids":"";
 
-				foreach my $type (Slim::Schema::Contributor::contributorRoles()) {
+				my $dbh = Slim::Schema->dbh;
+				my $contributor_sth;
 
-					my $key = lc($type) . $postfix;
-					my $contributors = $track->contributorsOfType($type) or next;
-					my @values = map { $_ = $_->$submethod() } $contributors->all;
-					my $value = join(', ', @values);
+				if ($tag eq 'S') {
+					$contributor_sth = $dbh->prepare_cached( q{
+						SELECT DISTINCT contributor FROM contributor_track WHERE track = ? AND role = ?
+					} );
+				}
+				else {
+					$contributor_sth = $dbh->prepare_cached( q{
+						SELECT DISTINCT contributors.name
+						FROM contributor_track
+							JOIN contributors ON contributors.id = contributor_track.contributor
+						WHERE track = ? AND role = ?
+					} );
+				}
+
+				foreach my $type (Slim::Schema::Contributor::contributorRoles()) {
+					$contributor_sth->execute($returnHash{'id'}, Slim::Schema::Contributor->typeToRole($type));
+					my $cons = $contributor_sth->fetchall_arrayref([0]);
+
+					next unless scalar @$cons;
+
+					my $value = join(', ', map { utf8::decode($_->[0]); $_->[0] } @$cons);
 
 					if (defined $value && $value ne '') {
+						my $key = lc($type) . $postfix;
 
 						# add the tag to the result
 						$returnHash{$key} = $value;
@@ -5067,7 +5118,7 @@ sub _songData {
 			}
 
 			# correct values
-			if (($tag eq 'R' || $tag eq 'x') && $value == 0) {
+			if ($tag eq 'R' && $value == 0) {
 				$value = undef;
 			}
 			# we might need to proxy the image request to resize it
@@ -5327,8 +5378,10 @@ sub _getTagDataForTracks {
 	}
 
 	if ( my $albumId = $args->{albumId} ) {
-		push @{$w}, 'tracks.album = ?';
-		push @{$p}, $albumId;
+		my @albumIds = split(',', $albumId);
+		push @{$w}, 'tracks.album IN (' . join(',', map {'?'} @albumIds) . ')';
+		push @{$p}, @albumIds;
+		delete $args->{releaseType};
 	}
 
 	if ( my $trackId = $args->{trackId} ) {
@@ -5341,7 +5394,7 @@ sub _getTagDataForTracks {
 		push @{$p}, $year;
 	}
 
-	if ( my $libraryId = $args->{libraryId} ) {
+	if ( my $libraryId = Slim::Music::VirtualLibraries->getRealId($args->{libraryId}) ) {
 		$sql .= 'JOIN library_track ON library_track.track = tracks.id ';
 		push @{$w}, 'library_track.library = ?';
 		push @{$p}, $libraryId;
@@ -5381,6 +5434,13 @@ sub _getTagDataForTracks {
 			$sql .= 'LEFT JOIN albums ON albums.id = tracks.album ';
 		}
 	};
+
+	if ( my $releaseType = $args->{releaseType} ) {
+		$join_albums->();
+		my @releaseTypes = map { uc($_) } split(',', $releaseType);
+		push @{$w}, 'albums.release_type IN (' . join(', ', map {'?'} @releaseTypes) . ')';
+		push @{$p}, @releaseTypes;
+	}
 
 	my $join_tracks_persistent = sub {
 		if ( main::STATISTICS && $sql !~ /JOIN tracks_persistent/ ) {
@@ -5423,6 +5483,7 @@ sub _getTagDataForTracks {
 	$tags =~ /y/ && do { $c->{'tracks.year'} = 1 };
 	$tags =~ /m/ && do { $c->{'tracks.bpm'} = 1 };
 	$tags =~ /M/ && do { $c->{'tracks.musicmagic_mixable'} = 1 };
+ 	$tags =~ /Q/ && do { $c->{'tracks.lossless'} = 1 };
 	$tags =~ /o/ && do { $c->{'tracks.content_type'} = 1 };
 	$tags =~ /v/ && do { $c->{'tracks.tagversion'} = 1 };
 	$tags =~ /r/ && do { $c->{'tracks.bitrate'} = 1; $c->{'tracks.vbr_scale'} = 1 };
@@ -5508,6 +5569,11 @@ sub _getTagDataForTracks {
 	$tags =~ /C/ && do {
 		$join_albums->();
 		$c->{'albums.compilation'} = 1;
+	};
+
+	$tags =~ /W/ && do {
+		$join_albums->();
+		$c->{'albums.release_type'} = 1;
 	};
 
 	$tags =~ /X/ && do {
@@ -5615,6 +5681,8 @@ sub _getTagDataForTracks {
 	my %results;
 	my @resultOrder;
 
+	my $ignoreReleaseTypes = $tags =~ /W/ && $prefs->get('ignoreReleaseTypes');
+
 	while ( $sth->fetch ) {
 		if (!$ids_only) {
 			utf8::decode( $c->{'tracks.title'} ) if exists $c->{'tracks.title'};
@@ -5628,6 +5696,12 @@ sub _getTagDataForTracks {
 		my $id = $c->{'tracks.id'};
 
 		$results{ $id } = { map { $_ => $c->{$_} } keys %{$c} };
+
+		# if user doesn't want to distinguish release types, just return ALBUMS for all of them
+		if ($ignoreReleaseTypes) {
+			$results{ $id }->{'albums.release_type'} = 'ALBUM';
+		}
+
 		push @resultOrder, $id;
 	}
 
@@ -5657,7 +5731,7 @@ sub _getTagDataForTracks {
 
 			# XXX: what if name has ", " in it?
 			utf8::decode($name);
-			$role_info->{ids}   .= $role_info->{ids} ? ', ' . $id : $id;
+			$role_info->{ids}   .= $role_info->{ids} ? ',' . $id : $id;
 			$role_info->{names} .= $role_info->{names} ? $separator . $name : $name;
 		}
 
@@ -5699,7 +5773,7 @@ sub _getTagDataForTracks {
 			my $genre_info = $values{$track} ||= {};
 
 			utf8::decode($name);
-			$genre_info->{ids}   .= $genre_info->{ids} ? ', ' . $id : $id;
+			$genre_info->{ids}   .= $genre_info->{ids} ? ',' . $id : $id;
 			$genre_info->{names} .= $genre_info->{names} ? ', ' . $name : $name;
 		}
 

@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-# Logitech Media Server Copyright 2001-2022 Logitech.
+# Logitech Media Server Copyright 2001-2024 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -47,7 +47,7 @@ use constant INFOLOG      => ( grep { /--noinfolog/ } @ARGV ) ? 0 : 1;
 use constant STATISTICS   => ( grep { /--nostatistics/ } @ARGV ) ? 0 : 1;
 use constant SB1SLIMP3SYNC=> ( grep { /--nosb1slimp3sync/ } @ARGV ) ? 0 : 1;
 use constant WEBUI        => ( grep { /--noweb/ } @ARGV ) ? 0 : 1;
-use constant NOMYSB       => ( grep { /--nomysqueezebox/ } @ARGV ) ? 1 : 0;
+use constant NOMYSB       => 1;
 use constant LOCALFILE    => ( grep { /--localfile/ } @ARGV ) ? 1 : 0;
 use constant NOBROWSECACHE=> ( grep { /--nobrowsecache/ } @ARGV ) ? 1 : 0;
 
@@ -64,7 +64,7 @@ $ENV{PERL5LIB} = join $Config{path_sep}, grep { !$check_inc{$_}++ } @INC;
 
 # This package section is used for the windows service version of the application,
 # as built with ActiveState's PerlSvc
-if (ISWINDOWS && $PerlSvc::VERSION) {
+if (ISACTIVEPERL && $PerlSvc::VERSION) {
 	package PerlSvc;
 
 	our %Config = (
@@ -155,7 +155,14 @@ our $REVISION    = undef;
 our $BUILDDATE   = undef;
 
 BEGIN {
-	our $VERSION = '8.4.0';
+	# hack a Strawberry Perl specific path into the environment variable - XML::Parser::Expat needs it!
+	if (ISWINDOWS && !ISACTIVEPERL) {
+		my $path = File::Basename::dirname($^X);
+		$path =~ s/perl(?=.bin)/c/i;
+		$ENV{PATH} = "$path;" . $ENV{PATH} if -d $path;
+	}
+
+	our $VERSION = '8.5.3';
 
 	# With EV, only use select backend
 	# I have seen segfaults with poll, and epoll is not stable
@@ -267,7 +274,6 @@ use Slim::Utils::Strings qw(string);
 use Slim::Utils::Timers;
 use Slim::Networking::Slimproto;
 use Slim::Networking::SimpleAsyncHTTP;
-use Slim::Networking::Repositories;
 use Slim::Utils::Firmware;
 use Slim::Control::Jive;
 use Slim::Formats::RemoteMetadata;
@@ -505,15 +511,6 @@ sub init {
 	Slim::Networking::Async::HTTP->init;
 	Slim::Networking::SimpleAsyncHTTP->init;
 
-	if (!main::NOMYSB) {
-		main::INFOLOG && $log->info("SqueezeNetwork Init...");
-		require Slim::Networking::SqueezeNetwork;
-		Slim::Networking::SqueezeNetwork->init();
-	}
-
-	main::INFOLOG && $log->info("Download repositories init...");
-	Slim::Networking::Repositories->init();
-
 	main::INFOLOG && $log->info("Firmware init...");
 	Slim::Utils::Firmware->init;
 
@@ -671,7 +668,12 @@ sub main {
 	# all other initialization
 	init();
 
-	while (!idle()) {}
+	if ( ISWINDOWS && !ISACTIVEPERL && $daemon ) {
+		Slim::Utils::OSDetect->getOS()->runService();
+	}
+	else {
+		while (!idle()) {}
+	}
 
 	stopServer();
 }
@@ -779,8 +781,7 @@ Usage: $0 [--diag] [--daemon] [--stdio]
     --httpport       => Activate the web interface on the specified port.
                         Set to 0 in order disable the web server.
     --httpaddr       => Activate the web interface on the specified IP address.
-    --advertiseaddr  => IP address to report as its exposed address (UI and to mysqueezebox.com).
-                        Basically the user facing IP address.
+    --advertiseaddr  => IP address to report as its exposed address. Basically the user facing IP address.
     --cliport        => Activate the command line interface TCP/IP interface
                         on the specified port. Set to 0 in order disable the
                         command line interface server.
@@ -804,8 +805,6 @@ Usage: $0 [--diag] [--daemon] [--stdio]
     --nosb1slimp3sync=> Disable support for SliMP3s, SB1s and associated synchronization
     --nostatistics   => Disable the TracksPersistent table used to keep to statistics across rescans (compiled out).
     --notranscoding  => Disable transcoding support.
-    --nomysqueezebox => Disable mysqueezebox.com integration.
-                        Warning: This effectively disables all music services provided by Logitech apps.
     --nobrowsecache  => Disable caching of rendered browse pages.
     --perfmon        => Enable internal server performance monitoring
     --perfwarn       => Generate log messages if internal tasks take longer than specified threshold
@@ -1129,7 +1128,6 @@ sub canRestartServer {
 }
 
 sub restartServer {
-
 	if ( canRestartServer() ) {
 		cleanup();
 		logger('')->info( 'Logitech Media Server restarting...' );
@@ -1138,11 +1136,9 @@ sub restartServer {
 			logger('')->error("Unable to restart Logitech Media Server");
 		}
 	}
-
-	# XXX - shouldn't we ignore the restart command if we can't restart?
 	else {
-		logger('')->error("Unable to restart Logitech Media Server - shutting down.");
-		stopServer();
+		logger('')->error("Unable to restart Logitech Media Server - leaving it running.");
+		return;
 	}
 
 	exit();
@@ -1177,6 +1173,7 @@ sub cleanup {
 	Slim::Utils::PluginManager->shutdownPlugins();
 
 	Slim::Utils::Prefs::writeAll();
+	Slim::Utils::ImageResizer->stopDaemon() if $INC{'Slim/Utils/ImageResizer.pm'};
 
 	if ($prefs->get('persistPlaylists')) {
 		Slim::Control::Request::unsubscribe(
@@ -1205,8 +1202,12 @@ sub remove_pid_file {
 }
 
 sub END {
-
 	Slim::bootstrap::theEND();
+
+	# tell Windows Service manager to resart
+	if (ISWINDOWS && !ISACTIVEPERL && $? == Slim::Utils::OS::Win64::RESTART_STATUS) {
+		POSIX::_exit($?);
+	}
 }
 
 # start up the server if we're not running as a service.

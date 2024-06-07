@@ -188,6 +188,11 @@ sub init {
 		'useUnifiedArtistsList' => 0,
 		'useTPE2AsAlbumArtist'  => 0,
 		'variousArtistsString'  => undef,
+		'releaseTypesToIgnore'  => [],
+		'ignoreReleaseTypes'    => 0,
+		'groupArtistAlbumsByReleaseType' => 0,
+		'showComposerReleasesbyAlbum' => 2,
+		'showComposerReleasesbyAlbumGenres' => "Classical, Klassik, Classique, Klassiek",
 		'ratingImplementation'  => 'LOCAL_RATING_STORAGE',
 		# Server Settings - FileTypes
 		'disabledextensionsaudio'    => '',
@@ -254,18 +259,13 @@ sub init {
 		'coverArt'              => '',
 		'artfolder'             => '',
 		'thumbSize'             => 100,
+		'useLocalImageproxy'    => main::ISWINDOWS ? 1 : 2,
 		# Server Settings - jive UI
 		'jivealbumsort'		=> 'album',
 		'defeatDestructiveTouchToPlay' => 4, # 4 => defeat only if playing and current item not a radio stream
 		# Bug 5557, disable UPnP support by default
 		'noupnp'                => 1,
 	);
-
-	if (!main::NOMYSB) {
-		# Server Settings - mysqueezebox.com
-		$defaults{'sn_sync'} = 1;
-		$defaults{'sn_disable_stats'} = 1;
-	}
 
 	# we can have different defaults depending on the OS
 	$os->initPrefs(\%defaults);
@@ -419,8 +419,15 @@ sub init {
 	}, 'autoDownloadUpdate', 'checkVersion' );
 
 	if ( !main::SCANNER ) {
+		my $scanArtwork = sub {
+			Slim::Music::Import->setIsScanning('PRECACHEARTWORK_PROGRESS');
+			Slim::Music::Artwork->precacheAllArtwork(sub {
+				Slim::Music::Import->setIsScanning(0);
+			}, 1);
+		};
+
 		$prefs->setChange( sub {
-			return if Slim::Music::Import->stillScanning;
+			return if !Slim::Schema->hasLibrary || Slim::Music::Import->stillScanning;
 
 			my $newValues = $_[1];
 			my $oldValues = $_[3];
@@ -432,11 +439,9 @@ sub init {
 			# trigger artwork scan if we've got a new specification only
 			if ( scalar @new ) {
 				require Slim::Music::Artwork;
-
-				Slim::Music::Import->setIsScanning('PRECACHEARTWORK_PROGRESS');
-				Slim::Music::Artwork->precacheAllArtwork(sub {
-					Slim::Music::Import->setIsScanning(0);
-				}, 1);
+				Slim::Utils::Timers::killTimers(undef, $scanArtwork);
+				# delay rescan in case we were still busy getting everything set up
+				Slim::Utils::Timers::setTimer(undef, Time::HiRes::time() + 10, $scanArtwork);
 			}
 		}, 'customArtSpecs');
 
@@ -575,53 +580,6 @@ sub init {
 			}
 		}
 	}, 'timeFormat');
-
-	if (!main::NOMYSB) {
-		# Clear SN cookies from the cookie jar if the session changes
-		$prefs->setChange( sub {
-			if (!$_[1]) {
-				Slim::Networking::SqueezeNetwork->shutdown();
-			}
-
-			# XXX the sn.com hostnames can be removed later
-			my $cookieJar = Slim::Networking::Async::HTTP::cookie_jar();
-			$cookieJar->clear( 'www.squeezenetwork.com' );
-			$cookieJar->clear( 'www.test.squeezenetwork.com' );
-			$cookieJar->clear( 'www.mysqueezebox.com' );
-			$cookieJar->clear( 'www.test.mysqueezebox.com' );
-			$cookieJar->save();
-			main::DEBUGLOG && logger('network.squeezenetwork')->debug( 'SN session has changed, removing cookies' );
-		}, 'sn_session' );
-
-		$prefs->setChange(sub {
-			my $newValue = $_[1];
-
-			if ( UNIVERSAL::can('Slim::Networking::SqueezeNetwork::PrefSync', 'shutdown') ) {
-				Slim::Networking::SqueezeNetwork::PrefSync->shutdown();
-			}
-
-			if ( $newValue && $prefs->get('sn_session') ) {
-				require Slim::Networking::SqueezeNetwork::PrefSync;
-				Slim::Networking::SqueezeNetwork::PrefSync->init();
-			}
-		}, 'sn_sync');
-
-		$prefs->setChange( sub {
-			Slim::Utils::Timers::setTimer(
-				$_[1],
-				time() + 30,
-				sub {
-					return unless $prefs->get('sn_session');
-
-					my $isDisabled = shift;
-					my $http = Slim::Networking::SqueezeNetwork->new(sub {}, sub {});
-
-					$http->get( $http->url( '/api/v1/stats/mark_disabled/' . $isDisabled ? 1 : 0 ) );
-				},
-			);
-
-		}, 'sn_disable_stats');
-	}
 
 	# Reset IR state if preference change
 	$prefs->setChange( sub {

@@ -85,7 +85,6 @@ sub minTreble { 50 };
 sub maxPitch { 100 };
 sub minPitch { 100 };
 sub maxTransitionDuration { 10 };
-sub canDecodeRhapsody { 1 };
 sub hasPreAmp { 1 };
 sub hasDisableDac { 1 };
 sub hasServ { 1 };
@@ -390,6 +389,9 @@ sub flush {
 
 	$client->stream('f');
 	$client->SUPER::flush();
+	
+	# once flush, don't wait for answer, just get ready
+	$client->readyToStream(1);
 	return 1;
 }
 

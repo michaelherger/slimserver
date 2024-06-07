@@ -1,6 +1,6 @@
 #!/usr/bin/env perl -ICPAN
 
-# Logitech Media Server Copyright 2001-2022 Logitech.
+# Logitech Media Server Copyright 2001-2024 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License,
 # version 2.
@@ -60,7 +60,7 @@ require Getopt::Long;
 require Slim::Utils::OSDetect;
 require Slim::Utils::Light;
 
-our $VERSION = '8.4.0';
+our $VERSION = '8.5.3';
 
 BEGIN {
 	if (ISWINDOWS) {
@@ -358,6 +358,10 @@ sub showSplashScreen {
 
 	if (defined $PerlApp::VERSION) {
 		$file = PerlApp::extract_bound_file(SPLASH_LOGO);
+	}
+
+	else {
+		$file = SPLASH_LOGO;
 	}
 
 	if (!$file || !-f $file) {

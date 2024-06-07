@@ -1,0 +1,6 @@
+PLUGIN_AUDIO_ADDICT_NAME
+	EN	AudioAddict
+
+PLUGIN_AUDIO_ADDICT_DESC
+	EN	AudioAddict - providing access to ClassicalRadio, DI.fm, JazzRadio, RadioTunes, RockRadio, ZenRadio
+	FR	AudioAddict - donne accès à ClassicalRadio, DI.fm, JazzRadio, RadioTunes, RockRadio, ZenRadio

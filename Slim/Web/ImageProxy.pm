@@ -59,7 +59,7 @@ Slim::Web::ImageProxy
 
 =head1 DESCRIPTION
 
-The ImageProxy module allows you to have artwork resized on the server-side without relying on mysqueezebox.com
+The ImageProxy module allows you to have artwork resized on the server-side without relying on external systems.
 
 Besides resizing artwork, custom handlers can eg. convert track IDs to image URLs, build a query string to request
 the smallest image possible for the given resizing spec etc.
@@ -74,6 +74,9 @@ use strict;
 use Digest::MD5;
 use File::Spec::Functions qw(catdir);
 use File::Slurp ();
+use HTTP::Status qw(
+	RC_MOVED_PERMANENTLY
+);
 use Tie::RegexpHash;
 use URI::Escape qw(uri_escape_utf8);
 
@@ -81,6 +84,7 @@ use Exporter::Lite;
 our @EXPORT_OK = qw(proxiedImage);
 
 use Slim::Networking::SimpleAsyncHTTP;
+use Slim::Utils::ImageResizer;
 use Slim::Utils::Misc;
 use Slim::Utils::Log;
 use Slim::Utils::Prefs;
@@ -99,6 +103,8 @@ my %queue;
 
 sub init {
 	$cache ||= Slim::Web::ImageProxy::Cache->new();
+
+	Slim::Utils::ImageResizer->initDaemon();
 
 	# clean up  stale cache files
 	Slim::Utils::Misc::deleteFiles($prefs->get('cachedir'), qr/^imgproxy_[a-f0-9]+$/i);
@@ -138,6 +144,18 @@ sub getImage {
 		return;
 	}
 
+	if ($spec =~ /^\.(?:png|jpe?g)/i && $url =~ /^https?/) {
+		main::INFOLOG && $log->is_info && $log->info("No resizing requested - redirect to original URI: $url");
+
+		my $response = $args[1];
+		$response->code(RC_MOVED_PERMANENTLY);
+		$response->header('Location' => $url);
+
+		$callback->($client, $params, '', @args);
+
+		return;
+	}
+
 	my $handleProxiedUrl = sub {
 		my $url = shift;
 
@@ -151,14 +169,23 @@ sub getImage {
 		main::DEBUGLOG && $log->debug("Found URL to get artwork: $url");
 
 		my $pre_shrunk;
+		my %headers;
 		# use external image proxy if one is defined
 		if ( $url =~ /^https?:/ && $spec && $spec !~ /^\.(png|jpe?g)/i && (my $imageproxy = $prefs->get('useLocalImageproxy')) ) {
 			if ( my $external = $externalHandlers{$imageproxy} ) {
 				my ($host, $port, $path, $user, $pass) = Slim::Utils::Misc::crackURL($url);
 
 				if ( $external->{func} && !($host && (Slim::Utils::Network::ip_is_private($host) || $host =~ /localhost/i)) ) {
-					my $url2 = $external->{func}->(uri_escape_utf8($url), $spec);
-					$url = $url2 if $url2;
+					my ($url2, $header) = $external->{func}->(uri_escape_utf8($url), $spec);
+
+					if ($url2) {
+						$url = $url2;
+
+						# parse header and add it to the request
+						if ($header =~ /(.*?):\s*(.*)/) {
+							$headers{$1} = $2;
+						}
+					}
 					$pre_shrunk = 1;
 
 					main::DEBUGLOG && $log->debug("Using custom image proxy: $url");
@@ -197,7 +224,7 @@ sub getImage {
 				},
 			);
 
-			$http->get( $url );
+			$http->get( $url, %headers );
 		}
 	};
 
@@ -373,9 +400,8 @@ sub _artworkError {
 
 # Return a proxied image URL if
 # - the given url is a fully qualified url, and
-# - the useLocalImageproxy pref is set (optional, as long as mysb.com is around), or
 # - a custom handler for the given url has been defined (eg. radiotime), or
-# - or the $force parameter is passed in
+# - the $force parameter is passed in
 #
 # $force can be used to create custom handlers dealing with custom "urls".
 # Eg. there could be a pattern to only pass some album id, together with a keyword,
@@ -385,9 +411,6 @@ sub proxiedImage {
 
 	# only proxy external URLs
 	return $url unless $force || ($url && $url =~ /^https?:/);
-
-	# don't use for all external URLs just yet, but only for URLs which have a handler defined
-	return $url unless main::NOMYSB || $force || $prefs->get('useLocalImageproxy') || __PACKAGE__->getHandlerFor($url);
 
 #	main::DEBUGLOG && $log->debug("Use proxied image URL for: $url");
 
@@ -419,7 +442,7 @@ sub registerHandler {
 	}
 
 	if ( ref $params{func} ne 'CODE' ) {
-		$log->error( 'registerProider called without a code reference' );
+		$log->error( 'registerProvider called without a code reference' );
 		return;
 	}
 

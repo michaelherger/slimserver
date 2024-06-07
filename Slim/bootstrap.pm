@@ -1,6 +1,6 @@
 package Slim::bootstrap;
 
-# Logitech Media Server Copyright 2001-2022 Logitech.
+# Logitech Media Server Copyright 2001-2024 Logitech.
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License, version 2
 
@@ -192,9 +192,13 @@ sub loadModules {
 
 		print "The following modules failed to load: $failed\n\n";
 
-		if ( main::ISWINDOWS ) {
-			print "To run from source on Windows, please install ActivePerl 5.14.  ActivePerl 5.10.0 is no longer supported.\n";
+		if ( main::ISACTIVEPERL ) {
+			print "To run from source on Windows 32-bit, please install ActivePerl 5.14.\n";
 			print "http://downloads.activestate.com/ActivePerl/releases/\n\n";
+		}
+		elsif ( main::ISWINDOWS ) {
+			print "To run from source on Windows 64-bit, please install dependencies using Strawberry Perl 5.32.\n";
+			print "https://strawberryperl.com/releases.html\n\n";
 		}
 		else {
 			print `perl -v`;

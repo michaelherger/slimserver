@@ -1,30 +1,181 @@
-<h2><a name="v8.4.0" id="v8.4.0"></a>Version 8.4.0</h2>
+<h2><a name="v8.5.3" id="v8.5.3"></a>Version 8.5.3</h2>
 <ul>
-	<li><a href="#v8.3.1">Upstream fixes from Logitech Media Server 8.3.x</a></li>
-	<br />
-
 	<li>New Features:</li>
 	<ul>
-		<li>New "Advanced Tag View" plugin allows you to show more information in the Track Info menu, without the need to drill down to "View Tags"</li>
-		<li>Add an option to import playlists from online music services.</li>
+		<li></li>
 	</ul>
 	<br />
 
 	<li>Server Changes:</li>
 	<ul>
+		<li></li>
+	</ul>
+	<br />
+
+	<li>Platform Support:</li>
+	<ul>
+		<li></li>
+	</ul>
+	<br />
+
+	<li>Bug Fixes:</li>
+	<ul>
+		<li></li>
+	</ul>
+	<br />
+
+	<li>Other:</li>
+	<ul>
+		<li></li>
+	</ul>
+	<br />
+</ul>
+
+
+<h2><a name="v8.5.2" id="v8.5.2"></a>Version 8.5.2 - 2024-05-26 (88ba56f2c)</h2>
+<ul>
+	<li>Server Changes:</li>
+	<ul>
+		<li>Fall back to "latest" firmware folder if no server version specific files can be found.</li>
+		<li>Improve Analytics reporting to cover more player types.</li>
+	</ul>
+	<br />
+
+	<li>Platform Support:</li>
+	<ul>
+		<li>Improve macOS architecture detection</li>
+	</ul>
+	<br />
+
+	<li>Bug Fixes:</li>
+	<ul>
+		<li><a href="https://github.com/Logitech/slimserver/pull/1056">#1056</a> - Fix playback of certain mp4 files (thanks philippe44!)</li>
+		<li><a href="https://github.com/Logitech/slimserver/pull/1047">#1047</a> - Fix sort collation when requesting artists</li>
+		<li><a href="https://github.com/LMS-Community/slimserver/pull/1083">#1083</a> - Fixes for playlist add via Release Type groups (thanks darrel-k!)</li>
+		<li>Fix /music/current/cover artwork handler for certain cases where resizing would fail (eg. <a href="https://forums.slimdevices.com/forum/developer-forums/developers/1699734">Podcasts</a>)</li>
+		<li><a href="https://forums.slimdevices.com/forum/user-forums/3rd-party-software/106269-announce-material-skin/page652#post1707487">Fix RandomPlay</a> when overriding a selected library view with "all music" (see when using Material skin)</li>
+		<li>Use ORIGINALYEAR, ORIGINALDATE, or DATE to parse the year from Ogg files.</li>
+	</ul>
+	<br/>
+</ul>
+
+
+<h2><a name="v8.5.1" id="v8.5.1"></a>Version 8.5.1 - 2024-04-15 (3b46196aa)</h2>
+<ul>
+	<li>New Features:</li>
+	<ul>
+		<li>Add plugin to report data about your LMS installation - see <a href="https://forums.slimdevices.com/forum/user-forums/general-discussion/1697108">forum discussion</a>.</li>
+	</ul>
+	<br />
+
+	<li>Server Changes:</li>
+	<ul>
+		<li>Add links to the settings of the AudioAddict based services.</li>
+		<li>Add support for "DELETE" HTTP verb to SimpleAsyncHTTP.</li>
+	</ul>
+	<br />
+
+	<li>Bug Fixes:</li>
+	<ul>
+		<li>Fix definition of track-level favorites' artwork.</li>
+		<li>Correctly prefix settings links from Plugins page with the web root.</li>
+		<li><a href="https://github.com/Logitech/slimserver/pull/1020">#1020</a> - Add icon to favorites in Default web UI et al. (thanks philippe44 && darrell-k)</li>
+		<li><a href="https://github.com/LMS-Community/slimserver/pull/1029">#1029</a> - Fix incorrect HTTP skipping (thanks philippe44 && bpa!)</li>
+		<li><a href="https://github.com/LMS-Community/slimserver/issues/1045">#1045</a> - "shufflemode" is missing from "alarms" query (thanks @CDrummond!)</li>
+	</ul>
+	<br />
+</ul>
+
+
+<h2><a name="v8.5.0" id="v8.5.0"></a>Version 8.5.0 - 2024-03-14 (8762186a4)</h2>
+<ul>
+	<li><a href="#v8.4.1">Upstream fixes from Logitech Media Server 8.4.x</a></li>
+	<br />
+
+	<li>Server Changes:</li>
+	<ul>
+		<li>Remove all dependency on MySqueezebox.com.</li>
+		<li>Remove warning about "incompatible" Radio firmware version 7.*.</li>
+		<li><a href="https://github.com/Logitech/slimserver/issues/1003">#1003</a> - Add alarm information to player "status" query.</li>
+	</ul>
+	<br />
+
+	<li>Bug Fixes:</li>
+	<ul>
+		<li><a href="https://github.com/Logitech/slimserver/pull/998">#998</a> - Fix Sounds &amp; Effects playback when password protection is enabled.</li>
+		<li><a href="https://github.com/Logitech/slimserver/pull/1007">#1007</a> - Fix track favorite links in album listings (thanks darrell-k!).</li>
+	</ul>
+	<br />
+</ul>
+
+
+<h2><a name="v8.4.1" id="v8.4.1"></a>Version 8.4.1</h2>
+<ul>
+	<li>Server Changes:</li>
+	<ul>
+		<li>Improve Release Type readout in Ogg and WMA files.</li>
+	</ul>
+	<br />
+
+	<li>Bug Fixes:</li>
+	<ul>
+		<li>Don't fail http caching due to extended characters in the URL.</li>
+		<li>Playing all items from a genre might fail under certain circumstances.</li>
+		<li>Use valid sorting arguments if sort order "albums" is requested when queuing up items.</li>
+		<li>Fix Last.fm scrobbling issue with some streaming service tracks.</li>
+	</ul>
+	<br />
+</ul>
+
+
+<h2><a name="v8.4.0" id="v8.4.0"></a>Version 8.4.0 - 2024-02-08 (e225575dc)</h2>
+<ul>
+	<li><a href="#v8.3.2">Upstream fixes from Logitech Media Server 8.3.x</a></li>
+	<br />
+
+	<li>New Features:</li>
+	<ul>
+		<li><a href="https://github.com/Logitech/slimserver/issues/879">#879</a> - Add support for Release Types (see eg. on <a href="https://musicbrainz.org/doc/Release_Group/Type">MusicBrainz</a>).</li>
+		<li>New "Advanced Tag View" plugin allows you to show more information in the Track Info menu, without the need to drill down to "View Tags"</li>
+		<li>Allow editing of a favourite's icon.</li>
+		<li>Add plugins for ClassicalRadio.com, DI.fm, JazzRadio.com, RadioTunes.com, RockRadio.com, ZenRadio.com.</li>
+		<li>Add an optional artist albums view which groups albums by release type and contribution. (thanks darrell-k!)</li>
+		<li>Add an option to import playlists from online music services.</li>
+		<li><a href="https://github.com/Logitech/slimserver/pull/987">#987</a> - Add OggFlac support (thanks philippe44!)</li>
+	</ul>
+	<br />
+
+	<li>Server Changes:</li>
+	<ul>
+		<li>Improve integration of the external image resizing helper daemon.</li>
+		<li>Improve built-in imageproxy: don't proxy image if original size is requested, re-direct instead; add support for custom headers when using external image proxy.</li>
 		<li>Updated Dutch translation - thanks blackfiction!</li>
+		<li>Updated French translation - thanks thanks Frank-Berry &amp; philippe317!</li>
 		<li>Improve rendering of links in the web UI menus (comments, file download, etc.)</li>
+		<li>Sort tracks in "title" sort order by artist and album, too, if they're part of the result set.</li>
+		<li>Add option to check for updates every hour.</li>
+		<li>Optionally don't remove online duplicates from library views.</li>
 		<li><a href="https://github.com/Logitech/slimserver/pull/846">#846</a> - Improve display of multiline lyrics and comments in the web UI (thanks mw9!)</li>
 		<li>Move persist.db out of the cache folder - it's music data which can't be restored from the music files.</li>
 		<li>Log warning if the server's time seems to be off (only if MySqueezebox integration is enabled).</li>
+		<li>Re-implement Sounds & Effects plugin to not depend on MySqueezebox for the navigation and content selection.</li>
+		<li>Report actual replay gain value for the currently playing track in "status" query.</li>
+		<li>Add "Q" tag to songinfo, status queries etc. to return lossless flag for tracks (thanks AF-1!).</li>
 		<li><a href="https://github.com/Logitech/slimserver/pull/862">#862</a> - Make lyrics on Default skin songinfo page collapsible (thanks AF-1!)</li>
 		<li><a href="https://github.com/Logitech/slimserver/pull/868">#868</a> - Populate the release year ('year') attribute for remote tracks in the player queue (thanks SamInPgh!)</li>
+		<li><a href="https://github.com/Logitech/slimserver/pull/956">#956</a> - Add raw AAC (ADTS) file support (thanks philippe44!)</li>
+		<li><a href="https://github.com/Logitech/slimserver/pull/964">#964</a>/<a href="https://github.com/Logitech/slimserver/pull/985">#985</a> - Handle case where user moves/adds/removes tracks in a playlist while the next track is already fully streamed (thanks philippe44!)</li>
+		<li><a href="https://github.com/Logitech/slimserver/pull/986">#986</a> - Add a 'V' query that will return the maximum seek point in seconds within the current track duration for a 'live' radio stream (thanks expectingtofly & philippe44!)</li>
+		<li>Fix Napster playback on community firmware players</li>
 	</ul>
 	<br />
 
 	<li>Platform Support:</li>
 	<ul>
 		<li>Tweak Apple OS Architecture discovery: use the "arm64" string rather than the CPU's name (eg. "Apple M1")</li>
+		<li>Add Perl 5.38 support for Linux x86_64.</li>
+		<li>Add <b>experimental</b> support for Windows 64-bit - requires installation of <a href="https://strawberryperl.com/releases.html">Strawberry Perl 5.32</a>!</li>
+		<li>Update Windows installer to use latest InnoSetup 6 - dropping support for Windows XP, 2003 Server, and Windows Home Server.</li>
 	</ul>
 	<br />
 
@@ -34,13 +185,25 @@
 		<li><a href="https://github.com/Logitech/slimserver/issues/622">#622</a> - __requestRE should only match words provided to Slim::Control::Request::subscribe. (thanks earlchew!)</li>
 		<li><a href="https://github.com/Logitech/slimserver/issues/799">#799</a> - Update IO::String to latest, fixing some odd Perl version check.</li>
 		<li><a href="https://github.com/Logitech/slimserver/issues/829">#829</a> - Don't override a content type set by a page handler.</li>
-		<li>Fix browsing albums from Favorites menu.</li>
-		<li></li>
+		<li><a href="https://github.com/Logitech/slimserver/issues/905">#905</a> - Browsing in to playlists is extremely slow.</li>
+		<li><a href="https://github.com/Logitech/slimserver/issues/911">#911</a> - Don't shut down the server on "restartserver" when we actually can't restart it.</li>
+		<li><a href="https://github.com/Logitech/slimserver/issues/939">#939</a> - Player can't be switched from MySqueezebox.com to LMS</li>
+		<li><a href="https://github.com/Logitech/slimserver/issues/962">#962</a> - Fix album_contributor updates in New &amp; Changed scan (thanks darrell!)</li>
+		<li><a href="https://github.com/Logitech/slimserver/issues/979">#979</a> - New and changed contributor scanning improvements (thanks darrell!)</li>
+		<li><a href="https://forums.slimdevices.com/forum/user-forums/logitech-media-server/1648813">Respect a contributor's Musicbrainz ID to separate artists of the same name.</a></li>
+		<li><a href="https://github.com/Logitech/slimserver/pull/969">#969</a> - Add utf-8 guess decoding on Ogg metadata - thanks philippe44!</li>
+		<li>Try harder to avoid duplicate (but empty) album entries on singles.</li>
+		<li>Clear the Various Artists ID when a scan has finished.</li>
+		<li>Don't remove online libraries from library views unless there really is a local copy of the same album.</li>
+		<li>Fix Deezer SmartRadio track duration calculation.</li>
+		<li>Allow pausing Deezer Flow.</li>
+		<li>Fix resizing with a defined background color.</li>
 	</ul>
 	<br />
 
 	<li>Other:</li>
 	<ul>
+		<li>Simplify plugin and server update repository handling.</li>
 	</ul>
 	<br />
 </ul>
@@ -48,20 +211,9 @@
 
 <h2><a name="v8.3.2" id="v8.3.2"></a>Version 8.3.2</h2>
 <ul>
-	<li>New Features:</li>
-	<ul>
-		<li></li>
-	</ul>
-	<br />
-
-	<li>Server Changes:</li>
-	<ul>
-		<li></li>
-	</ul>
-	<br />
-
 	<li>Platform Support:</li>
 	<ul>
+		<li><a href="https://github.com/Logitech/slimserver/issues/891">#891</a> - Add Perl 5.36 support for Linux aarch64, armv7.</li>
 		<li></li>
 	</ul>
 	<br />
@@ -69,12 +221,10 @@
 	<li>Bug Fixes:</li>
 	<ul>
 		<li><a href="https://github.com/Logitech/slimserver/pull/874">#874</a> - Fix shuffling when starting off with an empty playlist (thanks robho!)</li>
+		<li><a href="https://github.com/Logitech/slimserver/pull/918">#918</a> - Fix browsing down to album favorites etc.</li>
+		<li>Add CPAN/auto/5.14 to lib search path for Windows builds to include Font::FreeType.</li>
 		<li>Fix another absolute path to a stylesheet in the Default skin.</li>
-	</ul>
-	<br />
-
-	<li>Other:</li>
-	<ul>
+		<li>Fix an issue where registering a pre-cache resolution would cause a subsequent LMS start to fail.</li>
 	</ul>
 	<br />
 </ul>

@@ -3,6 +3,7 @@ package Slim::Utils::Update;
 use strict;
 use Time::HiRes;
 use File::Spec::Functions qw(splitpath catdir);
+use JSON::XS::VersionOneAndTwo;
 
 use Slim::Utils::Log;
 use Slim::Utils::OSDetect;
@@ -11,9 +12,7 @@ use Slim::Utils::Strings qw(string);
 use Slim::Utils::Timers;
 use Slim::Utils::Unicode;
 
-if (main::NOMYSB) {
-	require Slim::Networking::Repositories;
-}
+use constant REPOSITORY_URL => 'https://lms-community.github.io/lms-server-repository/servers.json';
 
 my $prefs = preferences('server');
 
@@ -77,31 +76,13 @@ sub checkVersion {
 
 	main::INFOLOG && $log->info("Checking version now.");
 
-	my $url = main::NOMYSB ? (Slim::Networking::Repositories->getUrlForRepository('servers') . "$::VERSION/servers.xml") : (Slim::Networking::SqueezeNetwork->url('') . '/update/');
-
-	$url .= sprintf(
-		"?version=%s&revision=%s&lang=%s&geturl=%s&os=%s&uuid=%s&pcount=%d",
-		$::VERSION,
-		$::REVISION,
-		Slim::Utils::Strings::getLanguage(),
-		$os->canAutoUpdate() && $prefs->get('autoDownloadUpdate') ? '1' : '0',
-		$os->canAutoUpdate() ? $os->installerOS() : '',
-		$prefs->get('server_uuid'),
-		Slim::Player::Client::clientCount(),
-	);
-
-	main::DEBUGLOG && $log->debug("Using URL: $url");
-
-	my $params = {
-		cb => $cb
-	};
-
-	if (main::NOMYSB) {
-		Slim::Networking::Repositories->get($url, \&checkVersionCB, \&checkVersionError, $params);
-	}
-	else {
-		Slim::Networking::SqueezeNetwork->new(\&checkVersionCB, \&checkVersionError, $params)->get($url);
-	}
+	Slim::Networking::SimpleAsyncHTTP->new(
+		\&checkVersionCB,
+		\&checkVersionError,
+		{
+			cb => $cb
+		}
+	)->get(REPOSITORY_URL);
 
 	$prefs->set('checkVersionLastTime', Time::HiRes::time());
 	Slim::Utils::Timers::setTimer(0, Time::HiRes::time() + $prefs->get('checkVersionInterval'), \&checkVersion);
@@ -119,34 +100,24 @@ sub checkVersionCB {
 
 		my $content = Slim::Utils::Unicode::utf8decode( $http->content() );
 
-		# Update checker logic is hosted on mysb.com. Once this is gone, we'll have to deal with it on our own.
-		if (main::NOMYSB) {
-			require XML::Simple;
-			my $versions = XML::Simple::XMLin($content);
+		my $versions = from_json($content);
 
-			my $osID = $os->installerOS() || 'default';
+		my $osID = $os->installerOS() || 'default';
+		$versions = $versions->{$::VERSION} || $versions->{latest};
 
-			main::DEBUGLOG && $log->is_debug && $log->debug("Got list of installers:\n" . Data::Dump::dump($versions));
+		main::DEBUGLOG && $log->is_debug && $log->debug("Got list of installers:\n" . Data::Dump::dump($versions));
 
-			if ( my $update = $versions->{ $osID } ) {
-				if ( $update->{version} && $update->{revision} ) {
-					if ( Slim::Utils::Versions->compareVersions($update->{version}, $::VERSION) > 0 || $update->{revision} > $::REVISION ) {
-						if ( $osID ne 'default' && $prefs->get('autoDownloadUpdate') ) {
-							$version = $update->{url};
-
-							# prepend URL with our download host if we didn't get an absolute URL
-							$version = Slim::Networking::Repositories->getUrlForRepository('servers') . $version unless $version =~ /^http/;
-						}
-						else {
-							$version = Slim::Utils::Strings::string('SERVER_UPDATE_AVAILABLE', $update->{version}, $update->{url});
-						}
+		if ( my $update = $versions->{ $osID } ) {
+			if ( $update->{version} && $update->{revision} ) {
+				if ( Slim::Utils::Versions->compareVersions($update->{version}, $::VERSION) > 0 || $update->{revision} > $::REVISION ) {
+					if ( $osID ne 'default' && $prefs->get('autoDownloadUpdate') ) {
+						$version = $update->{url};
+					}
+					else {
+						$version = Slim::Utils::Strings::string('SERVER_UPDATE_AVAILABLE', $update->{version}, $update->{url});
 					}
 				}
 			}
-		}
-		else {
-			chomp($content);
-			$version = $content;
 		}
 
 		$version ||= 0;
@@ -164,7 +135,7 @@ sub checkVersionCB {
 		}
 
 		# if we got an update with download URL, display it in the web UI et al.
-		elsif ($version && $version =~ /a href="downloads.slimdevices/i) {
+		elsif ($version && $version =~ /a href=.*\bdownloads\./i) {
 			$::newVersion = $version;
 		}
 	}

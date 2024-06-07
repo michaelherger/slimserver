@@ -12,11 +12,7 @@ Slim::Utils::Firmware
 
 =head1 SYNOPSIS
 
-This class downloads firmware during startup if it was
-not included with the distribution.  It uses synchronous
-download via LWP so that all firmware will be downloaded
-before any players connect.  If this initial download fails
-it will switch to async mode and try to download missing
+This class downloads firmware in async mode and try to download missing
 firmware every 10 minutes in the background.
 
 All downloaded firmware is verified using an SHA1 checksum
@@ -33,7 +29,6 @@ use File::Basename;
 use File::Slurp qw(read_file);
 use File::Spec::Functions qw(:ALL);
 
-use Slim::Networking::Repositories;
 use Slim::Networking::SimpleAsyncHTTP;
 use Slim::Utils::Log;
 use Slim::Utils::Misc;
@@ -49,13 +44,15 @@ use constant MAX_RETRY_TIME     => 86400;
 my $dir;
 my $updatesDir;
 
-# Download location
-sub BASE {
-	return Slim::Networking::Repositories->getUrlForRepository('firmware');
-}
+# Download location and check interval - this isn't a constant to allow 3rd party plugins to re-use the mechanism (eg. for the community firmware)
+sub BASE { 'http://downloads.lms-community.org/update/firmware/' }
+sub CHECK_INTERVAL { MAX_RETRY_TIME }
 
 # Check interval when firmware can't be downloaded
 my $CHECK_TIME = INITIAL_RETRY_TIME;
+
+# folder to look for updates
+my $BASE_FOLDER = $::VERSION;
 
 # Available firmware files and versions/revisions
 my $firmwares = {};
@@ -156,7 +153,7 @@ sub init_version_done {
 	my ($ver, $rev) = $version =~ m/^([^ ]+)\sr(\d+)/;
 
 	# on some systems we don't download firmware files
-	# we'll let the player download them from squeezenetwork directly
+	# we'll let the player download them from the origin host directly
 	if ( Slim::Utils::OSDetect->getOS()->directFirmwareDownload() && BASE() !~ /^https:/ ) {
 
 		$firmwares->{$model} = {
@@ -192,11 +189,10 @@ sub init_version_done {
 
 	}
 
-	# Check again for an updated $model.version in 12 hours
-	main::DEBUGLOG && $log->debug("Scheduling next $model.version check in " . ($prefs->get('checkVersionInterval') / 3600) . " hours");
+	main::DEBUGLOG && $log->debug("Scheduling next $model.version check in " . (CHECK_INTERVAL() / 3600) . " hours");
 	Slim::Utils::Timers::setTimer(
 		undef,
-		time() + $prefs->get('checkVersionInterval'),
+		time() + CHECK_INTERVAL(),
 		sub {
 			init_firmware_download($model);
 		},
@@ -299,9 +295,9 @@ sub url {
 		return unless ($firmwares->{$model}->{file});	# Will be available immediately if custom f/w
 	}
 
-	# on some systems return the direct link from SqueezeNetwork
+	# on some systems return the direct link from the origin server
 	if ( Slim::Utils::OSDetect->getOS()->directFirmwareDownload() && BASE() !~ /^https:/ ) {
-		return BASE() . $::VERSION . '/' . $model
+		return BASE() . $BASE_FOLDER . '/' . $model
 			. '_' . $firmwares->{$model}->{version}
 			. '_r' . $firmwares->{$model}->{revision}
 			. '.bin';
@@ -350,73 +346,6 @@ sub need_upgrade {
 	return;
 }
 
-=head2 download( $url, $file )
-
-Performs a synchronous file download at startup for all firmware files.
-If these fail, will set a timer for async downloads in the background in
-10 minutes or so.
-
-$file must be an absolute path.
-
-=cut
-
-sub download {
-	my ( $url, $file ) = @_;
-
-	require LWP::UserAgent;
-	my $ua = LWP::UserAgent->new(
-		env_proxy => 1,
-	);
-
-	my $error;
-
-	msg("Downloading firmware from $url, please wait...\n");
-
-	my $res = $ua->mirror( $url, $file );
-	if ( $res->is_success ) {
-
-		# Download the SHA1sum file to verify our download
-		my $res2 = $ua->mirror( "$url.sha", "$file.sha" );
-		if ( $res2->is_success ) {
-
-			my $sumfile = read_file( "$file.sha" ) or fatal("Unable to read $file.sha to verify firmware\n");
-			my ($sum) = $sumfile =~ m/([a-f0-9]{40})/;
-			unlink "$file.sha";
-
-			open my $fh, '<', $file or fatal("Unable to read $file to verify firmware\n");
-			binmode $fh;
-
-			my $sha1 = Digest::SHA1->new;
-			$sha1->addfile($fh);
-			close $fh;
-
-			if ( $sha1->hexdigest eq $sum ) {
-				logWarning("Successfully downloaded and verified $file.");
-				return 1;
-			}
-
-			unlink $file;
-
-			logError("Validation of firmware $file failed, SHA1 checksum did not match");
-		}
-		else {
-			unlink $file;
-			$error = $res2->status_line;
-		}
-	}
-	else {
-		$error = $res->status_line;
-	}
-
-	if ( $res->code == 304 ) {
-		main::INFOLOG && $log->info("File $file not modified");
-		return 0;
-	}
-
-	logError("Unable to download firmware from $url: $error");
-
-	return 0;
-}
 
 =head2 downloadAsync($file)
 
@@ -446,7 +375,7 @@ sub downloadAsync {
 	$filesDownloading{$file} ||= [];
 
 	# URL to download
-	my $url = BASE(basename($file)) . $::VERSION . '/' . basename($file);
+	my $url = BASE(basename($file)) . $BASE_FOLDER . '/' . basename($file);
 
 	# Save to a tmp file so we can check SHA
 	my $http = Slim::Networking::SimpleAsyncHTTP->new(
@@ -559,19 +488,40 @@ sub downloadAsyncError {
 	my $cb   = $http->params('cb');
 	my $pt   = $http->params('pt');
 
+	my $checkArgs = {
+		file => $file,
+		cb   => $cb,
+		pt   => $pt,
+		retry=> 1,
+	};
+
+	Slim::Utils::Timers::killTimers( $file, \&downloadAsync );
+
 	# Clean up
 	unlink "$file.tmp" if -e "$file.tmp";
 
 	# If error was "Unable to open $file for writing", downloading will never succeed so just give up
 	# Same for "Unable to write" if we run out of disk space, for example
 	if ( $error =~ /Unable to (?:open|write)/ ) {
-		logWarning(sprintf("Firmware: Fatal error downloading %s (%s), giving up",
+		$log->error(sprintf("Fatal error downloading %s (%s), giving up",
 			$http->url,
 			$error,
 		));
 	}
+	# we can expect a failure if we're looking for the server's version number - fall back to "latest"
+	elsif ( $error =~ /^40[34] / && $BASE_FOLDER eq $::VERSION ) {
+		$log->info(sprintf("Firmware %s not found (%s), will try folder 'latest' instead of '$::VERSION'.",
+			$http->url,
+			$error,
+		));
+
+		$BASE_FOLDER = 'latest';
+
+		downloadAsync( $file, $checkArgs );
+		return;
+	}
 	else {
-		logWarning(sprintf("Firmware: Failed to download %s (%s), will try again in %d minutes.",
+		$log->warn(sprintf("Failed to download %s (%s), will try again in %d minutes.",
 			$http->url,
 			$error,
 			int( $CHECK_TIME / 60 ),
@@ -581,15 +531,7 @@ sub downloadAsyncError {
 			$log->error( sprintf("Please check your proxy configuration (%s)", $proxy) );
 		}
 
-		Slim::Utils::Timers::killTimers( $file, \&downloadAsync );
-		Slim::Utils::Timers::setTimer( $file, time() + $CHECK_TIME, \&downloadAsync,
-			{
-				file => $file,
-				cb   => $cb,
-				pt   => $pt,
-				retry=> 1,
-			},
-		 );
+		Slim::Utils::Timers::setTimer( $file, time() + $CHECK_TIME, \&downloadAsync, $checkArgs );
 
 		# Increase retry time in case of multiple failures, but don't exceed MAX_RETRY_TIME
 		$CHECK_TIME *= 2;

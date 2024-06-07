@@ -1138,10 +1138,6 @@ sub generateHTTPResponse {
 			# if we match one of the page functions as defined above,
 			# execute that, and hand it a callback to send the data.
 
-			$params->{'imageproxy'} = Slim::Networking::SqueezeNetwork->url(
-				"/public/imageproxy"
-			) if !main::NOMYSB;
-
 			main::PERFMON && (my $startTime = AnyEvent->time);
 
 			if (ref($classOrCode) eq 'CODE') {
@@ -1216,7 +1212,7 @@ sub generateHTTPResponse {
 			my $async = 0;
 			my $sentResponse = 0;
 
-			($body, $mtime, $inode, $size, $contentType) = Slim::Web::Graphics::artworkRequest(
+			Slim::Web::Graphics::artworkRequest(
 				$client,
 				$path,
 				$params,
