@@ -34,6 +34,7 @@ use constant AUDIOBOOKS_MENUS => [{
 }];
 
 my $prefs = preferences('plugin.extendedbrowsemodes');
+my $serverPrefs = preferences('server');
 
 sub name {
 	return Slim::Web::HTTP::CSRF->protectName('PLUGIN_EXTENDED_BROWSEMODES');
@@ -50,16 +51,51 @@ sub page {
 sub handler {
 	my ($class, $client, $params) = @_;
 
-	my $serverPrefs = $class->getServerPrefs($client);
+	# if we're called from the client prefs, we've already saved the client prefs
+	if ($params->{'saveSettings'} && !$class->needsClient) {
+		# custom role handling
+		my $currentRoles = $serverPrefs->get('userDefinedRoles');
+		my $customTags = {};
+		my $id = 21;
+		my $changed = 0;
 
-	if ($params->{'saveSettings'}) {
+		foreach my $pref (keys %{$params}) {
+			if ($pref =~ /(.*)_tag$/) {
+				my $key = $1;
+				my $tag = uc($params->{$pref});
+
+				if ( $tag ) {
+					$customTags->{$tag} = {
+						name => $params->{$key . '_name'} || $tag,
+						id => $id,
+					};
+					if ( !$currentRoles->{$tag} || $currentRoles->{$tag}->{name} ne $customTags->{$tag}->{name} ) {
+						Slim::Utils::Strings::storeExtraStrings([{
+							strings => { EN => $customTags->{$tag}->{name}},
+							token   => $tag,
+						}]) if !Slim::Utils::Strings::stringExists($tag);
+						$changed = 1;
+					}
+					$id++;
+				}
+			}
+		}
+
+		foreach my $old (keys %{$currentRoles}) {
+			$changed = 1 if !$customTags->{$old};
+		}
+
+		if ( $changed ) {
+			$serverPrefs->set('userDefinedRoles', $customTags);
+		}
+
+		# browse menu handling
 		my $menus = $prefs->get('additionalMenuItems');
 
 		for (my $i = 1; defined $params->{"id$i"}; $i++) {
 
 			if ( $params->{"delete$i"} ) {
 				Slim::Menu::BrowseLibrary->deregisterNode($params->{"id$i"});
-				my $serverPrefs = preferences('server');
 
 				# remove prefs related to this menu item
 				foreach my $clientPref ( $serverPrefs->allClients ) {
@@ -72,12 +108,6 @@ sub handler {
 			}
 
 			my ($menu) = $params->{"id$i"} eq '_new_' ? {} : grep { $_->{id} eq $params->{"id$i"} } @$menus;
-
-			if ( $class->needsClient && $serverPrefs ) {
-				$serverPrefs->set('disabled_' . $params->{"id$i"}, $params->{"enabled$i"} ? 0 : 1);
-			}
-
-			delete $menu->{enabled} if $serverPrefs;
 
 			next unless $params->{"name$i"} && $params->{"feed$i"} && ($params->{"roleid$i"} || $params->{"releasetype$i"} || $params->{"genreid$i"} || $params->{"libraryid$i"});
 
@@ -115,9 +145,6 @@ sub handler {
 					$menu->{id}     = 'myMusicArtists' . $menu->{id} if $menu->{id} !~ /^myMusic/;
 					$menu->{weight} = "15.$ts" * 1;
 				}
-
-				# need to migrate the enabled flag
-				my $serverPrefs = preferences('server');
 
 				# remove prefs related to this menu item
 				foreach my $clientPref ( $serverPrefs->allClients ) {
@@ -179,19 +206,16 @@ sub handler {
 		$prefs->set('additionalMenuItems', $menus);
 	}
 
-	$params->{genre_list} = [ sort map { $_->name } Slim::Schema->search('Genre')->all ];
-	$params->{roles} = [ Slim::Schema::Contributor->contributorRoles ];
-	$params->{release_types} = Slim::Schema::Album->releaseTypes;
-
 	$class->SUPER::handler($client, $params);
 }
-
-sub getServerPrefs {}
-
 
 sub beforeRender {
 	my ($class, $params, $client) = @_;
 
+	$params->{genre_list} = [ sort map { $_->name } Slim::Schema->search('Genre')->all ];
+	$params->{roles} = [ Slim::Schema::Contributor->contributorRoles ];
+	$params->{release_types} = Slim::Schema::Album->releaseTypes;
+	$params->{customTags} = $serverPrefs->get('userDefinedRoles');
 	$params->{libraries} = {};
 
 	if ($params->{'needsAudioBookUpdate'}) {
@@ -209,19 +233,19 @@ sub beforeRender {
 		$prefs->set('additionalMenuItems', $menus);
 	}
 
-	my $serverPrefs = $class->getServerPrefs($client);
+	my $clientPrefs = $serverPrefs->client($client) if $class->needsClient;
 
 	my %ids;
 	$params->{menu_items} = [ map {
 		$ids{$_->{id}}++;
-		$_->{enabled} = $serverPrefs ? ($serverPrefs->get('disabled_' . $_->{id}) ? 0 : 1) : 1;
+		$_->{enabled} = $clientPrefs ? ($clientPrefs->get('disabled_' . $_->{id}) ? 0 : 1) : 1;
 		$_;
 	} @{Storable::dclone($prefs->get('additionalMenuItems'))}, { id => '_new_' } ];
 
 	unshift @{$params->{menu_items}}, map { {
 		name => $_->{name},
 		id   => $_->{id},
-		enabled => $serverPrefs ? ($serverPrefs->get('disabled_' . $_->{id}) ? 0 : 1) : 1,
+		enabled => $clientPrefs ? ($clientPrefs->get('disabled_' . $_->{id}) ? 0 : 1) : 1,
 	} } sort {
 		$a->{weight} <=> $b->{weight}
 	# don't allow to disable some select browse menus

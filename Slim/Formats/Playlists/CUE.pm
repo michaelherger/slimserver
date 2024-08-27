@@ -544,7 +544,7 @@ sub parse {
 		}
 
 		# Merge in file level attributes
-		for my $attribute (keys %$cuesheet) {
+		for my $attribute (sort {$a cmp $b} keys %$cuesheet) {
 
 			if (!exists $track->{$attribute} && defined $cuesheet->{$attribute}) {
 

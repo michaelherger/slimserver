@@ -1996,10 +1996,10 @@ sub playlistcontrolCommand {
 			$criteria->{'album'} = [ 'IN' => @albumIds ];
 		}
 
-		if ( my $grouping = $request->getParam('grouping') ) {
-			$criteria->{'grouping'} = [ '=' => $grouping ];
-		} elsif ( defined $request->getParam('grouping') ) {
-			$criteria->{'grouping'} = [ '=' => undef ]
+		if ( my $performance = $request->getParam('performance') ) {
+			$criteria->{'performance'} = [ '=' => $performance ];
+		} elsif ( defined $request->getParam('performance') ) {
+			$criteria->{'performance'} = [ '=' => undef ]
 		}
 
 		@tracks = Slim::Schema->search('Track', $criteria)->all;
@@ -2068,6 +2068,9 @@ sub playlistcontrolCommand {
 		if (defined(my $year = $request->getParam('year'))) {
 			$what->{'year.id'} = $year;
 			$info[0] = $year;
+			if ( $request->getParam('only_album_years') ) {
+				$what->{'album.year'} = $year;
+			}
 		}
 
 		if (defined(my $releaseType = $request->getParam('release_type'))) {
@@ -2670,7 +2673,6 @@ sub rescanCommand {
 	}
 
 	# if scan is running or we're told to queue up requests, return quickly
-	# FIXME - this seems to sometimes lead to infinite loops! (see eg. Synology change)
 	if ( Slim::Music::Import->stillScanning() || Slim::Music::Import->doQueueScanTasks() || Slim::Music::Import->hasScanTask() ) {
 		Slim::Music::Import->queueScanTask($request);
 
@@ -3313,14 +3315,14 @@ sub _playlistXtracksCommand_parseSearchTerms {
 
 		# Do some mapping from the player browse mode. This is
 		# already done in the web ui.
-		elsif ($key =~ /^(playlist|age|album|contributor|genre|year)$/) {
+		elsif ($key =~ /^(playlist|age|changed|album|contributor|genre|year)$/) {
 			$key = "$1.id";
 		}
 
 		# New Music browsing is working on the
 		# tracks.timestamp column, but shows years.
 		# Use the album-id in the track instead of joining with the album table.
-		if ($key eq 'album.id' || $key eq 'age.id') {
+		if ($key eq 'album.id' || $key eq 'age.id' || $key eq 'changed.id') {
 			$key = 'track.album';
 		}
 
@@ -3372,7 +3374,7 @@ sub _playlistXtracksCommand_parseSearchTerms {
 					$find{$key} = { 'like' => Slim::Utils::Text::searchStringSplit($value) };
 				}
 
-			} elsif ( $key eq 'me.grouping' ) {
+			} elsif ( $key eq 'me.performance' ) {
 
 				$find{$key} = $value || undef;
 
@@ -3394,6 +3396,10 @@ sub _playlistXtracksCommand_parseSearchTerms {
 			}
 		} elsif ($value eq 'album') {
 			$sort = $albumSort;
+		} elsif ( $value =~ s/^sql=// ) {
+			# Raw SQL search query
+			$sort = $value;
+			$sort =~ s/;//g; # strip out any attempt at combining SQL statements
 		} elsif ($value !~ /^(artistalbum|albumtrack|new|random)$/) {
 			# Only use sort value if it is **not** an album sort.
 			$sort = $value;
@@ -3444,16 +3450,10 @@ sub _playlistXtracksCommand_parseSearchTerms {
 			delete $find{'playlist.id'};
 		}
 
-		# If we have an album and a year - remove the year, since
-		# there is no explict relationship between Track and Year.
-		if ($find{'me.album'} && $find{'year.id'}) {
+		# restrict by tracks.year to bring playlist add into line with album/tracks listings filtered by year.
+		if ($find{'year.id'}) {
 
-			delete $find{'year.id'};
-			delete $joinMap{'year'};
-
-		} elsif ($find{'year.id'}) {
-
-			$find{'album.year'} = delete $find{'year.id'};
+			$find{'me.year'} = delete $find{'year.id'};
 			delete $joinMap{'year'};
 		}
 
@@ -3465,6 +3465,11 @@ sub _playlistXtracksCommand_parseSearchTerms {
 				# Bug: 3629 - if we're sorting by album - be sure to include it in the join table.
 				$joinMap{'album'} = 'album';
 			}
+		}
+
+		if ($sort && $sort =~ s/tracks_persistent/persistent/g) {
+			$sort =~ s/\btracks\./me./g;
+			$joinMap{'persistent'} = 'persistent';
 		}
 
 		if ( $library_id ||= Slim::Music::VirtualLibraries->getLibraryIdForClient($client) ) {
@@ -3575,7 +3580,7 @@ sub _playlistXtracksCommand_parseDbItem {
 				if ( $class eq 'LibraryTracks' && $key eq 'library' && $value eq '-1' ) {
 					$classes{$class} = -1;
 				}
-				elsif ( $class eq 'Track' && $key eq 'grouping' ) {
+				elsif ( $class eq 'Track' && $key eq 'performance' ) {
 					$classes{$class} = $value;
 				}
 				# album favorites need to be filtered by contributor, too
@@ -3646,7 +3651,7 @@ sub _playlistXtracksCommand_parseDbItem {
 
 	if ( defined $classes{Track} ) {
 		$terms .= "&" if ( $terms ne "" );
-		$terms .= sprintf( 'track.grouping=%s', URI::Escape::uri_escape_utf8($classes{Track}) );
+		$terms .= sprintf( 'track.performance=%s', URI::Escape::uri_escape_utf8($classes{Track}) );
 	}
 
 	if ( $terms ne "" ) {

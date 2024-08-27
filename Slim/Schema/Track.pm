@@ -29,7 +29,8 @@ our @allColumns = (qw(
 	timestamp added_time updated_time filesize disc remote audio audio_size audio_offset year secs
 	cover cover_cached vbr_scale bitrate samplerate samplesize channels block_alignment endian
 	bpm tagversion drm musicmagic_mixable dlna_profile
-	musicbrainz_id lossless lyrics replay_gain replay_peak extid virtual work subtitle grouping
+	musicbrainz_id lossless lyrics replay_gain replay_peak extid virtual work subtitle grouping performance
+	discsubtitle
 ));
 
 {
@@ -629,6 +630,26 @@ sub retrievePersistent {
 	}
 
 	return undef;
+}
+
+sub yearTracksNotOnYearAlbums {
+	my ($year, $lib) = @_;
+
+	my $sql = "SELECT GROUP_CONCAT(DISTINCT tracks.id) FROM tracks JOIN albums ON albums.id = tracks.album ";
+	$sql .= "JOIN library_track ON library_track.track = tracks.id " if $lib;
+	$sql .= "WHERE albums.year <> :year AND tracks.year = :year ";
+	$sql .= "AND library_track.library = :lib" if $lib;
+
+	my $sth = Slim::Schema->dbh->prepare_cached($sql);
+
+	$sth->bind_param(":year", $year);
+	$sth->bind_param(":lib", $lib) if $lib;
+
+	$sth->execute();
+
+	my ($tracks) = $sth->fetchrow_array;
+	$sth->finish;
+	return $tracks
 }
 
 # The methods below are stored in the persistent table

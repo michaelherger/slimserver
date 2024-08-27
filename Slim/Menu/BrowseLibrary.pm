@@ -729,7 +729,7 @@ sub setMode {
 	$client->modeParam( handledTransition => 1 );
 }
 
-our @topLevelArgs = qw(track_id artist_id genre_id album_id playlist_id year folder_id role_id library_id remote_library release_type work_id composer_id from_search subtitle grouping);
+our @topLevelArgs = qw(track_id artist_id genre_id album_id playlist_id year only_album_years folder_id role_id library_id remote_library release_type work_id composer_id from_search subtitle grouping performance);
 
 sub _topLevel {
 	my ($client, $callback, $args, $pt) = @_;
@@ -1347,7 +1347,7 @@ sub _years {
 		push @searchTags, 'library_id:' . $library_id if $library_id;
 	}
 
-	_generic($client, $callback, $args, 'years', [ 'hasAlbums:1', @searchTags ],
+	_generic($client, $callback, $args, 'years', [ "hasAlbums:". $prefs->get('onlyAlbumYears'), @searchTags ],
 		sub {
 			my $results = shift;
 			my $items = $results->{'years_loop'};
@@ -1441,6 +1441,7 @@ sub _albumsOrReleases {
 }
 
 sub _albums {
+
 	my ($client, $callback, $args, $pt) = @_;
 	my @searchTags = $pt->{'searchTags'} ? @{$pt->{'searchTags'}} : ();
 	my $sort       = $pt->{'sort'};
@@ -1451,7 +1452,7 @@ sub _albums {
 	my $library_id = $args->{'library_id'} || $pt->{'library_id'};
 	my $remote_library = $args->{'remote_library'} ||= $pt->{'remote_library'};
 
-	if (!$sort || $sort !~ /^sort:(?:random|new)$/) {
+	if (!$sort || $sort !~ /^sort:(?:random|new|changed)$/) {
 		$sort = $pt->{'orderBy'} || $args->{'orderBy'} || $sort;
 	}
 	$sort = 'sort:' . $sort if $sort && $sort !~ /^sort:/;
@@ -1484,7 +1485,7 @@ sub _albums {
 		if ($artistId && ($mapped = $mapArtistOrders{$1})) {
 			$sort = 'sort:' . $mapped;
 		}
-		$sort = undef unless grep {$_ eq $1} ('new', 'random', values %orderByList);
+		$sort = undef unless grep {$_ eq $1} ('new', 'changed', 'random', values %orderByList);
 	}
 
 	# Under certain circumstances (random albums in web UI or with remote streams) we are only
@@ -1514,7 +1515,7 @@ sub _albums {
 				$_->{'name'} = $_->{'composer'} ? $_->{'composer'} . cstring($client, 'COLON') . ' ' : '';
 				if ( $_->{'work_id'} ) {
 					$_->{'name'} .= $_->{'work_name'} . ' (';
-					$_->{'name'} .= "$_->{'grouping'} " if $_->{'grouping'};
+					$_->{'name'} .= "$_->{'performance'} " if $_->{'performance'};
 					$_->{'name'} .= cstring($client,'FROM') . ' ';
 				}
 				$_->{'name'}          .= $_->{'album'};
@@ -1524,7 +1525,7 @@ sub _albums {
 				$_->{'type'}          = 'playlist';
 				$_->{'playlist'}      = \&_tracks;
 				$_->{'url'}           = \&_tracks;
-				$_->{'passthrough'}   = [ { searchTags => [@searchTags, "album_id:" . $_->{'id'}, "grouping:" . $_->{'grouping'}], sort => 'sort:tracknum', remote_library => $remote_library } ];
+				$_->{'passthrough'}   = [ { searchTags => [@searchTags, "album_id:" . $_->{'id'}, "performance:" . $_->{'performance'}], sort => 'sort:tracknum', remote_library => $remote_library } ];
 
 				if ($_->{'artist_ids'}) {
 					$_->{'artists'} = $_->{'artist_ids'} =~ /,/ ? [ split /(?<!\s),(?!\s)/, $_->{'artists'} ] : [ $_->{'artists'} ];
@@ -1555,17 +1556,75 @@ sub _albums {
 			}
 
 			my $extra;
-			if ((scalar grep { $_ !~ /remote_library/ } @searchTags) && $sort !~ /:(?:new|random)/) {
-				my $params = _tagsToParams(\@searchTags);
 
-				if ($params->{artist_id}) {
-					$extra = [ grep { $_ } map {
-						$_->($params->{artist_id});
-					} @{getExtraItems('artist')} ];
+			# Have we got tracks for the year from other albums (ones with a different album year)?
+			my $yearTracks = 0;
+			if (  my $year = (grep(/^year:/, @searchTags))[0] ) {
+				my $onlyAlbumYears = $prefs->get('onlyAlbumYears');
+				if ( !$onlyAlbumYears && $year && !(grep(/^release_type:|^work_id:/, @searchTags)) ) {
+					$year =~ s/^year://;
+					$yearTracks = Slim::Schema::Track::yearTracksNotOnYearAlbums($year, $library_id);
+				}
+				#if not showing track years, ensure "All Songs" doesn't include tracks from albums which don't have the selected year
+				push @searchTags, "only_album_years:$onlyAlbumYears";
+			}
+
+			if ((scalar grep { $_ !~ /remote_library/ } @searchTags) && $sort !~ /:(?:new|changed|random)/) {
+
+				if ( $yearTracks ) {
+
+					my $params = _tagsToParams([ "track_id:$yearTracks" ]);
+
+					my %actions = $remote_library ? (
+						commonVariables	=> [album_id => 'id', performance => 'performance'],
+					) : (
+						allAvailableActionsDefined => 1,
+						info => {
+							command     => [],
+						},
+						items => {
+							command     => [BROWSELIBRARY, 'items'],
+							fixedParams => {
+								mode       => 'tracks',
+								%{&_tagsToParams([ "track_id:$yearTracks" ])},
+							},
+						},
+						play => {
+							command     => ['playlistcontrol'],
+							fixedParams => {cmd => 'load', %$params},
+						},
+						add => {
+							command     => ['playlistcontrol'],
+							fixedParams => {cmd => 'add', %$params},
+						},
+						insert => {
+							command     => ['playlistcontrol'],
+							fixedParams => {cmd => 'insert', %$params},
+						},
+						remove => {
+							command     => ['playlistcontrol'],
+							fixedParams => {cmd => 'delete', %$params},
+						},
+					);
+					$actions{'playall'} = $actions{'play'};
+					$actions{'addall'} = $actions{'add'};
+
+					push @$extra, {
+						name        => cstring($client, 'TRACKS_FROM_OTHER_ALBUMS'),
+						image       => 'html/images/albums.png',
+						type        => 'playlist',
+						playlist    => \&_tracks,
+						url         => \&_tracks,
+						passthrough => [{ searchTags => ["track_id:$yearTracks"], sort => 'sort:albumtrack', menuStyle => 'menuStyle:allSongs' }],
+						itemActions => \%actions,
+						skipIfSingleton => 0,
+					};
 				}
 
+				my $params = _tagsToParams(\@searchTags);
+
 				my %actions = $remote_library ? (
-					commonVariables	=> [album_id => 'id', grouping => 'grouping'],
+					commonVariables	=> [album_id => 'id', performance => 'performance'],
 				) : (
 					allAvailableActionsDefined => 1,
 					info => {
@@ -1575,7 +1634,7 @@ sub _albums {
 						command     => [BROWSELIBRARY, 'items'],
 						fixedParams => {
 							mode       => 'tracks',
-							%{&_tagsToParams(\@searchTags)},
+							%{&_tagsToParams([@searchTags, "performance:-1"])},
 						},
 					},
 					play => {
@@ -1598,13 +1657,19 @@ sub _albums {
 				$actions{'playall'} = $actions{'play'};
 				$actions{'addall'} = $actions{'add'};
 
+				if ($params->{artist_id}) {
+					push @$extra,  grep { $_ } map {
+						$_->($params->{artist_id});
+					} @{getExtraItems('artist')};
+				}
+
 				push @$extra, {
 					name        => cstring($client, 'ALL_SONGS'),
 					icon        => 'html/images/albums.png',
 					type        => 'playlist',
 					playlist    => \&_tracks,
 					url         => \&_tracks,
-					passthrough => [{ searchTags => \@searchTags, sort => 'sort:albumtrack', menuStyle => 'menuStyle:allSongs' }],
+					passthrough => [{ searchTags => [@searchTags, "performance:-1"], sort => 'sort:albumtrack', menuStyle => 'menuStyle:allSongs' }],
 					itemActions => \%actions,
 					skipIfSingleton => 1,
 				};
@@ -1641,7 +1706,7 @@ sub _albums {
 					remove => {command => [BROWSELIBRARY, 'playlist', 'delete'], fixedParams => \%params},
 				);
 
-				$extra = [ {
+				push @$extra, {
 					name        => cstring($client, 'ALL_SONGS'),
 					icon        => 'html/images/albums.png',
 					type        => 'playlist',
@@ -1650,15 +1715,15 @@ sub _albums {
 					passthrough => [{ search => 'sql=' . $sql, sort => 'sort:albumtrack', menuStyle => 'menuStyle:allSongs' }],
 					itemActions => \%actions,
 					skipIfSingleton => 1
-				} ];
+				};
 			}
 
 			my $params = _tagsToParams(\@searchTags);
 			my %actions = $remote_library ? (
-				commonVariables	=> [album_id => 'id', grouping => 'grouping'],
+				commonVariables	=> [album_id => 'id', performance => 'performance'],
 			) : (
 				allAvailableActionsDefined => 1,
-				commonVariables	=> [album_id => 'id', grouping => 'grouping'],
+				commonVariables	=> [album_id => 'id', performance => 'performance'],
 				info => {
 					command     => ['albuminfo', 'items'],
 					fixedParams => $params,
@@ -1693,8 +1758,8 @@ sub _albums {
 			my $result = {
 				items       => $items,
 				actions     => \%actions,
-				sorted      => (($sort && $sort =~ /^sort:(?:random|new)$/) ? 0 : 1),
-				orderByList => (defined($search) || ($sort && $sort =~ /^sort:(?:random|new)$/) ? undef : \%orderByList),
+				sorted      => (($sort && $sort =~ /^sort:(?:random|changed|new)$/) ? 0 : 1),
+				orderByList => (defined($search) || ($sort && $sort =~ /^sort:(?:random|changed|new)$/) ? undef : \%orderByList),
 			};
 
 			if ( $cacheKey && $args->{quantity} && $args->{quantity} > 1 ) {
@@ -1713,7 +1778,7 @@ sub _albums {
 			return $result, $extra;
 		},
 		# no need for an index bar in New Music mode
-		$tags, ($pt->{'wantIndex'} || $args->{'wantIndex'}) && !($sort && $sort =~ /^sort:(random|new)$/),
+		$tags, ($pt->{'wantIndex'} || $args->{'wantIndex'}) && !($sort && $sort =~ /^sort:(random|changed|new)$/),
 	);
 }
 
@@ -1747,10 +1812,12 @@ sub _tracks {
 	}
 
 	$tags .= 'k' if $pt->{'wantMetadata'};
-	my $titleFormat = Slim::Music::Info::standardTitleFormat($client);
-	$tags .= 'b' if $titleFormat =~ /\bWORK\b/;
-	$tags .= 'h' if $titleFormat =~ /\bGROUPING\b/;
-	$tags .= 'z' if $titleFormat =~ /\bSUBTITLE\b/;
+	my $titleFormatPlayer = Slim::Music::Info::standardTitleFormat($client);
+	my $titleFormatWeb = Slim::Music::Info::standardTitleFormat();
+	$tags .= 'b' if $titleFormatPlayer =~ /\bWORK\b/ || $titleFormatWeb =~ /\bWORK\b/;
+	$tags .= 'h' if $titleFormatPlayer =~ /\bGROUPING\b/ || $titleFormatWeb =~ /\bGROUPING\b/;
+	$tags .= 'z' if $titleFormatPlayer =~ /\bSUBTITLE\b/ || $titleFormatWeb =~ /\bSUBTITLE\b/;
+	$tags .= '1' if $titleFormatPlayer =~ /\bPERFORMANCE\b/ || $titleFormatWeb =~ /\bPERFORMANCE\b/;
 
 	my ($addAlbumToName2, $addArtistToName2);
 	if ($addAlbumToName2  = !(grep {/album_id:/} @searchTags)) {
@@ -1931,10 +1998,10 @@ sub _tracks {
 				$albumId =~ s/album_id:// if $albumId;
 				my ($workId) = grep {/work_id:/} @searchTags;
 				$workId =~ s/work_id:// if $workId;
-				my ($grouping) = grep {/grouping:/} @searchTags;
-				$grouping =~ s/grouping:// if $grouping;
+				my ($performance) = grep {/performance:/} @searchTags;
+				$performance =~ s/performance:// if $performance;
 				my $album = Slim::Schema->find( Album => $albumId );
-				my $feed  = Slim::Menu::AlbumInfo->menu( $client, $album->url, $album, undef, { library_id => $library_id, work_id => $workId, grouping => $grouping, track_count => scalar @$items} ) if $album;
+				my $feed  = Slim::Menu::AlbumInfo->menu( $client, $album->url, $album, undef, { library_id => $library_id, work_id => $workId, performance => $performance, track_count => $results->{'count'}} ) if $album;
 				$albumMetadata = $feed->{'items'} if $feed;
 
 				$image = 'music/' . $album->artwork . '/cover' if $album && $album->artwork;

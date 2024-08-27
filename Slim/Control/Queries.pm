@@ -287,7 +287,7 @@ sub albumsQuery {
 	my $ignoreNewAlbumsCache = $search || $compilation || $contributorID || $genreID || $trackID || $albumID || $year || Slim::Music::Import->stillScanning();
 
 	# FIXME: missing genrealbum, genreartistalbum
-	if ($request->paramNotOneOfIfDefined($sort, ['new', 'album', 'artflow', 'artistalbum', 'yearalbum', 'yearartistalbum', 'random' ])) {
+	if ($request->paramNotOneOfIfDefined($sort, ['new', 'changed', 'album', 'artflow', 'artistalbum', 'yearalbum', 'yearartistalbum', 'random' ])) {
 		$request->setStatusBadParams();
 		return;
 	}
@@ -301,7 +301,7 @@ sub albumsQuery {
 	my $order_by = "albums.titlesort $collate, albums.disc"; # XXX old code prepended 0 to titlesort, but not other titlesorts
 	my $limit;
 	my $page_key = "SUBSTR(albums.titlesort,1,1)";
-	my $newAlbumsCacheKey = 'newAlbumIds' . Slim::Music::Import->lastScanTime . ($libraryID || Slim::Music::VirtualLibraries->getLibraryIdForClient($client));
+	my $newAlbumsCacheKey = 'newAlbumIds' . Slim::Music::Import->lastScanTime . ($libraryID || Slim::Music::VirtualLibraries->getLibraryIdForClient($client)) . $sort;
 
 	# Normalize and add any search parameters
 	if ( defined $trackID ) {
@@ -397,14 +397,19 @@ sub albumsQuery {
 			$sql .= 'JOIN contributors ON contributors.id = albums.contributor ';
 		}
 
-		if ( $sort eq 'new' ) {
+		if ( $sort =~ /^(?:new|changed)$/ ) {
 			$sql .= 'JOIN tracks ON tracks.album = albums.id ';
 			$limit = $prefs->get('browseagelimit') || 100;
-			$order_by = "tracks.timestamp desc";
+			$order_by = "MAX(tracks.timestamp) DESC";
 
 			# Force quantity to not exceed max
 			if ( $quantity && $quantity > $limit ) {
 				$quantity = $limit;
+			}
+
+			if (main::STATISTICS && $sort eq 'new') {
+				$sql .= 'LEFT JOIN tracks_persistent ON tracks_persistent.urlmd5 = tracks.urlmd5 ';
+				$order_by = 'MIN(tracks_persistent.added) DESC';
 			}
 
 			# cache the most recent album IDs - need to query the tracks table, which is expensive
@@ -423,14 +428,20 @@ sub albumsQuery {
 						delete $cache->{$_};
 					}
 
+					my $join = '';
+					$join .= "JOIN library_track ON library_track.library = '$libraryID' AND tracks.id = library_track.track " if $libraryID;
+
+					if (main::STATISTICS && $sort eq 'new') {
+						$join .= 'LEFT JOIN tracks_persistent ON tracks_persistent.urlmd5 = tracks.urlmd5 ';
+					}
+
 					my $countSQL = qq{
 						SELECT tracks.album
-						FROM tracks } . ($libraryID ? qq{
-							JOIN library_track ON library_track.library = '$libraryID' AND tracks.id = library_track.track
-						} : '') . qq{
+						FROM tracks
+						$join
 						WHERE tracks.album > 0
 						GROUP BY tracks.album
-						ORDER BY tracks.timestamp DESC
+						ORDER BY $order_by
 					};
 
 					# get the list of album IDs ordered by timestamp
@@ -548,7 +559,7 @@ sub albumsQuery {
 		$c->{'tracks.work'} = 1;
 		$c->{'works.title'} = 1;
 		$c->{'composer.name'} = 1;
-		$c->{'tracks.grouping'} = 1;
+		$c->{'tracks.performance'} = 1;
 		$order_by .= ", tracks.tracknum";
 
 		# -1 -> all works
@@ -640,7 +651,7 @@ sub albumsQuery {
 
 	my $dbh = Slim::Schema->dbh;
 
-	$sql .= $work ? "GROUP BY tracks.grouping, tracks.work, albums.id " : "GROUP BY albums.id ";
+	$sql .= $work ? "GROUP BY tracks.performance, tracks.work, albums.id " : "GROUP BY albums.id ";
 
 	if ($page_key && $tags =~ /Z/) {
 		$request->addResult('indexList', _createIndexList(sprintf($sql, "$page_key AS n") . " ORDER BY $order_by", $p));
@@ -663,7 +674,7 @@ sub albumsQuery {
 	# Get count of all results, the count is cached until the next rescan done event
 	my $cacheKey = md5_hex($sql . join( '', @{$p} ) . Slim::Music::VirtualLibraries->getLibraryIdForClient($client) . (Slim::Utils::Text::ignoreCase($search, 1) || ''));
 
-	if ( $sort eq 'new' && $cache->{$newAlbumsCacheKey} && !$ignoreNewAlbumsCache ) {
+	if ( $sort =~ /^(?:new|changed)$/ && $cache->{$newAlbumsCacheKey} && !$ignoreNewAlbumsCache ) {
 		my $albumCount = scalar @{$cache->{$newAlbumsCacheKey}};
 		$albumCount    = $limit if ($limit && $limit < $albumCount);
 		$cache->{$cacheKey} ||= $albumCount;
@@ -753,7 +764,7 @@ sub albumsQuery {
 			if ( defined $work ) {
 				my @roles = ( 'ARTIST', 'BAND', 'CONDUCTOR' );
 				$contributorSql = sprintf( qq{
-					WITH temp AS (
+					SELECT GROUP_CONCAT(DISTINCT c.name) AS name, GROUP_CONCAT(DISTINCT c.id) AS id FROM (
 						SELECT
 							CASE
 								WHEN contributor_track.role = 1 THEN 'ARTIST'
@@ -766,11 +777,10 @@ sub albumsQuery {
 						JOIN contributor_track ON tracks.id = contributor_track.track
 						JOIN contributors ON contributors.id = contributor_track.contributor
 						WHERE tracks.album = :album AND tracks.work = :work AND contributor_track.role IN (%s)
-							AND ( (:grouping IS NULL AND tracks.grouping IS NULL) OR tracks.grouping = :grouping )
+							AND ( (:performance IS NULL AND tracks.performance IS NULL) OR tracks.performance = :performance )
 						GROUP BY contributor_track.role
 						ORDER BY role
-					)
-					SELECT GROUP_CONCAT(DISTINCT name) AS name, GROUP_CONCAT(DISTINCT id) AS id FROM temp
+					) as c
 				},
 				join(',', map { Slim::Schema::Contributor->typeToRole($_) } @roles));
 			} else {
@@ -823,17 +833,17 @@ sub albumsQuery {
 			utf8::decode( $c->{'albums.title'} ) if exists $c->{'albums.title'};
 			utf8::decode( $c->{'works.title'} ) if exists $c->{'works.title'};
 			utf8::decode( $c->{'composer.name'} ) if exists $c->{'composer.name'};
-			utf8::decode( $c->{'tracks.grouping'} ) if exists $c->{'tracks.grouping'};
+			utf8::decode( $c->{'tracks.performance'} ) if exists $c->{'tracks.performance'};
 			$request->addResultLoop($loopname, $chunkCount, 'id', $c->{'albums.id'});
 			$request->addResultLoopIfValueDefined($loopname, $chunkCount, 'work_id', $c->{'tracks.work'});
 			$request->addResultLoopIfValueDefined($loopname, $chunkCount, 'work_name', $c->{'works.title'});
 			$request->addResultLoopIfValueDefined($loopname, $chunkCount, 'composer', $c->{'composer.name'});
-			$request->addResultLoop($loopname, $chunkCount, 'grouping', $c->{'tracks.grouping'}||"");
+			$request->addResultLoop($loopname, $chunkCount, 'performance', $c->{'tracks.performance'}||"");
 
 			my $favoritesUrl = $work
-				? sprintf('db:album.title=%s&contributor.name=%s&work.title=%s&composer.name=%s&track.grouping=%s',
+				? sprintf('db:album.title=%s&contributor.name=%s&work.title=%s&composer.name=%s&track.performance=%s',
 					URI::Escape::uri_escape_utf8($c->{'albums.title'}), URI::Escape::uri_escape_utf8($c->{'contributors.name'}),
-					URI::Escape::uri_escape_utf8($c->{'works.title'}), URI::Escape::uri_escape_utf8($c->{'composer.name'}), URI::Escape::uri_escape_utf8($c->{'tracks.grouping'}))
+					URI::Escape::uri_escape_utf8($c->{'works.title'}), URI::Escape::uri_escape_utf8($c->{'composer.name'}), URI::Escape::uri_escape_utf8($c->{'tracks.performance'}))
 				: sprintf('db:album.title=%s&contributor.name=%s', URI::Escape::uri_escape_utf8($c->{'albums.title'}), URI::Escape::uri_escape_utf8($c->{'contributors.name'}));
 			# even if we have an extid, it cannot be used when we're dealing here with a work, which is a subset of the album.
 			$request->addResultLoop($loopname, $chunkCount, 'favorites_url', $c->{'albums.extid'} && !$c->{'tracks.work'} ? $c->{'albums.extid'} : $favoritesUrl);
@@ -841,7 +851,7 @@ sub albumsQuery {
 			if ( $work ) {
 				$favoritesTitle = $c->{'composer.name'} ? $c->{'composer.name'} . cstring($client, 'COLON') . ' ' : '';
 				$favoritesTitle .= $c->{'works.title'} . ' (';
-				$favoritesTitle .= "$c->{'tracks.grouping'} " if $c->{'tracks.grouping'};
+				$favoritesTitle .= "$c->{'tracks.performance'} " if $c->{'tracks.performance'};
 				$favoritesTitle .= cstring($client,'FROM') . ' ' . $c->{'albums.title'} . ')';
 			}
 			$request->addResultLoop($loopname, $chunkCount, 'favorites_title', $favoritesTitle);
@@ -899,7 +909,7 @@ sub albumsQuery {
 				$contributorSth->bind_param(":album", $c->{'albums.id'});
 				if ( $work ) {
 					$contributorSth->bind_param(":work", $work);
-					$contributorSth->bind_param(":grouping", $c->{'tracks.grouping'}||undef);
+					$contributorSth->bind_param(":performance", $c->{'tracks.performance'}||undef);
 				}
 				$contributorSth->execute();
 
@@ -969,6 +979,7 @@ sub artistsQuery {
 	my $albumID  = $request->getParam('album_id');
 	my $artistID = $request->getParam('artist_id');
 	my $roleID   = $request->getParam('role_id');
+	my $workID   = $request->getParam('work_id');
 	my $includeOnlineOnlyArtists = $request->getParam('include_online_only_artists');
 	my $libraryID= Slim::Music::VirtualLibraries->getRealId($request->getParam('library_id'));
 	my $tags     = $request->getParam('tags') || '';
@@ -1051,6 +1062,17 @@ sub artistsQuery {
 			$sql_va .= 'JOIN genre_track ON genre_track.track = tracks.id ';
 			push @{$w_va}, 'genre_track.genre = ?';
 			push @{$p_va}, $genreID;
+		}
+
+		if (defined $workID) {
+			$sql .= 'JOIN contributor_track ON contributor_track.contributor = contributors.id ' if $sql !~ /JOIN contributor_track/;
+			$sql .= 'JOIN tracks ON tracks.id = contributor_track.track ' if $sql !~ /JOIN tracks /;
+			if ( $workID eq "-1" ) {
+				push @{$w}, 'tracks.work IS NOT NULL';
+			} else {
+				push @{$w}, 'tracks.work = ?';
+				push @{$p}, $workID;
+			}
 		}
 
 		if ( !defined $search ) {
@@ -1677,6 +1699,7 @@ sub genresQuery {
 	my $albumID       = $request->getParam('album_id');
 	my $trackID       = $request->getParam('track_id');
 	my $genreID       = $request->getParam('genre_id');
+	my $workID        = $request->getParam('work_id');
 	my $libraryID     = Slim::Music::VirtualLibraries->getRealId($request->getParam('library_id'));
 	my $tags          = $request->getParam('tags') || '';
 
@@ -1734,7 +1757,7 @@ sub genresQuery {
 			push @{$p}, $libraryID;
 		}
 
-		if (defined $albumID || defined $year) {
+		if (defined $albumID || defined $year || defined $workID) {
 			if ( $sql !~ /JOIN genre_track/ ) {
 				$sql .= 'JOIN genre_track ON genres.id = genre_track.genre ';
 			}
@@ -1749,6 +1772,14 @@ sub genresQuery {
 			if (defined $year) {
 				push @{$w}, 'tracks.year = ?';
 				push @{$p}, $year;
+			}
+			if (defined $workID) {
+				if ( $workID eq "-1" ) {
+					push @{$w}, 'tracks.work IS NOT NULL';
+				} else {
+					push @{$w}, 'tracks.work = ?';
+					push @{$p}, $workID;
+				}
 			}
 		}
 	}
@@ -3310,12 +3341,11 @@ sub serverstatusQuery_filter {
 		return 1.3;
 	}
 
-	# FIXME: prefset???
 	# we want to know about any pref in our array
 	if (defined(my $prefsPtr = $self->privateData()->{'server'})) {
-		if ($request->isCommand([['pref']])) {
+		if ($request->isCommand([['pref','prefset']])) {
 			if (defined(my $reqpref = $request->getParam('_prefname'))) {
-				if (grep($reqpref, @{$prefsPtr})) {
+				if (grep($_ eq $reqpref, @{$prefsPtr})) {
 					return 1.3;
 				}
 			}
@@ -3324,7 +3354,7 @@ sub serverstatusQuery_filter {
 	if (defined(my $prefsPtr = $self->privateData()->{'player'})) {
 		if ($request->isCommand([['playerpref']])) {
 			if (defined(my $reqpref = $request->getParam('_prefname'))) {
-				if (grep($reqpref, @{$prefsPtr})) {
+				if (grep($_ eq $reqpref, @{$prefsPtr})) {
 					return 1.3;
 				}
 			}
@@ -3601,12 +3631,6 @@ sub statusQuery_filter {
 		return 1;
 	}
 
-	# suppress frequent updates during volume changes
-	if ($request->isCommand([['mixer'], ['volume']])) {
-
-		return 3;
-	}
-
 	# give it a tad more time for muting to leave room for the fade to finish
 	# see bug 5255
 	if ($request->isCommand([['mixer'], ['muting']])) {
@@ -3819,6 +3843,10 @@ sub statusQuery {
 	}
 
 	$request->addResult("playlist_tracks", $songCount);
+
+	if ( exists $INC{'Slim/Plugin/RandomPlay/Plugin.pm'} ) {
+		$request->addResult("randomplay", Slim::Plugin::RandomPlay::Plugin::active($client) ? 1 : 0);
+	}
 
 	# send client pref for digital volume control
 	my $digitalVolumeControl = $prefs->client($client)->get('digitalVolumeControl');
@@ -4364,7 +4392,8 @@ sub titlesQuery {
 	my $releaseType   = $request->getParam('release_type');
 	my $workID        = $request->getParam('work_id');
 	my $ignoreWorkTracks = $request->getParam('ignore_work_tracks');
-	my $grouping      = $request->getParam('grouping');
+	my $performance      = $request->getParam('performance');
+	my $onlyAlbumYears = $request->getParam('only_album_years');
 
 	# did we have override on the defaults?
 	# note that this is not equivalent to
@@ -4419,6 +4448,7 @@ sub titlesQuery {
 		releaseType   => $releaseType,
 		workId	      => $workID,
 		libraryId     => $libraryID,
+		onlyAlbumYears=> $onlyAlbumYears,
 		limit         => sub {
 			$count = shift;
 
@@ -4428,7 +4458,7 @@ sub titlesQuery {
 			return ($valid, $index, $quantity);
 		},
 	};
-	$tagDataParams->{grouping} = $grouping if $grouping;
+	$tagDataParams->{performance} = $performance if $performance;
 	my ($items, $itemOrder, $totalCount) = _getTagDataForTracks( $tags, $tagDataParams );
 
 	if ($stillScanning) {
@@ -4504,7 +4534,7 @@ sub yearsQuery {
 	# get them all by default
 	my $where = {};
 
-	my ($key, $table) = ($hasAlbums || $libraryID) ? ('albums.year', 'albums') : ('id', 'years');
+	my ($key, $table) = $hasAlbums ? ('albums.year', 'albums') : ('tracks.year', 'tracks');
 
 	my $sql = "SELECT DISTINCT $key FROM $table ";
 	my $w   = ["$key != '0'"];
@@ -4516,7 +4546,7 @@ sub yearsQuery {
 	}
 
 	if (defined $libraryID) {
-		$sql .= 'JOIN tracks ON tracks.album = albums.id ';
+		$sql .= 'JOIN tracks ON tracks.album = albums.id ' if $hasAlbums;
 		$sql .= 'JOIN library_track ON library_track.track = tracks.id ';
 		push @{$w}, 'library_track.library = ?';
 		push @{$p}, $libraryID;
@@ -5157,6 +5187,7 @@ my %tagMap = (
 	  'e' => ['album_id',         '',              'albumid'],          #album
 	  'l' => ['album',            'ALBUM',         'albumname'],        #->album.title
 	  'b' => ['work',             'WORK',          'worktitle'],        #->work.title
+	  '1' => ['performance',      'PERFORMANCE',   'performance'],      #performance
 	  'h' => ['grouping',         'GROUPING',      'grouping'],         #grouping
 	  'z' => ['subtitle',         'SUBTITLE',      'subtitle'],         #subtitle
 	  't' => ['tracknum',         'TRACK',         'tracknum'],         #tracknum
@@ -5267,6 +5298,7 @@ my %colMap = (
 	E => 'tracks.extid',
 	b => 'works.title',
 	h => 'tracks.grouping',
+	'1' => 'tracks.performance',
 	z => 'tracks.subtitle',
 );
 
@@ -5310,6 +5342,19 @@ sub _songDataFromHash {
 				}
 			}
 		}
+
+		# Special case for b (work), return work_id as well
+		elsif ( $tag eq 'b' ) {
+				$returnHash{'work'} = $res->{'works.title'} if $res->{'works.title'};
+				$returnHash{'work_id'} = $res->{'works.id'} if $res->{'works.id'};
+		}
+
+		# Special case for i (disc), return discsubtitle as well
+		elsif ( $tag eq 'i' ) {
+				$returnHash{'disc'} = $res->{'tracks.disc'} if $res->{'tracks.disc'};
+				$returnHash{'discsubtitle'} = $res->{'tracks.discsubtitle'} if $res->{'tracks.discsubtitle'};
+		}
+
 		# eg. the web UI is requesting some tags which are only available for remote tracks,
 		# such as 'B' (custom button handler). They would return empty here - ignore them.
 		elsif ( my $map = $colMap{$tag} ) {
@@ -5392,6 +5437,7 @@ sub _songData {
 			$remoteMeta->{W} = $remoteMeta->{releasetype};
 			$remoteMeta->{b} = $remoteMeta->{work};
 			$remoteMeta->{h} = $remoteMeta->{grouping};
+			$remoteMeta->{'1'} = $remoteMeta->{performance};
 			$remoteMeta->{z} = $remoteMeta->{subtitle};
 
 			# Distance from the live edge of live remote stream. -1 is not live, 0 is live at the edge, >0 is distance in seconds from the live edge.
@@ -5795,13 +5841,9 @@ sub _getTagDataForTracks {
 	}
 
 	if ( my $trackId = $args->{trackId} ) {
-		push @{$w}, 'tracks.id = ?';
-		push @{$p}, $trackId;
-	}
-
-	if ( my $year = $args->{year} ) {
-		push @{$w}, 'tracks.year = ?';
-		push @{$p}, $year;
+		my @trackIds = split(',', $trackId);
+		push @{$w}, 'tracks.id IN (' . join(',', map {'?'} @trackIds) . ')';
+		push @{$p}, @trackIds;
 	}
 
 	if ( my $workId = $args->{workId} ) {
@@ -5810,11 +5852,13 @@ sub _getTagDataForTracks {
 		} else {
 			push @{$w}, 'tracks.work = ?';
 			push @{$p}, $workId;
-			if ( my $grouping = $args->{grouping} ) {
-				push @{$w}, 'tracks.grouping = ?';
-				push @{$p}, $grouping;
+			if ( my $performance = $args->{performance} ) {
+				if ( $performance ne '-1' ) {
+					push @{$w}, 'tracks.performance = ?';
+					push @{$p}, $performance;
+				}
 			} else {
-				push @{$w}, 'tracks.grouping IS NULL';
+				push @{$w}, 'tracks.performance IS NULL';
 			}
 		}
 	}
@@ -5865,6 +5909,16 @@ sub _getTagDataForTracks {
 			$sql .= 'LEFT JOIN albums ON albums.id = tracks.album ';
 		}
 	};
+
+	if ( my $year = $args->{year} ) {
+		push @{$w}, 'tracks.year = ?';
+		push @{$p}, $year;
+		if ( $args->{onlyAlbumYears} ) {
+			$join_albums->();
+			push @{$w}, 'albums.year = ?';
+			push @{$p}, $year;
+		}
+	}
 
 	if ( my $releaseType = $args->{releaseType} ) {
 		$join_albums->();
@@ -5932,12 +5986,17 @@ sub _getTagDataForTracks {
 	$tags =~ /x/ && do { $c->{'tracks.remote'} = 1 };
 	$tags =~ /c/ && do { $c->{'tracks.coverid'} = 1 };
 	$tags =~ /Y/ && do { $c->{'tracks.replay_gain'} = 1 };
-	$tags =~ /i/ && do { $c->{'tracks.disc'} = 1 };
+	$tags =~ /i/ && do {
+		$c->{'tracks.disc'} = 1;
+		$c->{'tracks.discsubtitle'} = 1;
+	};
 	$tags =~ /b/ && do {
 		$join_works->();
 		$c->{'works.title'} = 1;
+		$c->{'works.id'} = 1;
 	};
 	$tags =~ /h/ && do { $c->{'tracks.grouping'} = 1 };
+	$tags =~ /1/ && do { $c->{'tracks.performance'} = 1 };
 	$tags =~ /z/ && do { $c->{'tracks.subtitle'} = 1 };
 
 	$tags =~ /g/ && do {
@@ -6124,7 +6183,7 @@ sub _getTagDataForTracks {
 	while ( $sth->fetch ) {
 		if (!$ids_only) {
 			utf8::decode( $c->{'tracks.title'} ) if exists $c->{'tracks.title'};
-			utf8::decode( $c->{'tracks.grouping'} ) if exists $c->{'tracks.grouping'};
+			utf8::decode( $c->{'tracks.performance'} ) if exists $c->{'tracks.performance'};
 			utf8::decode( $c->{'works.title'} ) if exists $c->{'works.title'};
 			utf8::decode( $c->{'tracks.lyrics'} ) if exists $c->{'tracks.lyrics'};
 			utf8::decode( $c->{'albums.title'} ) if exists $c->{'albums.title'};

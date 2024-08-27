@@ -186,7 +186,7 @@ sub init {
 		'bandInArtists'         => 0,
 		'variousArtistAutoIdentification' => 1,
 		'useUnifiedArtistsList' => 0,
-		'useTPE2AsAlbumArtist'  => 0,
+		'useTPE2AsAlbumArtist'  => 1,
 		'variousArtistsString'  => undef,
 		'releaseTypesToIgnore'  => [],
 		'ignoreReleaseTypes'    => 0,
@@ -265,6 +265,7 @@ sub init {
 		'defeatDestructiveTouchToPlay' => 4, # 4 => defeat only if playing and current item not a radio stream
 		# Bug 5557, disable UPnP support by default
 		'noupnp'                => 1,
+		'onlyAlbumYears'        => 1,
 	);
 
 	# we can have different defaults depending on the OS
@@ -393,8 +394,10 @@ sub init {
 
 	$prefs->setChange(
 		sub { Slim::Control::Request::executeRequest(undef, ['wipecache', $prefs->get('dontTriggerScanOnPrefChange') ? 'queue' : undef]) },
-		qw(splitList groupdiscs useTPE2AsAlbumArtist)
+		qw(splitList groupdiscs useTPE2AsAlbumArtist userDefinedRoles)
 	);
+
+	$prefs->setChange( sub { Slim::Schema::Contributor->initializeRoles() }, 'userDefinedRoles');
 
 	$prefs->setChange( sub { Slim::Utils::Misc::setPriority($_[1]) }, 'serverPriority');
 

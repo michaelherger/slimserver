@@ -30,7 +30,7 @@ sub prefs {
 				conductorInArtists bandInArtists variousArtistAutoIdentification
 				ignoreReleaseTypes cleanupReleaseTypes groupArtistAlbumsByReleaseType
 				useTPE2AsAlbumArtist variousArtistsString ratingImplementation useUnifiedArtistsList
-				skipsentinel showComposerReleasesbyAlbum showComposerReleasesbyAlbumGenres)
+				skipsentinel showComposerReleasesbyAlbum showComposerReleasesbyAlbumGenres onlyAlbumYears)
 		   );
 }
 
@@ -83,6 +83,8 @@ sub handler {
 
 		$prefs->set('releaseTypesToIgnore', [ keys %releaseTypesToIgnore ]);
 	}
+
+	$paramRef->{usesFTS} = Slim::Schema->canFulltextSearch;
 
 	return $class->SUPER::handler( $client, $paramRef );
 }
