@@ -117,6 +117,7 @@ jobs:
           - [rpm, ""]
           - [tarball, "--arm"]
           - [tarball, ""]
+          - [tarball, "--encore"]
           - [tarball, "--noCPAN"]
 
     steps:
