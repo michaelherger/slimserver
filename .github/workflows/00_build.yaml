@@ -21,6 +21,7 @@ on:
 
 jobs:
   macLegacy:
+    if: false
     name: Build LMS for Mac (Legacy)
     runs-on: self-hosted
     timeout-minutes: 2    # increase once we're actually building...
@@ -47,16 +48,9 @@ jobs:
     name: Build LMS for Mac (MenuBar Item)
     runs-on: macos-12
     steps:
-      # we must check out here, as  otherwise the build action is not available
-      - name: Check out LMS code
-        uses: actions/checkout@v4
-        with:
-          path: server
-          ref: ${{ inputs.branch }}
-
       - name: Install Platypus
         env:
-          # see https://github.com/sveinbjornt/Platypus/blob/a42d829e8d03991d7437ed7e0e4d929ad8b32835/Common.h#L58-L76
+          # see https://github.com/sveinbjornt/Platypus/issues/270#issuecomment-2312235079
           CMDLINE_BIN_PATH: /usr/local/bin
           CMDLINE_SHARE_PATH: /usr/local/share/platypus
           CMDLINE_MANDIR_PATH: /usr/local/share/man/man1
@@ -66,37 +60,46 @@ jobs:
           CMDLINE_PROGNAME_BUNDLE: platypus_clt.gz
           CMDLINE_TOOL_PATH: /usr/local/bin/platypus
         run: |
+          pwd
+
+          echo "Downloading Platypus"
           curl -Lo platypus.zip https://github.com/sveinbjornt/Platypus/releases/download/v5.4.1/platypus5.4.1.zip
           unzip -qd platypus platypus.zip
 
-          # https://github.com/sveinbjornt/Platypus/blob/a42d829e8d03991d7437ed7e0e4d929ad8b32835/Application/Resources/InstallCommandLineTool.sh
-
-          # Change to Resources directory of Platypus application
-          cd "$PWD/platypus/Platypus.app/Contents/Resources"
-
-          REAL_USER_ID=`/usr/bin/id -r -u`
-
           # Create directories if they don't exist
           echo "Creating directory structures"
-          mkdir -p "$CMDLINE_BIN_PATH"
-          mkdir -p "$CMDLINE_SHARE_PATH"
+          mkdir -p "$CMDLINE_BIN_PATH" || echo $?
+          mkdir -p "$CMDLINE_SHARE_PATH" || echo $?
 
           echo "Copying resources to share directory"
-          gunzip -c "$CMDLINE_SCRIPTEXEC_GZIP_NAME" > "$CMDLINE_SCRIPT_EXEC_PATH"
-          cp -r "$CMDLINE_NIB_NAME" "$CMDLINE_SHARE_PATH"
-          chown -R ${REAL_USER_ID} "$CMDLINE_SHARE_PATH"
-          chmod -R 755 "$CMDLINE_SHARE_PATH"
+          pushd platypus/Platypus.app/Contents/Resources
+          sudo gunzip -c "$CMDLINE_SCRIPTEXEC_GZIP_NAME" > "$CMDLINE_SCRIPT_EXEC_PATH"
+          sudo cp -nfr "$CMDLINE_NIB_NAME" "$CMDLINE_SHARE_PATH"
+          sudo chmod -R 755 "$CMDLINE_SHARE_PATH"
+          ls -al $CMDLINE_SHARE_PATH
 
           echo "Installing command line tool"
-          gunzip -c "$CMDLINE_PROGNAME_BUNDLE" > "$CMDLINE_TOOL_PATH"
-          chown ${REAL_USER_ID} "$CMDLINE_TOOL_PATH"
-          chmod +x "$CMDLINE_TOOL_PATH"
+          sudo gunzip -c "$CMDLINE_PROGNAME_BUNDLE" > "$CMDLINE_TOOL_PATH"
+          sudo chmod +x "$CMDLINE_TOOL_PATH"
+
+          popd
+          pwd
+          rm -rf platypus*
 
           platypus -v
+          ls -al
 
           exit 0
 
+      # we must check out here, as  otherwise the build action is not available
+      - name: Check out LMS code
+        uses: actions/checkout@v4
+        with:
+          path: server
+          ref: ${{ inputs.branch }}
+
       - name: Launch build process
+        if: false
         uses: ./server/.github/actions/build
         with:
           build-params: macos
@@ -105,6 +108,7 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
   linux:
+    if: false
     name: Build LMS for Linux
     runs-on: ubuntu-22.04
     strategy:
@@ -143,6 +147,7 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
   docker:
+    if: false
     name: Build LMS for Docker
     runs-on: ubuntu-22.04
 
@@ -170,6 +175,7 @@ jobs:
           build-type: ${{ inputs.build_type }}
 
   windows:
+    if: false
     name: Build LMS for Windows
     runs-on: windows-2022
     steps:
