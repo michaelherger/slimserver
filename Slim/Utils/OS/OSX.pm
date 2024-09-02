@@ -15,6 +15,9 @@ use File::Spec::Functions qw(:ALL);
 use FindBin qw($Bin);
 use POSIX qw(LC_CTYPE LC_TIME);
 
+# the new menubar item comes as an application in something like "Lyrion Music Server.app/Contents/Resources/server"
+use constant IS_MENUBAR_ITEM => $Bin =~ m|app/Contents/Resources/server| ? 1 : 0;
+
 my $canFollowAlias;
 
 sub name {
@@ -368,10 +371,14 @@ sub getDefaultGateway {
 my $updateCheckInitialized;
 my $plistLabel = "com.slimdevices.updatecheck";
 
-sub initUpdate {
+sub initUpdate { if (!IS_MENUBAR_ITEM) {
 	return if $updateCheckInitialized;
 
 	my $log = Slim::Utils::Log::logger('server.update');
+	$log->error(IS_MENUBAR_ITEM ? 'menu item' : 'nope');
+
+	return if IS_MENUBAR_ITEM;
+
 	my $err = "Failed to install LaunchAgent for the update checker";
 
 	my $launcherPlist = catfile($ENV{HOME}, 'Library', 'LaunchAgents', $plistLabel . '.plist');
@@ -428,23 +435,39 @@ sub initUpdate {
 		unlink($launcherPlist);
 		$updateCheckInitialized = 0;
 	}, 'checkVersion' );
-}
+} }
 
 sub getUpdateParams {
 	return {
-		cb => sub {
+		cb => sub { if (!IS_MENUBAR_ITEM) {
 			# let's kick the update checker
 			if ( my $err = `launchctl start $plistLabel` ) {
 				Slim::Utils::Log::logger('server.update')->error($err);
 			}
-		}
+		} }
 	};
 }
 
 sub canAutoUpdate { 1 }
 
-sub installerExtension { 'pkg' };
-sub installerOS { 'osx' }
+sub installerExtension {
+	my $updateFolder = $_[0]->dirsFor('updates');
+
+	# remove installer from old installation
+	Slim::Utils::Misc::deleteFiles($updateFolder, qr/^LogitechMediaServer.*\.pkg$/i);
+
+	if (IS_MENUBAR_ITEM) {
+		# remove pref pane installer
+		Slim::Utils::Misc::deleteFiles($updateFolder, qr/^LyrionMusicServer.*\.pkg$/i);
+		return 'zip';
+	};
+
+	# remove menu bar item installer
+	Slim::Utils::Misc::deleteFiles($updateFolder, qr/^LyrionMusicServer.*\.zip$/i);
+	return 'pkg';
+};
+
+sub installerOS { IS_MENUBAR_ITEM ? 'macos' : 'osx' }
 
 sub canRestartServer { 1 }
 
