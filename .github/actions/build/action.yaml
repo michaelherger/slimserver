@@ -29,12 +29,14 @@ runs:
         echo "LMS_VERSION=$MAJOR.$MINOR" >> $GITHUB_OUTPUT
         echo "GIT_BRANCH=public/$MAJOR.$MINOR" >> $GITHUB_OUTPUT
 
+
     - name: Check out LMS platform code
       uses: actions/checkout@v4
       with:
         repository: Logitech/slimserver-platforms
         path: platforms
         ref: ${{ steps.getversion.outputs.GIT_BRANCH }}
+
 
     - name: Set up Docker environment
       if: ${{ startsWith(inputs.build-params, 'docker') }}
@@ -51,6 +53,34 @@ runs:
         sed -ie "s/lmscommunity/mherger/" platforms/buildme.pl
         egrep "tag.*logitechmediaserver" platforms/buildme.pl
 
+
+    - name: Set up macOS environment
+      if: ${{ startsWith(inputs.build-params, 'macos') }}
+      shell: bash
+      run: |
+        # set up Platypus - see https://github.com/sveinbjornt/Platypus/issues/270#issuecomment-2312235079
+        echo "Creating directory structures"
+        mkdir -p /usr/local/bin || echo $?
+        mkdir -p /usr/local/share/platypus || echo $?
+
+        cd platforms/osx/platypus
+
+        echo "Copying resources to share directory"
+        sudo cp -nfr ScriptExec MainMenu.nib /usr/local/share/platypus
+        sudo chmod -R 755 /usr/local/share/platypus
+
+        echo "Installing command line tool"
+        sudo cp -nf platypus /usr/local/bin
+        sudo chmod +x /usr/local/bin/platypus
+
+
+    - name: Set up Windows environment
+      if: ${{ startsWith(inputs.build-params, 'win64') }}
+      shell: bash
+      run: |
+        cp -nf platforms/win32/tools/* 'c:\Program Files\Git\usr\bin\'
+
+
     - name: Build ${{ inputs.build-params }} package on ${{ runner.os }} (self-hosted runner)
       if: ${{ startsWith(inputs.build-params, 'macosx') }}
       shell: bash
@@ -64,6 +94,7 @@ runs:
         mkdir -p publish
         scp ${{ inputs.mac-connect-string }}:$BASEDIR/publish/* publish/
 
+
     - name: Build ${{ inputs.build-params }} package on ${{ runner.os }}
       if: ${{ !startsWith(inputs.build-params, 'macosx') }}
       shell: bash
@@ -75,23 +106,6 @@ runs:
 
         mkdir -p $BUILD_PATH
         mkdir -p $DEST_PATH
-
-        # set up Platypus - see https://github.com/sveinbjornt/Platypus/issues/270#issuecomment-2312235079
-        echo "Creating directory structures"
-        mkdir -p /usr/local/bin || echo $?
-        mkdir -p /usr/local/share/platypus || echo $?
-
-        pushd platforms/osx/platypus
-
-        echo "Copying resources to share directory"
-        sudo cp -nfr ScriptExec MainMenu.nib /usr/local/share/platypus
-        sudo chmod -R 755 /usr/local/share/platypus
-
-        echo "Installing command line tool"
-        sudo cp -nf platypus /usr/local/bin
-        sudo chmod +x /usr/local/bin/platypus
-
-        popd
 
         platforms/buildme.pl --build ${{ inputs.build-params }} ${{ steps.dockersetup.outputs.LMS_TAG }} --buildDir $BUILD_PATH --sourceDir $SRC_PATH --destDir $DEST_PATH --releaseType ${{ inputs.build-type }}
 

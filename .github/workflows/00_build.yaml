@@ -131,7 +131,6 @@ jobs:
           build-type: ${{ inputs.build_type }}
 
   windows:
-    if: false
     name: Build LMS for Windows
     runs-on: windows-2022
     steps:
@@ -143,6 +142,7 @@ jobs:
           ref: ${{ inputs.branch }}
 
       - name: Install rsync
+        if: false
         shell: bash
         run: |
           curl -sL https://github.com/facebook/zstd/releases/download/v1.5.5/zstd-v1.5.5-win64.zip --output xxx
