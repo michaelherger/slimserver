@@ -9,6 +9,7 @@ on:
         type: string
         description: 'The branch from which to build from'
         required: true
+        # TODO - default to default branch?
         default: 'gh-build'
       build_type:
         type: choice
@@ -41,8 +42,8 @@ jobs:
           build-params: macosx
           build-type: ${{ inputs.build_type }}
           mac-connect-string: ${{ secrets.MAC_CONNECT_STRING }}
-          AWS_KEY_ID: ${{ secrets.AWS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_KEY_ID: ${{ secrets.R2_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 
   mac:
     name: Build LMS for Mac (MenuBar Item)
@@ -60,11 +61,10 @@ jobs:
         with:
           build-params: macos
           build-type: ${{ inputs.build_type }}
-          AWS_KEY_ID: ${{ secrets.AWS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_KEY_ID: ${{ secrets.R2_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 
   linux:
-    if: false
     name: Build LMS for Linux
     runs-on: ubuntu-22.04
     strategy:
@@ -99,8 +99,8 @@ jobs:
         with:
           build-params: ${{ matrix.flavour[0] }} ${{ matrix.flavour[1] }}
           build-type: ${{ inputs.build_type }}
-          AWS_KEY_ID: ${{ secrets.AWS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_KEY_ID: ${{ secrets.R2_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 
   docker:
     if: false
@@ -141,46 +141,22 @@ jobs:
           path: server
           ref: ${{ inputs.branch }}
 
-      - name: Install rsync
-        if: false
-        shell: bash
-        run: |
-          curl -sL https://github.com/facebook/zstd/releases/download/v1.5.5/zstd-v1.5.5-win64.zip --output xxx
-          unzip -q xxx
-          cp zstd-v1.5.5-win64/zstd.exe 'c:\Program Files\Git\usr\bin\'
-          rm -rf zstd* xxx
-
-          curl -sL https://repo.msys2.org/msys/x86_64/rsync-3.2.7-2-x86_64.pkg.tar.zst --output xxx
-          tar -I zstd -xf xxx
-          cp usr/bin/rsync.exe 'c:\Program Files\Git\usr\bin\'
-          rm -rf xxx usr
-
-          curl -sL https://repo.msys2.org/msys/x86_64/libzstd-1.5.5-1-x86_64.pkg.tar.zst --output xxx
-          tar -I zstd -xf xxx
-          cp usr/bin/msys-zstd-1.dll 'c:\Program Files\Git\usr\bin\'
-          rm -rf xxx usr
-
-          curl -sL https://repo.msys2.org/msys/x86_64/libxxhash-0.8.1-1-x86_64.pkg.tar.zst --output xxx
-          tar -I zstd -xf xxx
-          cp usr/bin/msys-xxhash-0.dll 'c:\Program Files\Git\usr\bin\'
-          rm -rf xxx usr
-
-          curl -sL https://repo.msys2.org/msys/x86_64/liblz4-1.9.4-1-x86_64.pkg.tar.zst --output xxx
-          tar -I zstd -xf xxx
-          cp usr/bin/msys-lz4-1.dll 'c:\Program Files\Git\usr\bin\'
-          rm -rf xxx usr
-
-          curl -sL https://repo.msys2.org/msys/x86_64/libopenssl-3.1.1-1-x86_64.pkg.tar.zst --output xxx
-          tar -I zstd -xf xxx
-          cp usr/bin/msys-crypto-3.dll 'c:\Program Files\Git\usr\bin\'
-          rm -rf xxx usr .BUILDINFO .MTREE .PKGINFO
-
       - name: Launch build process
         uses: ./server/.github/actions/build
         with:
           build-params: win64
           build-type: ${{ inputs.build_type }}
-          AWS_KEY_ID: ${{ secrets.AWS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_KEY_ID: ${{ secrets.R2_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 
 # TODO - re-build repository file
+  build_repo_file:
+    if: ${{ always() }}
+    runs-on: ubuntu-22.04
+    needs:
+      - macLegacy
+      - mac
+      - linux
+      - windows
+    steps:
+      - run: echo "yo, done!"

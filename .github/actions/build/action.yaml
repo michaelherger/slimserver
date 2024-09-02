@@ -49,6 +49,7 @@ runs:
           echo "LMS_TAG=--tag=stable" >> $GITHUB_OUTPUT
         fi
 
+        # TODO - correct Docker registry!
         echo TEMPORARY DOCKER DEV ONLY!!!!
         sed -ie "s/lmscommunity/mherger/" platforms/buildme.pl
         egrep "tag.*logitechmediaserver" platforms/buildme.pl
@@ -88,7 +89,7 @@ runs:
         ssh ${{ inputs.mac-connect-string }} "mkdir -p $BASEDIR; rm -rf $BASEDIR/publish"
         rsync -a --delete server platforms ${{ inputs.mac-connect-string }}:$BASEDIR/
 
-        ssh ${{ inputs.mac-connect-string }} "cd $BASEDIR && platforms/buildme.pl --build macosx --buildDir \$(pwd)/work --sourceDir \$(pwd) --destDir \$(pwd)/publish --releaseType ${{ inputs.build_type }}"
+        ssh ${{ inputs.mac-connect-string }} "cd $BASEDIR && platforms/buildme.pl --build macosx --buildDir \$(pwd)/work --sourceDir \$(pwd) --destDir \$(pwd)/publish --releaseType ${{ inputs.build-type }}"
 
         rm -rf publish
         mkdir -p publish
@@ -118,18 +119,20 @@ runs:
         fi
 
     - name: Upload artifacts
-      if: ${{ false && !startsWith(inputs.build-params, 'docker') }}
+      if: ${{ !startsWith(inputs.build-params, 'docker') }}
       shell: bash
       run: |
         mkdir -p $HOME/.aws
         echo "[downloads]" > $HOME/.aws/credentials
+        # region is irrelevant for Cloudflare R2, but required by the aws CLI tool
         echo "region=us-east-1" >> $HOME/.aws/credentials
         echo "aws_access_key_id=${{ inputs.AWS_KEY_ID }}" >> $HOME/.aws/credentials
         echo "aws_secret_access_key=${{ inputs.AWS_SECRET_ACCESS_KEY }}" >> $HOME/.aws/credentials
 
-        aws --profile downloads s3 cp publish/* "s3://downloads.slimdevices.com/gh-build-test/"
+        # TODO - fix upload folder
+        for f in publish/?yrion?usic?erver*;
+        do
+          aws --profile downloads --endpoint-url https://e83bc03c881257fada7ca16c243e9298.eu.r2.cloudflarestorage.com s3 cp $f s3://downloads/gh-build-test/${{ inputs.build-type }}/
+        done
 
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        path: publish
+        rm -f $HOME/.aws/credentials
