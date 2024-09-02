@@ -48,49 +48,6 @@ jobs:
     name: Build LMS for Mac (MenuBar Item)
     runs-on: macos-12
     steps:
-      - name: Install Platypus
-        env:
-          # see https://github.com/sveinbjornt/Platypus/issues/270#issuecomment-2312235079
-          CMDLINE_BIN_PATH: /usr/local/bin
-          CMDLINE_SHARE_PATH: /usr/local/share/platypus
-          CMDLINE_MANDIR_PATH: /usr/local/share/man/man1
-          CMDLINE_SCRIPTEXEC_GZIP_NAME: ScriptExec.gz
-          CMDLINE_SCRIPT_EXEC_PATH: /usr/local/share/platypus/ScriptExec
-          CMDLINE_NIB_NAME: MainMenu.nib
-          CMDLINE_PROGNAME_BUNDLE: platypus_clt.gz
-          CMDLINE_TOOL_PATH: /usr/local/bin/platypus
-        run: |
-          pwd
-
-          echo "Downloading Platypus"
-          curl -Lo platypus.zip https://github.com/sveinbjornt/Platypus/releases/download/v5.4.1/platypus5.4.1.zip
-          unzip -qd platypus platypus.zip
-
-          # Create directories if they don't exist
-          echo "Creating directory structures"
-          mkdir -p "$CMDLINE_BIN_PATH" || echo $?
-          mkdir -p "$CMDLINE_SHARE_PATH" || echo $?
-
-          echo "Copying resources to share directory"
-          pushd platypus/Platypus.app/Contents/Resources
-          sudo gunzip -c "$CMDLINE_SCRIPTEXEC_GZIP_NAME" > "$CMDLINE_SCRIPT_EXEC_PATH"
-          sudo cp -nfr "$CMDLINE_NIB_NAME" "$CMDLINE_SHARE_PATH"
-          sudo chmod -R 755 "$CMDLINE_SHARE_PATH"
-          ls -al $CMDLINE_SHARE_PATH
-
-          echo "Installing command line tool"
-          sudo gunzip -c "$CMDLINE_PROGNAME_BUNDLE" > "$CMDLINE_TOOL_PATH"
-          sudo chmod +x "$CMDLINE_TOOL_PATH"
-
-          popd
-          pwd
-          rm -rf platypus*
-
-          platypus -v
-          ls -al
-
-          exit 0
-
       # we must check out here, as  otherwise the build action is not available
       - name: Check out LMS code
         uses: actions/checkout@v4
@@ -99,7 +56,6 @@ jobs:
           ref: ${{ inputs.branch }}
 
       - name: Launch build process
-        if: false
         uses: ./server/.github/actions/build
         with:
           build-params: macos

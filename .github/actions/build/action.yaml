@@ -76,6 +76,23 @@ runs:
         mkdir -p $BUILD_PATH
         mkdir -p $DEST_PATH
 
+        # set up Platypus - see https://github.com/sveinbjornt/Platypus/issues/270#issuecomment-2312235079
+        echo "Creating directory structures"
+        mkdir -p /usr/local/bin || echo $?
+        mkdir -p /usr/local/share/platypus || echo $?
+
+        pushd platforms/osx/platypus
+
+        echo "Copying resources to share directory"
+        sudo cp -nfr ScriptExec MainMenu.nib /usr/local/share/platypus
+        sudo chmod -R 755 /usr/local/share/platypus
+
+        echo "Installing command line tool"
+        sudo cp -nf platypus /usr/local/bin
+        sudo chmod +x /usr/local/bin/platypus
+
+        popd
+
         platforms/buildme.pl --build ${{ inputs.build-params }} ${{ steps.dockersetup.outputs.LMS_TAG }} --buildDir $BUILD_PATH --sourceDir $SRC_PATH --destDir $DEST_PATH --releaseType ${{ inputs.build-type }}
 
     - name: Verify results
@@ -87,7 +104,7 @@ runs:
         fi
 
     - name: Upload artifacts
-      if: ${{ !startsWith(inputs.build-params, 'docker') }}
+      if: ${{ false && !startsWith(inputs.build-params, 'docker') }}
       shell: bash
       run: |
         mkdir -p $HOME/.aws
@@ -97,3 +114,8 @@ runs:
         echo "aws_secret_access_key=${{ inputs.AWS_SECRET_ACCESS_KEY }}" >> $HOME/.aws/credentials
 
         aws --profile downloads s3 cp publish/* "s3://downloads.slimdevices.com/gh-build-test/"
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        path: publish
