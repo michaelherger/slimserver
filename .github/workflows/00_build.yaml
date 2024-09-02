@@ -171,15 +171,20 @@ jobs:
           AWS_KEY_ID: ${{ secrets.R2_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 
-# TODO - re-build repository file
-  build_repo_file:
-    if: ${{ always() }}
-    runs-on: ubuntu-22.04
+  updateRepoFile:
+    name: Trigger repository file update
+    if: ${{ always() && inputs.build_type == 'nightly' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
     needs:
       - macLegacy
       - mac
       - linux
       - win64
       - win32
+    permissions:
+      actions: write
     steps:
-      - run: echo "yo, done!"
+      - env:
+          GH_TOKEN: ${{ secrets.DEPLOYMENT_KEY }}
+        run: gh workflow run update-server-repository.yml -R https://github.com/LMS-Community/lms-server-repository
