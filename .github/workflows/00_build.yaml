@@ -22,10 +22,9 @@ on:
 
 jobs:
   macLegacy:
-    if: false
     name: Build LMS for Mac (Legacy)
     runs-on: self-hosted
-    timeout-minutes: 2    # increase once we're actually building...
+    timeout-minutes: 20
     env:
       BASEDIR: gh-build
     steps:
@@ -47,6 +46,7 @@ jobs:
 
   mac:
     name: Build LMS for Mac (MenuBar Item)
+    if: false
     runs-on: macos-12
     steps:
       # we must check out here, as  otherwise the build action is not available
@@ -66,6 +66,7 @@ jobs:
 
   linux:
     name: Build LMS for Linux
+    if: false
     runs-on: ubuntu-22.04
     strategy:
       matrix:
@@ -132,6 +133,7 @@ jobs:
 
   windows:
     name: Build LMS for Windows
+    if: false
     runs-on: windows-2022
     steps:
       # we must check out here, as  otherwise the build action is not available
