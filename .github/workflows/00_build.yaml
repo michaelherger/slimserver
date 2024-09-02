@@ -40,13 +40,12 @@ jobs:
         with:
           build-params: macosx
           build-type: ${{ inputs.build_type }}
-          mac-connect-string: ${{ secrets.MAC_CONNECT_STRING }}
+          ssh-connect-string: ${{ secrets.MAC_CONNECT_STRING }}
           AWS_KEY_ID: ${{ secrets.R2_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 
   mac:
     name: Build LMS for Mac (MenuBar Item)
-    if: false
     runs-on: macos-12
     steps:
       # we must check out here, as  otherwise the build action is not available
@@ -66,7 +65,6 @@ jobs:
 
   linux:
     name: Build LMS for Linux
-    if: false
     runs-on: ubuntu-22.04
     strategy:
       matrix:
@@ -131,9 +129,8 @@ jobs:
           build-params: docker
           build-type: ${{ inputs.build_type }}
 
-  windows:
-    name: Build LMS for Windows
-    if: false
+  win64:
+    name: Build LMS for Windows (64-bit)
     runs-on: windows-2022
     steps:
       # we must check out here, as  otherwise the build action is not available
@@ -151,6 +148,29 @@ jobs:
           AWS_KEY_ID: ${{ secrets.R2_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 
+  win32:
+    name: Build LMS for Windows (Legacy 32-bit)
+    runs-on: self-hosted
+    timeout-minutes: 30
+    env:
+      BASEDIR: gh-build
+    steps:
+      # we must check out here, as  otherwise the build action is not available
+      - name: Check out LMS code
+        uses: actions/checkout@v4
+        with:
+          path: server
+          ref: ${{ inputs.branch }}
+
+      - name: Launch build process
+        uses: ./server/.github/actions/build
+        with:
+          build-params: win32
+          build-type: ${{ inputs.build_type }}
+          ssh-connect-string: ${{ secrets.WIN_CONNECT_STRING }}
+          AWS_KEY_ID: ${{ secrets.R2_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+
 # TODO - re-build repository file
   build_repo_file:
     if: ${{ always() }}
@@ -159,6 +179,7 @@ jobs:
       - macLegacy
       - mac
       - linux
-      - windows
+      - win64
+      - win32
     steps:
       - run: echo "yo, done!"

@@ -9,8 +9,8 @@ inputs:
     description: "`nightly` or `production`"
     required: true
     default: nightly
-  mac-connect-string:
-    description: Connection string to be used to to connect to Mac build host.
+  ssh-connect-string:
+    description: Connection string to be used to to connect to the locally run build host.
   AWS_KEY_ID:
     description: The key ID to use to upload to S3
   AWS_SECRET_ACCESS_KEY:
@@ -83,21 +83,21 @@ runs:
 
 
     - name: Build ${{ inputs.build-params }} package on ${{ runner.os }} (self-hosted runner)
-      if: ${{ startsWith(inputs.build-params, 'macosx') }}
+      if: ${{ inputs.ssh-connect-string != '' }}
       shell: bash
       run: |
-        ssh ${{ inputs.mac-connect-string }} "mkdir -p $BASEDIR; rm -rf $BASEDIR/publish"
-        rsync -a --delete server platforms ${{ inputs.mac-connect-string }}:$BASEDIR/
+        ssh ${{ inputs.ssh-connect-string }} "mkdir -p $BASEDIR; rm -rf $BASEDIR/publish"
+        rsync -a --delete server platforms ${{ inputs.ssh-connect-string }}:$BASEDIR/
 
-        ssh ${{ inputs.mac-connect-string }} "cd $BASEDIR && platforms/buildme.pl --build macosx --buildDir \$(pwd)/work --sourceDir \$(pwd) --destDir \$(pwd)/publish --releaseType ${{ inputs.build-type }}"
+        ssh ${{ inputs.ssh-connect-string }} "cd $BASEDIR && platforms/buildme.pl --build ${{ inputs.build-params }} --buildDir \$(pwd)/work --sourceDir \$(pwd) --destDir \$(pwd)/publish --releaseType ${{ inputs.build-type }}"
 
         rm -rf publish
         mkdir -p publish
-        scp ${{ inputs.mac-connect-string }}:$BASEDIR/publish/* publish/
+        scp ${{ inputs.ssh-connect-string }}:$BASEDIR/publish/* publish/
 
 
     - name: Build ${{ inputs.build-params }} package on ${{ runner.os }}
-      if: ${{ !startsWith(inputs.build-params, 'macosx') }}
+      if: ${{ inputs.ssh-connect-string == '' }}
       shell: bash
       run: |
         SRC_PATH=$PWD
